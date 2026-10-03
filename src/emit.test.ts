@@ -181,3 +181,42 @@ test("a user prop named __astroProps is not overwritten by an internal helper", 
   expect(go).toContain('webui.ChildText(webui.Get(scope, "__astroProps"))');
   expect(go).not.toContain('scope["__astroProps"] = props');
 });
+
+test("only the updater parameter reads pending state while closed-over states keep event values", async () => {
+  const compiled = await program(`import {useState} from 'preact/hooks';
+export function Page() {
+  const [a,setA] = useState(0); const [b,setB] = useState(1);
+  return <button onClick={() => { setB(2); setA(current => current + b); setA(current => current + a); }} />;
+}`);
+  const go = emitGo(compiled, options);
+  expect(go).toContain(
+    'webui.Binary("+", webui.Get(pending, "a"), webui.Get(eventScope, "b"))',
+  );
+  expect(go).toContain(
+    'webui.Binary("+", webui.Get(pending, "a"), webui.Get(eventScope, "a"))',
+  );
+  expect(go).not.toContain('webui.Get(pending, "b")');
+});
+
+test("an event parameter shadowing the state cannot replace the updater current value", async () => {
+  const compiled = await program(`import {useState} from 'preact/hooks';
+export function Page() { const [count,setCount] = useState(0); return <input onInput={count => setCount(current => current + 1)} />; }`);
+  const go = emitGo(compiled, options);
+  expect(go).toContain('eventScope["count"] = webui.Scope');
+  expect(go).toContain("pending := cloneScope(scope)");
+  expect(go).not.toContain("pending := cloneScope(eventScope)");
+  expect(go).toContain('webui.Get(pending, "count")');
+});
+
+test("mapped handlers update the component state while loop names keep lexical values", async () => {
+  const compiled = await program(`import {useState} from 'preact/hooks';
+export function Page() { const [count,setCount] = useState(0); const items=[10,20]; return <main>{items.map(count => <button onClick={() => setCount(current => current + count)} />)}<p>{count}</p></main>; }`);
+  const go = emitGo(compiled, options);
+  const key = `componentPrefix + "/${compiled.entry}/count"`;
+  expect(go).toContain("componentPrefix := prefix");
+  expect(go).toContain(`pending["count"] = state[${key}]`);
+  expect(go).toContain(`state[${key}] = pending["count"]`);
+  expect(go).toContain(
+    'webui.Binary("+", webui.Get(pending, "count"), webui.Get(eventScope, "count"))',
+  );
+});

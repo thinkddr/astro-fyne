@@ -1454,12 +1454,21 @@ class Compiler {
     if (parameter) eventScope.names.add(parameter);
     const expressions: ts.Expression[] = [];
     if (ts.isBlock(node.body)) {
+      let returned = false;
       for (const statement of node.body.statements) {
+        if (returned)
+          this.fail(
+            scope.source,
+            statement,
+            "Código después de return en un handler no soportado.",
+            scope,
+          );
         if (ts.isExpressionStatement(statement))
           expressions.push(statement.expression);
-        else if (ts.isReturnStatement(statement) && statement.expression)
+        else if (ts.isReturnStatement(statement) && statement.expression) {
           expressions.push(statement.expression);
-        else
+          returned = true;
+        } else
           this.fail(
             scope.source,
             statement,
@@ -1496,6 +1505,8 @@ class Compiler {
           if (
             value.parameters.length !== 1 ||
             !ts.isIdentifier(value.parameters[0]!.name) ||
+            value.parameters[0]!.initializer ||
+            value.parameters[0]!.dotDotDotToken ||
             ts.isBlock(value.body) ||
             this.hasModifier(value, ts.SyntaxKind.AsyncKeyword)
           ) {
@@ -1511,7 +1522,7 @@ class Compiler {
             substitutions: new Map(eventScope.substitutions),
           };
           setterScope.substitutions.set(value.parameters[0]!.name.text, {
-            kind: "name",
+            kind: "current",
             name: state,
           });
           value = this.unwrap(value.body);

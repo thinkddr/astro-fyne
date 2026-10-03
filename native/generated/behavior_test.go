@@ -2,6 +2,8 @@
 package generated
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -25,25 +27,36 @@ func TestExportBrowserComparableBehavior(t *testing.T) {
 	if err := json.Unmarshal(data, &scenario); err != nil {
 		t.Fatal(err)
 	}
+	scenarioData, err := json.Marshal(scenario)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(scenarioData)
+	if ConformanceSourceHash != os.Getenv("ASTRO_FYNE_CONFORMANCE_SOURCE_HASH") {
+		t.Fatal("generated native source does not match the analyzed browser source")
+	}
 	view, observations, calls := conformanceView(t)
 	type frame struct {
-		Action string            `json:"action"`
-		Nodes  map[string]string `json:"nodes"`
+		Action string         `json:"action"`
+		Nodes  map[string]any `json:"nodes"`
 	}
 	type observed struct {
 		Prefix   string  `json:"prefix"`
 		Previous float64 `json:"previous"`
 	}
 	trace := struct {
+		Schema          int        `json:"schema"`
+		SourceHash      string     `json:"sourceHash"`
+		ScenarioHash    string     `json:"scenarioHash"`
 		Frames          []frame    `json:"frames"`
 		Observations    []observed `json:"observations"`
 		UnexpectedCalls []string   `json:"unexpectedCalls"`
-	}{Frames: []frame{}, Observations: []observed{}, UnexpectedCalls: []string{}}
+	}{Schema: 1, SourceHash: ConformanceSourceHash, ScenarioHash: hex.EncodeToString(digest[:]), Frames: []frame{}, Observations: []observed{}, UnexpectedCalls: []string{}}
 	snapshot := func(action string) {
-		nodes := map[string]string{}
+		nodes := map[string]any{}
 		for _, id := range scenario.IDs {
 			if view.Object(id) == nil {
-				nodes[id] = "<absent>"
+				nodes[id] = nil
 			} else {
 				nodes[id] = generatedText(t, view, id)
 			}
