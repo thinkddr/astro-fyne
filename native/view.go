@@ -30,7 +30,9 @@ type Node struct {
 	Children                                                []Node
 	OnTap                                                   func()
 	OnChange                                                func(string)
-	ImageResource                                           fyne.Resource
+	// OnCommit represents HTML change; OnChange represents immediate input.
+	OnCommit      func(string)
+	ImageResource fyne.Resource
 }
 
 // Style uses CSS pixels, including fractional pixels. Measured positions are
@@ -68,21 +70,22 @@ type Style struct {
 // Fyne's event goroutine; native adapters completing background work use fyne.Do.
 type View struct {
 	widget.BaseWidget
-	backend          Backend
-	build            func() []Node
-	nodes            []Node
-	elements         map[string]*element
-	roots            []*element
-	measurements     map[string]Style
-	measurementState string
-	viewport         fyne.Size
-	captureScale     float32
-	boundCanvas      fyne.Canvas
-	err              error
-	canvasErr        error
-	navigationErr    error
-	refreshing       bool
-	bitmaps          map[[32]byte]bitmapAsset
+	backend           Backend
+	build             func() []Node
+	nodes             []Node
+	elements          map[string]*element
+	roots             []*element
+	measurements      map[string]Style
+	measurementState  string
+	viewport          fyne.Size
+	captureScale      float32
+	boundCanvas       fyne.Canvas
+	err               error
+	canvasErr         error
+	navigationErr     error
+	refreshing        bool
+	bitmaps           map[[32]byte]bitmapAsset
+	autoRefreshEvents bool
 }
 
 var _ fyne.Widget = (*View)(nil)
@@ -94,7 +97,7 @@ func NewView(build func() []Node, backends ...Backend) *View {
 	if len(backends) > 0 && backends[0] != nil {
 		backend = backends[0]
 	}
-	v := &View{build: build, backend: backend, elements: make(map[string]*element), bitmaps: make(map[[32]byte]bitmapAsset)}
+	v := &View{build: build, backend: backend, elements: make(map[string]*element), bitmaps: make(map[[32]byte]bitmapAsset), autoRefreshEvents: true}
 	v.ExtendBaseWidget(v)
 	v.reconcile()
 	return v
@@ -108,9 +111,35 @@ func (v *View) Object(id string) fyne.CanvasObject {
 	return nil
 }
 
+// SetAutoRefreshEvents selects who reevaluates the source tree after callbacks.
+// Hand-authored nodes default to automatic refresh. Generated event handlers turn
+// it off and refresh only when they queued state, preserving action-only closures.
+func (v *View) SetAutoRefreshEvents(enabled bool) { v.autoRefreshEvents = enabled }
+
+func (v *View) refreshAfterEvent() {
+	if v.autoRefreshEvents {
+		v.Refresh()
+	}
+}
+
 // Error reports invalid source contracts and stale measurement profiles. Consumers
 // must surface this error; a measured page with an error is not parity certified.
-func (v *View) Error() error { return errors.Join(v.err, v.canvasErr, v.navigationErr) }
+func (v *View) Error() error {
+	var editingErr error
+	if len(v.measurements) != 0 {
+		editingErr = v.uncommittedInputError()
+	}
+	return errors.Join(v.err, v.canvasErr, v.navigationErr, editingErr)
+}
+
+func (v *View) uncommittedInputError() error {
+	for id, e := range v.elements {
+		if e.input != nil && e.input.Text() != e.node.Value {
+			return fmt.Errorf("webui: input %q has an uncommitted visual value; commit it before supplying a matching measurement profile", id)
+		}
+	}
+	return nil
+}
 
 // SetCaptureScale declares the browser capture's device-pixel ratio. Loading a
 // profile before mounting remains possible; certification also requires BindCanvas
@@ -190,6 +219,9 @@ func (v *View) ValidateViewport(size fyne.Size) error {
 // Partial captures and extra IDs are errors: no child falls back to guessed layout.
 // Profiles describe one visual state and become invalid when that state changes.
 func (v *View) ApplyMeasurements(measurements map[string]Style) error {
+	if err := v.uncommittedInputError(); err != nil {
+		return err
+	}
 	ids := make(map[string]bool, len(v.elements))
 	for id := range v.elements {
 		ids[id] = true
@@ -519,20 +551,23 @@ func newElement(v *View, n Node) *element {
 					e.view.navigationErr = err
 				}
 			}
-			e.view.Refresh()
+			e.view.refreshAfterEvent()
 		}
 		e.object = w
 	case "input", "textarea":
-		w := &inputWidget{element: e}
+		w := &inputWidget{element: e, committedValue: n.Value}
 		w.ExtendBaseWidget(w)
 		e.input = v.backend.Editor(n.Kind == "textarea", v.backend.Defaults(n), func(value string) {
 			if e.suppressChange || e.node.Disabled {
 				return
 			}
+			w.dirty = true
 			if e.node.OnChange != nil {
 				e.node.OnChange(value)
+				e.view.refreshAfterEvent()
 			}
-			e.view.Refresh()
+			// Without an immediate callback the editor owns its pending value until
+			// commit. Reevaluating Node.Value here would erase every typed character.
 		})
 		e.object = w
 	default:
@@ -566,6 +601,9 @@ func (e *element) update() {
 		e.suppressChange = true
 		if e.input.Text() != e.node.Value {
 			e.input.SetText(e.node.Value)
+			if w, ok := e.object.(*inputWidget); ok && !w.dirty {
+				w.committedValue = e.node.Value
+			}
 		}
 		e.input.SetPlaceholder(e.node.Placeholder)
 		e.input.SetDisabled(e.node.Disabled)
@@ -751,12 +789,33 @@ func (w *actionWidget) Disable()       { w.element.node.Disabled = true; w.disab
 
 type inputWidget struct {
 	widget.BaseWidget
-	element *element
+	element        *element
+	committedValue string
+	dirty          bool
 }
 
 func (w *inputWidget) CreateRenderer() fyne.WidgetRenderer { return newElementRenderer(w.element) }
-func (w *inputWidget) FocusGained()                        { w.element.input.FocusGained() }
-func (w *inputWidget) FocusLost()                          { w.element.input.FocusLost() }
+func (w *inputWidget) FocusGained() {
+	w.committedValue, w.dirty = w.element.input.Text(), false
+	w.element.input.FocusGained()
+}
+func (w *inputWidget) FocusLost() {
+	w.element.input.FocusLost()
+	w.commit()
+}
+
+func (w *inputWidget) commit() {
+	if w.element.node.Disabled {
+		return
+	}
+	value := w.element.input.Text()
+	changed := w.dirty && value != w.committedValue
+	w.committedValue, w.dirty = value, false
+	if changed && w.element.node.OnCommit != nil {
+		w.element.node.OnCommit(value)
+		w.element.view.refreshAfterEvent()
+	}
+}
 func (w *inputWidget) TypedRune(r rune) {
 	if !w.element.node.Disabled {
 		w.element.input.TypedRune(r)
@@ -765,6 +824,9 @@ func (w *inputWidget) TypedRune(r rune) {
 func (w *inputWidget) TypedKey(k *fyne.KeyEvent) {
 	if !w.element.node.Disabled {
 		w.element.input.TypedKey(k)
+		if w.element.node.Kind == "input" && (k.Name == fyne.KeyReturn || k.Name == fyne.KeyEnter) {
+			w.commit()
+		}
 	}
 }
 func (w *inputWidget) TypedShortcut(s fyne.Shortcut) {
