@@ -144,7 +144,7 @@ func TestInputPointerPositionsCursorWithoutChangingFocusOwner(t *testing.T) {
 	style := v.elements["field"].style
 	field.(fyne.Tappable).Tapped(&fyne.PointEvent{Position: fyne.NewPos(style.PaddingLeft+style.BorderWidth, style.PaddingTop+style.BorderWidth+10)})
 	field.(fyne.Focusable).TypedRune('X')
-	if value != "Xab" || w.Canvas().Focused() != field {
+	if value != "Xab" || w.Canvas().Focused() != field.(fyne.Focusable) {
 		t.Fatalf("pointer/cursor/focus mismatch: value=%q focus=%T", value, w.Canvas().Focused())
 	}
 }

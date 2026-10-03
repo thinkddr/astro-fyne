@@ -87,7 +87,10 @@ The comparison contract uses up to 8-bit channels and rejects 16-bit PNG input, 
 changes that would disappear if their channels were reduced to 8 bits.
 
 The initial examples exercise state/input behavior and solid geometry at 320 × 240 pixels,
-scale 1. Their tests include a negative visual check that changes one channel of one pixel
+scale 1. A behavioral corpus drives the same click sequence in Preact/Chromium and generated Go.
+The differential gate compares texts, mount/unmount results and callback observations;
+passing it covers that declared scenario only. Its browser and native JSON traces are CI artifacts.
+The tests include a negative visual check that changes one channel of one pixel
 and requires the comparator to fail. A release should report which scenarios actually passed
 in CI and which remain untested, rather than applying a general fidelity badge to generated
 code. Failed or missing comparisons leave a profile uncertified.
