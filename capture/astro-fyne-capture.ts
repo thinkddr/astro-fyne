@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) Sytue. All rights reserved.
+// Copyright (c) Sytue. Licensed under Apache-2.0.
 
 // Ejecutar en CI o en el efímero de Scaleway: captura el diseño YA renderizado.
-import { chromium } from "playwright";
+import { chromium, type Response } from "playwright";
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 function argumentsFrom(argv: string[]) {
@@ -18,6 +18,7 @@ function argumentsFrom(argv: string[]) {
     "source-hash",
     "selector",
     "ready-selector",
+    "analysis",
   ]);
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
@@ -70,11 +71,71 @@ function argumentsFrom(argv: string[]) {
     sourceHash,
     selector: values.get("selector") ?? "#fyne-root",
     readySelector: values.get("ready-selector"),
+    analysis: values.get("analysis"),
   };
+}
+
+interface BitmapResource {
+  name: string;
+  hash: string;
+  mediaType: "image/png" | "image/jpeg";
+  width: number;
+  height: number;
+  srcs: string[];
+}
+
+async function bitmapResources(
+  analysisPath: string | undefined,
+  sourceHash: string,
+): Promise<BitmapResource[]> {
+  if (!analysisPath) return [];
+  const analysis = JSON.parse(
+    await readFile(resolve(analysisPath), "utf8"),
+  ) as {
+    sourceHash?: unknown;
+    program?: { resources?: unknown };
+  };
+  if (analysis.sourceHash !== sourceHash)
+    throw new Error(
+      "--analysis y --source-hash pertenecen a fuentes distintas",
+    );
+  const resources = analysis.program?.resources ?? [];
+  if (!Array.isArray(resources))
+    throw new Error("El análisis debe contener program.resources como lista");
+  return resources.map((resource: unknown) => {
+    if (!resource || typeof resource !== "object")
+      throw new Error("Recurso de análisis inválido");
+    const value = resource as Record<string, unknown>;
+    if (
+      typeof value.name !== "string" ||
+      !value.name ||
+      typeof value.hash !== "string" ||
+      !/^[a-f0-9]{64}$/.test(value.hash) ||
+      !["image/png", "image/jpeg"].includes(String(value.mediaType)) ||
+      typeof value.width !== "number" ||
+      !Number.isSafeInteger(value.width) ||
+      value.width < 1 ||
+      value.width > 16_384 ||
+      typeof value.height !== "number" ||
+      !Number.isSafeInteger(value.height) ||
+      value.height < 1 ||
+      value.height > 16_384 ||
+      value.width * value.height > 64_000_000 ||
+      !Array.isArray(value.srcs) ||
+      value.srcs.length === 0 ||
+      value.srcs.some((src: unknown) => typeof src !== "string" || !src)
+    ) {
+      throw new Error(
+        "El análisis contiene un recurso bitmap sin tipo, hash, dimensión o src válido",
+      );
+    }
+    return value as unknown as BitmapResource;
+  });
 }
 
 async function capture() {
   const args = argumentsFrom(process.argv.slice(2));
+  const resources = await bitmapResources(args.analysis, args.sourceHash);
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({
@@ -87,6 +148,13 @@ async function capture() {
     page.setDefaultTimeout(30_000);
     const pageErrors: string[] = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
+    const imageResponses = new Map<string, Response[]>();
+    page.on("response", (imageResponse) => {
+      if (imageResponse.request().resourceType() !== "image") return;
+      const responses = imageResponses.get(imageResponse.url()) ?? [];
+      responses.push(imageResponse);
+      imageResponses.set(imageResponse.url(), responses);
+    });
     const response = await page.goto(args.url, {
       waitUntil: "domcontentloaded",
     });
@@ -121,9 +189,112 @@ async function capture() {
       );
     });
 
+    const images = await page.evaluate((selector) => {
+      const root = document.querySelector(selector)!;
+      const nodes = [root, ...root.querySelectorAll("img")];
+      return nodes
+        .filter(
+          (element): element is HTMLImageElement =>
+            element instanceof HTMLImageElement,
+        )
+        .map((image) => ({
+          id: image.id,
+          src: image.getAttribute("src") ?? "",
+          currentSrc: image.currentSrc,
+          width: image.naturalWidth,
+          height: image.naturalHeight,
+          responsive:
+            image.hasAttribute("srcset") ||
+            image.hasAttribute("sizes") ||
+            image.parentElement?.tagName === "PICTURE",
+        }));
+    }, args.selector);
+    const verifiedImages: Record<
+      string,
+      {
+        name: string;
+        src: string;
+        currentSrc: string;
+        hash: string;
+        width: number;
+        height: number;
+      }
+    > = Object.create(null);
+    for (const image of images) {
+      if (!args.analysis)
+        throw new Error(
+          "Las imágenes requieren --analysis con el manifiesto del compilador",
+        );
+      if (!image.id || Object.hasOwn(verifiedImages, image.id))
+        throw new Error("Una imagen necesita id explícito y único");
+      if (image.responsive)
+        throw new Error(
+          `${image.id}: srcset, sizes y picture requieren un adaptador de recursos responsive`,
+        );
+      if (!image.src || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(image.src))
+        throw new Error(
+          `${image.id}: solo se admiten imágenes locales del compilador`,
+        );
+      const matches = resources.filter((resource) =>
+        resource.srcs.includes(image.src),
+      );
+      if (matches.length !== 1)
+        throw new Error(
+          `${image.id}: el src no corresponde a un único recurso compilado`,
+        );
+      const resource = matches[0]!;
+      const expectedURL = new URL(image.src, args.url);
+      if (
+        expectedURL.origin !== new URL(args.url).origin ||
+        image.currentSrc !== expectedURL.href
+      )
+        throw new Error(
+          `${image.id}: el navegador seleccionó otra URL de imagen`,
+        );
+      if (image.width !== resource.width || image.height !== resource.height)
+        throw new Error(
+          `${image.id}: las dimensiones naturales no coinciden con el recurso compilado`,
+        );
+      const responses = imageResponses.get(image.currentSrc) ?? [];
+      if (responses.length !== 1)
+        throw new Error(
+          `${image.id}: la captura requiere una única respuesta verificable de imagen`,
+        );
+      const imageResponse = responses[0]!;
+      if (imageResponse.request().redirectedFrom())
+        throw new Error(`${image.id}: no se admiten redirecciones de imagen`);
+      if (!imageResponse.ok())
+        throw new Error(
+          `${image.id}: el recurso responde ${imageResponse.status()}`,
+        );
+      const mediaType = imageResponse
+        .headers()
+        ["content-type"]?.split(";")[0]
+        ?.trim();
+      if (mediaType !== resource.mediaType)
+        throw new Error(
+          `${image.id}: el tipo MIME no coincide con el recurso compilado`,
+        );
+      const bytes = await imageResponse.body();
+      if (bytes.length > 20 * 1024 * 1024)
+        throw new Error(`${image.id}: el recurso supera 20 MiB`);
+      if (createHash("sha256").update(bytes).digest("hex") !== resource.hash)
+        throw new Error(
+          `${image.id}: el hash de la imagen cargada no coincide con el compilador`,
+        );
+      verifiedImages[image.id] = {
+        name: resource.name,
+        src: image.src,
+        currentSrc: image.currentSrc,
+        hash: resource.hash,
+        width: resource.width,
+        height: resource.height,
+      };
+    }
+
     const measure = () =>
       page.evaluate(
-        ({ selector, sourceHash, state }) => {
+        ({ selector, sourceHash, state, verifiedImages }) => {
           const root = document.querySelector(selector);
           if (!(root instanceof HTMLElement))
             throw new Error("La raíz debe ser un elemento HTML");
@@ -229,7 +400,7 @@ async function capture() {
             if (element.shadowRoot)
               fail("shadow-root", "requiere un adaptador");
             if (
-              ["CANVAS", "VIDEO", "IFRAME", "IMG", "AUDIO"].includes(
+              ["CANVAS", "VIDEO", "IFRAME", "AUDIO", "PICTURE"].includes(
                 element.tagName,
               )
             )
@@ -265,7 +436,7 @@ async function capture() {
             ];
             if (
               new Set(borders).size !== 1 ||
-              (Number.parseFloat(borders[0]) > 0 &&
+              (Number.parseFloat(css.borderTopWidth) > 0 &&
                 (new Set(borderColors).size !== 1 ||
                   borderStyles.some((style) => style !== "solid")))
             ) {
@@ -279,6 +450,39 @@ async function capture() {
             ];
             if (new Set(radii).size !== 1)
               fail("border-radius", "se requiere un radio uniforme");
+            if (element instanceof HTMLImageElement) {
+              const verified = verifiedImages[id];
+              if (
+                !verified ||
+                element.getAttribute("src") !== verified.src ||
+                element.currentSrc !== verified.currentSrc ||
+                element.naturalWidth !== verified.width ||
+                element.naturalHeight !== verified.height
+              ) {
+                fail(
+                  "img src",
+                  "la imagen cambió respecto al recurso verificado",
+                );
+              }
+              if (css.objectFit !== "fill") fail("object-fit", css.objectFit);
+              if (css.objectPosition !== "50% 50%")
+                fail("object-position", css.objectPosition);
+              if (
+                Number.parseFloat(css.borderTopWidth) !== 0 ||
+                Number.parseFloat(css.borderTopLeftRadius) !== 0 ||
+                [
+                  css.paddingTop,
+                  css.paddingRight,
+                  css.paddingBottom,
+                  css.paddingLeft,
+                ].some((value) => Number.parseFloat(value) !== 0)
+              ) {
+                fail(
+                  "img box",
+                  "bordes, radios y padding necesitan un adaptador de contenido y recorte",
+                );
+              }
+            }
             const hasText =
               [...element.childNodes].some(
                 (node) =>
@@ -294,10 +498,10 @@ async function capture() {
             let textAlign = "left";
             let whiteSpace = "normal";
             if (hasText) {
-              fontFamily = css.fontFamily
-                .split(",")[0]
+              fontFamily = (css.fontFamily.split(",")[0] ?? "")
                 .trim()
                 .replace(/^['"]|['"]$/g, "");
+              if (!fontFamily) fail("font-family", css.fontFamily);
               fontStyle = css.fontStyle;
               fontWeight = Number(css.fontWeight);
               if (!Number.isFinite(fontWeight))
@@ -313,13 +517,17 @@ async function capture() {
                         ? 700
                         : Number(weight),
                   );
+                const minimumWeight = weights[0];
+                const maximumWeight = weights[weights.length - 1];
                 return (
                   family === fontFamily &&
                   face.status === "loaded" &&
                   face.style === fontStyle &&
                   weights.every(Number.isFinite) &&
-                  fontWeight >= weights[0] &&
-                  fontWeight <= weights[weights.length - 1]
+                  minimumWeight !== undefined &&
+                  maximumWeight !== undefined &&
+                  fontWeight >= minimumWeight &&
+                  fontWeight <= maximumWeight
                 );
               });
               if (!faceLoaded)
@@ -384,8 +592,8 @@ async function capture() {
               background: css.backgroundColor,
               color: css.color,
               borderColor: css.borderTopColor,
-              borderWidth: px(borders[0], `${id} border-width`),
-              radius: px(radii[0], `${id} border-radius`),
+              borderWidth: px(css.borderTopWidth, `${id} border-width`),
+              radius: px(css.borderTopLeftRadius, `${id} border-radius`),
               fontFamily,
               fontStyle,
               fontWeight,
@@ -404,6 +612,7 @@ async function capture() {
           selector: args.selector,
           sourceHash: args.sourceHash,
           state: args.state,
+          verifiedImages,
         },
       );
 
@@ -417,6 +626,10 @@ async function capture() {
     const after = await measure();
     if (JSON.stringify(before) !== JSON.stringify(after))
       throw new Error("La página cambió durante la captura");
+    for (const image of Object.values(verifiedImages)) {
+      if (imageResponses.get(image.currentSrc)?.length !== 1)
+        throw new Error("Una imagen se volvió a cargar durante la captura");
+    }
     if (pageErrors.length)
       throw new Error(`Errores de JavaScript: ${pageErrors.join("; ")}`);
     await mkdir(args.out, { recursive: true });
@@ -438,6 +651,7 @@ async function capture() {
           domHash: createHash("sha256").update(before.html).digest("hex"),
           screenshotHash: createHash("sha256").update(screenshot).digest("hex"),
           tokens: before.tokens,
+          resources: verifiedImages,
           nodes: before.nodes,
         },
         null,

@@ -3,5 +3,6 @@ example/dist/
 example/.astro/
 artifacts/
 artifacts-analysis.json
+artifacts-image-analysis.json
 native/generated/*.gen.go
 native/generated/*.report.json

@@ -11,7 +11,12 @@ import { resolve, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { compile } from "./parser.js";
-import { emitGo, scopeHelper, sourceHash } from "./emit.js";
+import {
+  emitGo,
+  scopeHelper,
+  sourceHash,
+  validateMeasurements,
+} from "./emit.js";
 import type { Measurements } from "./emit.js";
 
 interface Entry {
@@ -20,6 +25,7 @@ interface Entry {
   export?: string;
   output: string;
   measurements?: string;
+  publicDir?: string;
   profile?: { state: string; width: number; height: number; scale: number };
 }
 interface Config {
@@ -75,6 +81,8 @@ function readConfig(value: unknown, root: string): Config {
       typeof entry.measurements !== "string"
     )
       throw new Error(`${entry.name}: measurements debe ser una ruta.`);
+    if (entry.publicDir !== undefined && typeof entry.publicDir !== "string")
+      throw new Error(`${entry.name}: publicDir debe ser una ruta.`);
     if (entry.profile !== undefined) {
       const profile = entry.profile;
       if (
@@ -130,6 +138,7 @@ export async function generate(options: Options): Promise<void> {
   for (const entry of entries) {
     const program = await compile(resolve(root, entry.source), entry.export, {
       root,
+      ...(entry.publicDir ? { publicDir: entry.publicDir } : {}),
     });
     if (options.analyze) {
       analyses.push({
@@ -145,6 +154,7 @@ export async function generate(options: Options): Promise<void> {
           await readFile(resolve(root, measurementPath), "utf8"),
         ) as Measurements)
       : undefined;
+    if (measurementPath) validateMeasurements(measurements);
     const output = resolve(root, entry.output);
     if (!output.endsWith(".go"))
       throw new Error(`${output}: la salida debe terminar en .go.`);
@@ -169,6 +179,9 @@ export async function generate(options: Options): Promise<void> {
       name: entry.name,
       sourceHash: sourceHash(program),
       sources: program.sources,
+      resources: (program.resources ?? []).map(
+        ({ content: _content, ...resource }) => resource,
+      ),
       actions: program.actions,
       components: program.components.map((component) => component.name),
       compatibility: "declarative-stage-1",
@@ -268,7 +281,7 @@ async function treeFingerprint(root: string): Promise<string> {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) await scan(path);
       else if (
-        /\.(astro|tsx|ts|css|json)$/.test(entry.name) &&
+        /\.(astro|tsx|ts|css|json|png|jpg|jpeg)$/i.test(entry.name) &&
         !entry.name.endsWith(".report.json")
       )
         paths.push(path);

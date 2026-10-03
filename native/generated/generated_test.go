@@ -255,3 +255,45 @@ func TestCaptureMeasuredGeometry(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCaptureMeasuredImageGeometry(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	view, err := NewImageGeometry(webui.Scope{}, webui.Actions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := software.NewCanvas()
+	target.SetPadded(false)
+	target.SetScale(1)
+	target.Resize(fyne.NewSize(320, 240))
+	target.SetContent(view)
+	view.Resize(fyne.NewSize(320, 240))
+	view.BindCanvas(target)
+	if err := view.ValidateCanvas(); err != nil {
+		t.Fatal(err)
+	}
+	image := target.Capture()
+	object := view.Object("local-image")
+	if object == nil || object.Size() != fyne.NewSize(16, 16) {
+		t.Fatal("the compiled local image must produce its measured native object")
+	}
+	if err := view.Error(); err != nil {
+		t.Fatal(err)
+	}
+	out := os.Getenv("ASTRO_FYNE_IMAGE_ARTIFACTS")
+	if out == "" {
+		t.Skip("set ASTRO_FYNE_IMAGE_ARTIFACTS to export the native image comparison capture")
+	}
+	if err := os.MkdirAll(out, 0755); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Create(filepath.Join(out, "native.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if err := png.Encode(file, image); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -32,6 +32,8 @@ export type Node =
       attrs: Record<string, Expr>;
       events: Record<string, Handler>;
       children: Node[];
+      /** A compile-time local bitmap, never a network URL or interpreted DOM. */
+      imageResource?: string;
     }
   | { kind: "text"; value: Expr }
   | { kind: "conditional"; test: Expr; yes: Node[]; no: Node[] }
@@ -69,11 +71,27 @@ export interface Program {
   actions: string[];
   /** Inline/external CSS requires captured browser measurements in stage 01. */
   hasStyles?: boolean;
+  resources?: BitmapResource[];
+}
+
+export interface BitmapResource {
+  name: string;
+  path: string;
+  hash: string;
+  mediaType: "image/png" | "image/jpeg";
+  /** Original bytes encoded for deterministic, portable compiler artifacts. */
+  content: string;
+  width: number;
+  height: number;
+  /** Exact literal HTML sources; capture verifies served bytes against hash. */
+  srcs: string[];
 }
 
 export interface CompileOptions {
   /** Source paths and stable component names are relative to this directory. */
   root?: string;
+  /** Override Astro's default public directory without executing its config. */
+  publicDir?: string;
   /** Optional package adapters: package -> exported name -> native builtin name. */
   adapters?: Record<string, Record<string, string>>;
 }

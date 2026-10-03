@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createHash } from "node:crypto";
-import type { Component, Expr, Handler, Node, Program } from "./ir.js";
+import { Buffer } from "node:buffer";
+import type {
+  BitmapResource,
+  Component,
+  Expr,
+  Handler,
+  Node,
+  Program,
+} from "./ir.js";
 
 export interface Measurements {
   schema: 1;
@@ -9,6 +17,49 @@ export interface Measurements {
   viewport: { width: number; height: number; scale: number };
   nodes: Record<string, Record<string, string | number | boolean>>;
   tokens?: Record<string, string>;
+}
+
+export function validateMeasurements(
+  value: unknown,
+): asserts value is Measurements {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("La captura debe ser un objeto JSON de medidas.");
+  const data = value as Partial<Measurements>;
+  if (
+    data.schema !== 1 ||
+    typeof data.sourceHash !== "string" ||
+    !/^[a-f0-9]{64}$/.test(data.sourceHash)
+  )
+    throw new Error("La captura necesita schema:1 y sourceHash SHA-256.");
+  if (
+    typeof data.state !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(data.state)
+  )
+    throw new Error("Estado de captura inválido.");
+  if (
+    !data.viewport ||
+    ![data.viewport.width, data.viewport.height].every(
+      (dimension) =>
+        Number.isSafeInteger(dimension) && dimension > 0 && dimension <= 16384,
+    ) ||
+    ![1, 2].includes(data.viewport.scale)
+  )
+    throw new Error("Viewport de captura inválido.");
+  if (
+    !data.nodes ||
+    typeof data.nodes !== "object" ||
+    Array.isArray(data.nodes) ||
+    !Object.keys(data.nodes).length
+  )
+    throw new Error("La captura necesita un mapa de nodos medidos.");
+  if (
+    data.tokens !== undefined &&
+    (!data.tokens ||
+      typeof data.tokens !== "object" ||
+      Array.isArray(data.tokens) ||
+      Object.values(data.tokens).some((token) => typeof token !== "string"))
+  )
+    throw new Error("Los tokens de captura deben ser cadenas CSS.");
 }
 
 export function sourceHash(program: Program): string {
@@ -132,9 +183,27 @@ const fieldAttrs: Record<string, string> = {
 function style(
   node: Extract<Node, { kind: "element" }>,
   measured: boolean,
+  bitmap?: BitmapResource,
 ): string {
-  if (measured) return "webui.Style{}";
   const values: Record<string, string | number> = {};
+  if (bitmap) {
+    for (const dimension of ["width", "height"] as const) {
+      const value = node.attrs[dimension];
+      if (!value) continue;
+      const raw = value.kind === "literal" ? value.value : undefined;
+      if (
+        (typeof raw !== "number" && typeof raw !== "string") ||
+        !/^\d+(?:\.\d+)?$/.test(String(raw)) ||
+        !Number.isFinite(Number(raw)) ||
+        Number(raw) <= 0
+      )
+        throw new Error(
+          `${node.id}: img ${dimension} necesita píxeles positivos literales en stage 01.`,
+        );
+      values[dimension === "width" ? "Width" : "Height"] = Number(raw);
+    }
+  }
+  if (measured) return "webui.Style{}";
   const spacing = (number: string): number => Number(number) * 3.5;
   const fontSizes: Record<string, [number, number]> = {
     xs: [10.5, 14],
@@ -148,6 +217,7 @@ function style(
   for (const className of literal(node.attrs.className ?? node.attrs.class, "")
     .split(/\s+/)
     .filter(Boolean)) {
+    if (bitmap && className === "object-fill") continue;
     if (className === "flex") {
       values.Direction ??= "row";
       continue;
@@ -254,6 +324,16 @@ function style(
       flexDirection: "Direction",
     };
     for (const [property, val] of Object.entries(node.attrs.style.entries)) {
+      if (bitmap && ["objectFit", "objectPosition"].includes(property)) {
+        if (
+          val.kind !== "literal" ||
+          val.value !== (property === "objectFit" ? "fill" : "50% 50%")
+        )
+          throw new Error(
+            `${node.id}: img ${property} sin soporte nativo en stage 01.`,
+          );
+        continue;
+      }
       if (
         property === "display" &&
         val.kind === "literal" &&
@@ -286,6 +366,38 @@ function style(
           : Number(val.value);
       }
     }
+  }
+  if (bitmap) {
+    for (const field of [
+      "Radius",
+      "BorderWidth",
+      "PaddingTop",
+      "PaddingRight",
+      "PaddingBottom",
+      "PaddingLeft",
+    ]) {
+      if (Number(values[field] ?? 0) !== 0)
+        throw new Error(
+          `${node.id}: img ${field} requiere clipping o una caja nativa adicional.`,
+        );
+    }
+    if (values.Width === undefined && values.Height === undefined) {
+      values.Width = bitmap.width;
+      values.Height = bitmap.height;
+    } else if (values.Width === undefined) {
+      values.Width = (Number(values.Height) * bitmap.width) / bitmap.height;
+    } else if (values.Height === undefined) {
+      values.Height = (Number(values.Width) * bitmap.height) / bitmap.width;
+    }
+    if (
+      !Number.isFinite(Number(values.Width)) ||
+      !Number.isFinite(Number(values.Height)) ||
+      Number(values.Width) <= 0 ||
+      Number(values.Height) <= 0
+    )
+      throw new Error(
+        `${node.id}: dimensiones img necesitan píxeles positivos o una captura.`,
+      );
   }
   return `webui.Style{${Object.entries(values)
     .map(
@@ -331,6 +443,7 @@ interface EmitContext {
   name: string;
   measured: boolean;
   textCounter: number;
+  resources: Map<string, BitmapResource>;
 }
 function nodeCode(
   node: Node,
@@ -380,29 +493,58 @@ function nodeCode(
     return `build${context.name}_${node.name}(webui.Scope{${props}}, actions, refresh, state, active, prefix + ${quote("/" + node.id)})`;
   }
   const tag = node.tag;
+  const bitmap = node.imageResource
+    ? context.resources.get(node.imageResource)
+    : undefined;
+  if (tag === "img" && !bitmap)
+    throw new Error(`${node.id}: img no tiene un recurso bitmap validado.`);
+  if (bitmap && node.attrs.style?.kind === "object") {
+    for (const [property, val] of Object.entries(node.attrs.style.entries)) {
+      if (
+        ["objectFit", "objectPosition"].includes(property) &&
+        (val.kind !== "literal" ||
+          val.value !== (property === "objectFit" ? "fill" : "50% 50%"))
+      )
+        throw new Error(
+          `${node.id}: img ${property} sin soporte nativo en stage 01.`,
+        );
+    }
+  }
   const kind =
-    tag === "button"
-      ? "button"
-      : tag === "a"
-        ? "link"
-        : tag === "input"
-          ? "input"
-          : tag === "textarea"
-            ? "textarea"
-            : textTags.has(tag)
-              ? "text"
-              : containers.has(tag)
-                ? "container"
-                : undefined;
+    tag === "img"
+      ? "image"
+      : tag === "button"
+        ? "button"
+        : tag === "a"
+          ? "link"
+          : tag === "input"
+            ? "input"
+            : tag === "textarea"
+              ? "textarea"
+              : textTags.has(tag)
+                ? "text"
+                : containers.has(tag)
+                  ? "container"
+                  : undefined;
   if (!kind)
     throw new Error(`${node.id}: etiqueta ${tag} sin renderer nativo.`);
   const fields = [
     `ID: ${node.attrs.id ? `webui.String(${expression(node.attrs.id)})` : `prefix + ${quote("/" + node.id)}`}`,
     `Kind: ${quote(kind)}`,
-    `Style: ${style(node, measured)}`,
+    `Style: ${style(node, measured, bitmap)}`,
   ];
+  if (bitmap) fields.push(`ImageResource: image${context.name}_${bitmap.name}`);
   for (const [key, value] of Object.entries(node.attrs)) {
     if (ignoredAttrs.has(key)) continue;
+    if (bitmap && ["src", "width", "height"].includes(key)) continue;
+    if (bitmap && key === "alt") {
+      if (node.attrs["aria-label"])
+        throw new Error(
+          `${node.id}: img alt y aria-label simultáneos necesitan prioridad accesible explícita.`,
+        );
+      fields.push(`AccessibleLabel: webui.String(${expression(value)})`);
+      continue;
+    }
     if (key === "disabled") {
       fields.push(`Disabled: webui.Truth(${expression(value)})`);
       continue;
@@ -445,7 +587,7 @@ function nodeCode(
     fields.push(
       `Text: ${node.children.map((child) => (child.kind === "text" ? `webui.ChildText(${expression(child.value)})` : '""')).join(" + ") || '""'}`,
     );
-  } else
+  } else if (kind !== "image")
     fields.push(`Children: ${nodesCode(node.children, component, context)}`);
   return `[]webui.Node{{${fields.join(", ")}}}`;
 }
@@ -469,6 +611,8 @@ export function emitGo(
 ): string {
   if (!identifier.test(options.name) || !identifier.test(options.packageName))
     throw new Error("Nombre y paquete Go deben ser identificadores válidos.");
+  if (options.measurements !== undefined)
+    validateMeasurements(options.measurements);
   if (
     options.measurements &&
     (options.measurements.schema !== 1 ||
@@ -491,7 +635,29 @@ export function emitGo(
         "Las medidas no corresponden al estado, viewport y escala configurados.",
       );
   }
-  const context: EmitContext = { name: options.name, measured, textCounter: 0 };
+  const resources = program.resources ?? [];
+  const context: EmitContext = {
+    name: options.name,
+    measured,
+    textCounter: 0,
+    resources: new Map(resources.map((resource) => [resource.name, resource])),
+  };
+  if (context.resources.size !== resources.length)
+    throw new Error("Nombres de recursos bitmap duplicados.");
+  const embedded = resources
+    .map((resource) => {
+      if (!identifier.test(resource.name))
+        throw new Error(`Nombre de recurso bitmap no válido: ${resource.name}`);
+      const bytes = Buffer.from(resource.content, "base64");
+      if (createHash("sha256").update(bytes).digest("hex") !== resource.hash)
+        throw new Error(
+          `${resource.path}: bytes bitmap y SHA-256 no coinciden.`,
+        );
+      const encoded = bytes.toString("hex").replace(/../g, "\\x$&");
+      return `// Resource SHA-256: ${resource.hash}\nvar image${options.name}_${resource.name} = fyne.NewStaticResource(${quote(resource.path)}, []byte("${encoded}"))`;
+    })
+    .join("\n\n");
+  const resourceFactory = `func New${options.name}Resources() map[string]fyne.Resource { return map[string]fyne.Resource{${resources.map((resource) => `${quote(resource.path)}: image${options.name}_${resource.name}`).join(", ")}} }`;
   if (program.hasStyles && !measured)
     throw new Error(
       "La fuente contiene CSS. Captura sus medidas calculadas antes de generar Fyne; el CSS no se aproxima ni se descarta.",
@@ -522,7 +688,7 @@ export function emitGo(
   const tokens = Object.entries(options.measurements?.tokens ?? {})
     .map(([key, value]) => `${quote(key)}: ${quote(value)}`)
     .join(", ");
-  return `// Code generated by astro-fyne. DO NOT EDIT.\n// Source SHA-256: ${sourceHash(program)}\n// SPDX-License-Identifier: Apache-2.0\npackage ${options.packageName}\n\nimport (webui "${runtime}"; "fyne.io/fyne/v2")\n\ntype ${options.name}Widget struct { *webui.View }\ntype ${options.name}Theme struct { *webui.CapturedTheme }\nfunc New${options.name}Theme(base fyne.Theme) (*${options.name}Theme,error) { generated,err := webui.NewCapturedTheme(map[string]string{${tokens}},base); if err != nil { return nil,err }; return &${options.name}Theme{CapturedTheme:generated},nil }\n\nfunc New${options.name}(props webui.Scope, actions webui.Actions, backends ...webui.Backend) (*${options.name}Widget, error) {\n if err := webui.Require(actions, []string{${program.actions.map(quote).join(", ")}}); err != nil { return nil, err }\n state := webui.Scope{}\n var view *webui.View\n refresh := func() { if view != nil { view.Refresh() } }\n view = webui.NewView(func() []webui.Node { active := map[string]bool{}; nodes := build${options.name}_${program.entry}(props, actions, refresh, state, active, ""); for key := range state { if !active[key] { delete(state,key) } }; return nodes }, backends...)\n if err := view.Error(); err != nil { return nil, err }\n ${measurementSetup}\n return &${options.name}Widget{View:view}, nil\n}\n\n${components.join("\n\n")}\n`;
+  return `// Code generated by astro-fyne. DO NOT EDIT.\n// Source SHA-256: ${sourceHash(program)}\n// SPDX-License-Identifier: Apache-2.0\npackage ${options.packageName}\n\nimport (webui "${runtime}"; "fyne.io/fyne/v2")\n\n${embedded}\n${resourceFactory}\n\ntype ${options.name}Widget struct { *webui.View }\ntype ${options.name}Theme struct { *webui.CapturedTheme }\nfunc New${options.name}Theme(base fyne.Theme) (*${options.name}Theme,error) { generated,err := webui.NewCapturedTheme(map[string]string{${tokens}},base); if err != nil { return nil,err }; return &${options.name}Theme{CapturedTheme:generated},nil }\n\nfunc New${options.name}(props webui.Scope, actions webui.Actions, backends ...webui.Backend) (*${options.name}Widget, error) {\n if err := webui.Require(actions, []string{${program.actions.map(quote).join(", ")}}); err != nil { return nil, err }\n state := webui.Scope{}\n var view *webui.View\n refresh := func() { if view != nil { view.Refresh() } }\n view = webui.NewView(func() []webui.Node { active := map[string]bool{}; nodes := build${options.name}_${program.entry}(props, actions, refresh, state, active, ""); for key := range state { if !active[key] { delete(state,key) } }; return nodes }, backends...)\n if err := view.Error(); err != nil { return nil, err }\n ${measurementSetup}\n return &${options.name}Widget{View:view}, nil\n}\n\n${components.join("\n\n")}\n`;
 }
 
 const measuredFields = new Set([
@@ -553,19 +719,33 @@ const measuredFields = new Set([
   "measured",
 ]);
 function measurementsGo(measurements: Measurements): string {
-  if (
-    !Number.isFinite(measurements.viewport.width) ||
-    !Number.isFinite(measurements.viewport.height) ||
-    ![1, 2].includes(measurements.viewport.scale)
-  )
-    throw new Error("Viewport de captura inválido.");
+  const stringFields = new Set([
+    "direction",
+    "background",
+    "color",
+    "borderColor",
+    "fontFamily",
+    "fontStyle",
+    "textAlign",
+    "whiteSpace",
+    "display",
+  ]);
   const nodes = Object.entries(measurements.nodes).map(([id, values]) => {
+    if (!id || !values || typeof values !== "object" || Array.isArray(values))
+      throw new Error(`${id}: nodo de captura inválido.`);
     if (values.measured !== true)
       throw new Error(`${id}: falta la medida real del navegador.`);
     const fields = Object.entries(values).map(([key, value]) => {
       if (
         !measuredFields.has(key) ||
-        (typeof value === "number" && !Number.isFinite(value))
+        (key === "measured"
+          ? value !== true
+          : stringFields.has(key)
+            ? typeof value !== "string"
+            : typeof value !== "number" ||
+              !Number.isFinite(value) ||
+              !Number.isFinite(Math.fround(value)) ||
+              (key !== "x" && key !== "y" && value < 0))
       )
         throw new Error(`${id}: medida ${key} inválida.`);
       return `${key[0]?.toUpperCase()}${key.slice(1)}: ${typeof value === "string" ? quote(value) : value}`;
