@@ -278,6 +278,18 @@ export function Page({ items }) { return <main>{items.map(item => <Counter key={
   await expect(compile(entry)).rejects.toThrow("key requiere identidad");
 });
 
+test("loose equality requires a native adapter instead of an unsupported runtime operator", async () => {
+  for (const operator of ["==", "!="]) {
+    const entry = await source(
+      "Page.tsx",
+      `export function Page({ count }) { return <p>{count ${operator} '0'}</p>; }`,
+    );
+    await expect(compile(entry)).rejects.toThrow(
+      `Operador no soportado: ${operator}`,
+    );
+  }
+});
+
 test("package adapters are optional and unavailable external components fail explicitly", async () => {
   const entry = await source(
     "Page.tsx",

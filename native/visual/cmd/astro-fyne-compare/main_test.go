@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) Sytue. All rights reserved.
+// Copyright (c) Sytue. Licensed under Apache-2.0.
 
 package main
 
