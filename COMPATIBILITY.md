@@ -28,7 +28,7 @@ original JavaScript or execute a general ECMAScript runtime.
 | Expressions | Literals, supported property/index access, arrays, objects, templates, conditionals and listed operators | Arbitrary function calls, spread, optional chaining and unsupported JavaScript constructs |
 | Branches and lists | Supported JSX conditionals and declarative `map` callbacks | General iteration, arbitrary callback bodies and full keyed Preact reconciliation guarantees |
 | Events | Button/link `onClick`; input/textarea `onInput` and `onChange`; declared Go host actions | Full DOM event propagation, arbitrary event payloads, browser effects and implicit platform adapters |
-| HTML nodes | Supported container, plain text, button, link, input and textarea tags | Rich text nesting, specialized form controls and unsupported tags |
+| HTML nodes | Supported container, plain text, button, link, input, textarea and local bitmap image tags | Rich text nesting, specialized form controls and unsupported tags |
 | Application effects | Explicit named native actions supplied by the Go host | Automatic translation of browser APIs, networking, SSR, storage or navigation implementations |
 
 The accepted operators and calls are defined in `src/parser.ts`; their native implementations
@@ -57,7 +57,7 @@ measurements. A measured profile uses the browser's actual rectangles and comput
 | Typography | Explicit loaded browser fonts and corresponding native resources; supported text alignment, line height and whitespace |
 | Stacking and effects | Capture rejects non-default stacking, transforms, shadows, gradients, filters, masks and pseudo content |
 | Overflow | Capture rejects content extending outside its measured box; scrolling and clipping need explicit future support |
-| Resources | Unsupported image, SVG, media, iframe, canvas and Shadow DOM elements require future native adapters |
+| Resources | Embedded local PNG RGB/RGBA8 and supported JPEG, without color/orientation metadata; SVG, media, iframe, canvas, remote images, srcset and Shadow DOM require further native adapters |
 | Themes | The capture currently requests light color scheme; dark and system-theme switching need separate scenarios and implementation |
 | Scale | Capture records device scale 1 or 2; each native profile must enforce and verify its corresponding scale |
 | Platforms | A pass in the pinned test renderer does not certify desktop GPU rendering, other operating systems or mobile devices |

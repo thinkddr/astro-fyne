@@ -35,6 +35,8 @@ function metadata(bytes: Buffer, extension: string) {
       bytes.readUInt32BE(8) !== 13
     )
       throw new Error("El recurso .png no contiene una cabecera PNG válida.");
+    if (bytes[24] !== 8 || ![2, 6].includes(bytes[25]!))
+      throw new Error("PNG requiere 8 bits y formato RGB o RGBA en stage 01.");
     let ended = false;
     for (let offset = 8; offset + 12 <= bytes.length;) {
       const length = bytes.readUInt32BE(offset);

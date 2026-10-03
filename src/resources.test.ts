@@ -236,6 +236,24 @@ test("bitmap extension mismatches and unsupported metadata are explicit diagnost
   );
 });
 
+test("PNG accepts only 8-bit RGB/RGBA until native color conversions are certified", async () => {
+  const entry = await file("Page.tsx", "export const Page = () => <main />;");
+  for (const [depth, format] of [
+    [16, 6],
+    [8, 0],
+    [8, 3],
+    [8, 4],
+  ]) {
+    const bytes = bitmap();
+    bytes[24] = depth!;
+    bytes[25] = format!;
+    await file("public/logo.png", bytes);
+    await expect(loadBitmap("/logo.png", entry, directory)).rejects.toThrow(
+      "8 bits y formato RGB o RGBA",
+    );
+  }
+});
+
 test("native images reject object-fit and clipping unsupported by the renderer", async () => {
   await file("public/logo.png", bitmap());
   for (const style of [
