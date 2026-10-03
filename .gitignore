@@ -1,0 +1,6 @@
+node_modules/
+example/dist/
+example/.astro/
+artifacts/
+native/generated/*.gen.go
+native/generated/*.report.json
