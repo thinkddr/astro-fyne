@@ -207,7 +207,7 @@ func TestNativeInputKeepsFocusAndCursorDuringReconciliation(t *testing.T) {
 	if value != "ñb" {
 		t.Fatalf("controlled input/cursor lost text: %q", value)
 	}
-	if v.Object("name") != field || w.Canvas().Focused() != field {
+	if v.Object("name").(fyne.Focusable) != field || w.Canvas().Focused() != field {
 		t.Fatal("state refresh replaced the focused field")
 	}
 }

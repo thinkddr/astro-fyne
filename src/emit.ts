@@ -665,6 +665,19 @@ export function emitGo(
   const components = program.components.map((component) => {
     if (!identifier.test(component.name))
       throw new Error(`Nombre de componente no válido: ${component.name}`);
+    const bindings = new Set<string>();
+    for (const name of [
+      ...component.props,
+      ...(component.propsObject ? [component.propsObject] : []),
+      ...component.constants.map((constant) => constant.name),
+      ...component.states.flatMap((state) => [state.name, state.setter]),
+    ]) {
+      if (bindings.has(name))
+        throw new Error(
+          `${component.name}: colisión lexical de ${name}; separar ámbitos de módulo y componente requiere un namespace explícito en stage 01.`,
+        );
+      bindings.add(name);
+    }
     const initializers = component.initializers
       .map((item) => {
         if (item.kind === "constant") {
@@ -680,7 +693,7 @@ export function emitGo(
         return `active[${key}] = true; if _, exists := state[${key}]; !exists { state[${key}] = ${expression(state.initial)} }; scope[${quote(state.name)}] = state[${key}]`;
       })
       .join("\n");
-    return `func build${options.name}_${component.name}(props webui.Scope, actions webui.Actions, refresh func(), state webui.Scope, active map[string]bool, prefix string) []webui.Node {\n scope := cloneScope(props)\n scope["__astroProps"] = props\n _ = scope\n ${component.propsObject ? `scope[${quote(component.propsObject)}] = props` : ""}\n ${initializers}\n return ${nodesCode(component.body, component, context)}\n}`;
+    return `func build${options.name}_${component.name}(props webui.Scope, actions webui.Actions, refresh func(), state webui.Scope, active map[string]bool, prefix string) []webui.Node {\n scope := cloneScope(props)\n _ = scope\n ${component.propsObject ? `scope[${quote(component.propsObject)}] = props` : ""}\n ${initializers}\n return ${nodesCode(component.body, component, context)}\n}`;
   });
   const measurementSetup = options.measurements
     ? `view.SetViewport(${options.measurements.viewport.width}, ${options.measurements.viewport.height})\n if err := view.SetCaptureScale(${options.measurements.viewport.scale}); err != nil { return nil, err }\n if err := view.ApplyMeasurements(${measurementsGo(options.measurements)}); err != nil { return nil, err }`

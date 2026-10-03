@@ -160,3 +160,24 @@ export function Page() { return <main><Shared /><Shared /></main>; }`);
   expect(first).not.toContain(`func buildSecond_${helper}(`);
   expect(second).toContain(`func buildSecond_${helper}(`);
 });
+
+test("lexical shadows fail explicitly rather than overwrite props or choose a module constant", async () => {
+  for (const source of [
+    `const label = 'module'; export function Page({label}) { return <p>{label}</p>; }`,
+    `const value = 1; export function Page() { const value = 2; return <p>{value}</p>; }`,
+    `import {useState} from 'preact/hooks'; const count = 10; export function Page() { const [count,setCount] = useState(0); return <p>{count}</p>; }`,
+    `const props = 'module'; export function Page(props) { return <p>{props.label}</p>; }`,
+  ]) {
+    const compiled = await program(source);
+    expect(() => emitGo(compiled, options)).toThrow("colisión lexical");
+  }
+});
+
+test("a user prop named __astroProps is not overwritten by an internal helper", async () => {
+  const compiled = await program(
+    `export function Page({__astroProps}) { return <p>{__astroProps}</p>; }`,
+  );
+  const go = emitGo(compiled, options);
+  expect(go).toContain('webui.ChildText(webui.Get(scope, "__astroProps"))');
+  expect(go).not.toContain('scope["__astroProps"] = props');
+});

@@ -46,7 +46,11 @@ func TestBitmapFullDecodeAndDimensions(t *testing.T) {
 			if err != nil || size != fyne.NewSize(16, 8) {
 				t.Fatalf("valid %s dimensions=%v error=%v", format, size, err)
 			}
-			truncated := fyne.NewStaticResource(resource.Name(), resource.Content()[:len(resource.Content())/2])
+			// Preserve all header data while removing the pixel stream's ending.
+			truncated := fyne.NewStaticResource(resource.Name(), resource.Content()[:len(resource.Content())-8])
+			if _, _, err := image.DecodeConfig(bytes.NewReader(truncated.Content())); err != nil {
+				t.Fatalf("fixture must retain a decodable header to exercise full pixel validation: %v", err)
+			}
 			if _, err := ValidateBitmap(truncated); err == nil {
 				t.Fatal("header-only/truncated resource was accepted without decoding pixels")
 			}

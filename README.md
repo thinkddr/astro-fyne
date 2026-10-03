@@ -105,6 +105,15 @@ contains the source tree and layout/style data used by its native renderer. Thes
 automate the current widget and theme construction contract; general CSS theme switching,
 arbitrary custom controls and every formatting model remain part of the compatibility roadmap.
 
+Local `<img src="/images/example.png" alt="…" />` nodes generate embedded native resources
+and `canvas.Image` renderers. `NewNameResources()` exposes the resources by source path.
+URL-root paths resolve from the entry's Astro `public` directory, even for imported shared
+components; an entry can set `publicDir` explicitly. Relative image paths are source-relative.
+The resource inventory and byte hashes appear in the report and source digest. Dynamic URLs,
+remote assets, SVG, srcset, animation and color/orientation metadata require further adapters.
+The initial PNG contract is RGB/RGBA with 8-bit channels; supported JPEG files also receive
+native decoding, while actual pixel equality remains subject to the image gate.
+
 ## Capture and verify a visual profile
 
 A visual profile fixes the source revision, application state, viewport, device scale, theme,
@@ -142,6 +151,12 @@ state already prepared by the URL and scenario; it does not execute interactions
 waits for fonts and images, checks that the DOM and measurements remain stable, and records
 root CSS custom properties as `tokens`. It writes `web.png` and `measurements.json`, including
 source, DOM and screenshot hashes.
+
+Image captures also require `--analysis PATH` pointing to the compiler's `analyze` result.
+Capture checks the bytes of the response Chromium actually used against the compiler's
+resource digest, plus its MIME type, literal URL and natural dimensions. The image scenario
+in `image-visual.json` uses a local PNG at its natural size; its evidence is retained in
+`artifacts/images` separately from the solid-box scenario.
 
 Capture the generated native geometry and compare the actual images:
 
