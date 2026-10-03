@@ -14,11 +14,13 @@ import ts from "typescript";
 import type {
   CompileOptions,
   Component,
+  BitmapResource,
   Expr,
   Handler,
   Node,
   Program,
 } from "./ir.ts";
+import { loadBitmap } from "./resources.ts";
 
 interface AstroNode {
   type: string;
@@ -100,6 +102,7 @@ const TAGS = new Set([
   "ul",
   "ol",
   "li",
+  "img",
 ]);
 const BUILTINS = new Set(["Button", "Input", "Card", "CardBody", "CardTitle"]);
 const PURE_CALLS = new Set(["String", "Number", "Boolean", "t"]);
@@ -153,13 +156,16 @@ class Compiler {
   private ids = new Map<string, Set<string>>();
   private nextID = 0;
   private root = "";
+  private entrySource = "";
   private styles = new Map<string, string>();
   private hasStyles = false;
+  private resources = new Map<string, BitmapResource>();
 
   constructor(private readonly options: CompileOptions) {}
 
   async compile(path: string, exported?: string): Promise<Program> {
     this.root = resolve(this.options.root ?? dirname(path));
+    this.entrySource = path;
     const source = await this.source(path);
     let choice = exported;
     if (!choice) {
@@ -195,9 +201,18 @@ class Compiler {
         ...[...this.styles].map(([path, text]) => ({ path, text })),
       ]
         .map((s) => ({ path: this.sourcePath(s.path), hash: hash(s.text) }))
+        .concat(
+          [...this.resources.values()].map(({ path, hash }) => ({
+            path,
+            hash,
+          })),
+        )
         .sort((a, b) => compare(a.path, b.path)),
       actions: [...this.actions].sort(),
       hasStyles: this.hasStyles,
+      resources: [...this.resources.values()].sort((a, b) =>
+        compare(a.path, b.path),
+      ),
     };
   }
 
@@ -1187,7 +1202,90 @@ class Compiler {
           this.fail(scope.source, node, `Id duplicado: ${id}.`, scope);
         used.add(id);
       } else id = `${scope.component.name}_n${++this.nextID}`;
-      return { kind: "element", id, tag, attrs, events, children };
+      let imageResource: string | undefined;
+      if (tag === "img") {
+        const src = attrs.src;
+        if (src?.kind !== "literal" || typeof src.value !== "string")
+          this.fail(
+            scope.source,
+            node,
+            "img src necesita una ruta local literal PNG/JPEG.",
+            scope,
+          );
+        if (children.length || Object.keys(events).length)
+          this.fail(
+            scope.source,
+            node,
+            "img no admite hijos ni eventos en stage 01.",
+            scope,
+          );
+        for (const attribute of [
+          "srcSet",
+          "srcset",
+          "sizes",
+          "useMap",
+          "usemap",
+          "isMap",
+          "ismap",
+          "crossOrigin",
+          "crossorigin",
+          "referrerPolicy",
+          "referrerpolicy",
+          "loading",
+          "decoding",
+          "fetchpriority",
+          "fetchPriority",
+        ]) {
+          if (attrs[attribute])
+            this.fail(
+              scope.source,
+              node,
+              `img ${attribute} requiere un contrato nativo explícito.`,
+              scope,
+            );
+        }
+        try {
+          const bitmap = await loadBitmap(
+            src.value,
+            scope.source.path,
+            this.root,
+            this.options.publicDir
+              ? resolve(this.root, this.options.publicDir)
+              : undefined,
+            this.entrySource,
+          );
+          const previous = this.resources.get(bitmap.path);
+          if (previous) {
+            if (previous.hash !== bitmap.hash)
+              throw new Error(
+                `El recurso bitmap cambió durante la conversión: ${bitmap.path}`,
+              );
+            if (!previous.srcs.includes(src.value))
+              previous.srcs.push(src.value);
+            previous.srcs.sort(compare);
+            imageResource = previous.name;
+          } else {
+            this.resources.set(bitmap.path, bitmap);
+            imageResource = bitmap.name;
+          }
+        } catch (error) {
+          this.fail(
+            scope.source,
+            node,
+            error instanceof Error ? error.message : String(error),
+            scope,
+          );
+        }
+      }
+      return {
+        kind: "element",
+        id,
+        tag,
+        attrs,
+        events,
+        children,
+        ...(imageResource ? { imageResource } : {}),
+      };
     }
     const imported = scope.source.imports.get(tag);
     const adapted =

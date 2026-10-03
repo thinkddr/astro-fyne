@@ -24,6 +24,38 @@ async function program(source: string) {
 
 const options = { name: "Page", packageName: "generated" };
 
+test("invalid capture metadata or wrong style types never produce invalid Go", async () => {
+  const source = await program(
+    `export function Page() { return <div id="panel" />; }`,
+  );
+  const valid: Measurements = {
+    schema: 1,
+    sourceHash: sourceHash(source),
+    state: "default",
+    viewport: { width: 100, height: 30, scale: 1 },
+    nodes: { panel: { measured: true, width: 100, height: 30 } },
+  };
+  const invalid: unknown[] = [
+    null,
+    { ...valid, viewport: { width: -1, height: 30, scale: 1 } },
+    { ...valid, viewport: { width: 100, height: 30, scale: 3 } },
+    { ...valid, state: "" },
+    { ...valid, nodes: [] },
+    { ...valid, tokens: { "--color-primary": 5 } },
+    { ...valid, nodes: { panel: { measured: true, width: "100" } } },
+    { ...valid, nodes: { panel: { measured: true, color: 5 } } },
+    { ...valid, nodes: { panel: { measured: true, width: 1e100 } } },
+    { ...valid, nodes: { panel: { measured: true, radius: -1 } } },
+  ];
+  for (const measurements of invalid)
+    expect(() =>
+      emitGo(source, {
+        ...options,
+        measurements: measurements as Measurements,
+      }),
+    ).toThrow();
+});
+
 test("missing scalar props keep undefined semantics in emitted Go", async () => {
   const source = await program(`export function Page({ missing }) {
     return <p>{String(missing)}{missing === null}{missing === undefined}</p>;

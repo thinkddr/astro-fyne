@@ -7,6 +7,7 @@
 package webui
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,7 @@ type Node struct {
 	Children                                                []Node
 	OnTap                                                   func()
 	OnChange                                                func(string)
+	ImageResource                                           fyne.Resource
 }
 
 // Style uses CSS pixels, including fractional pixels. Measured positions are
@@ -80,6 +82,7 @@ type View struct {
 	canvasErr        error
 	navigationErr    error
 	refreshing       bool
+	bitmaps          map[[32]byte]bitmapAsset
 }
 
 var _ fyne.Widget = (*View)(nil)
@@ -91,7 +94,7 @@ func NewView(build func() []Node, backends ...Backend) *View {
 	if len(backends) > 0 && backends[0] != nil {
 		backend = backends[0]
 	}
-	v := &View{build: build, backend: backend, elements: make(map[string]*element)}
+	v := &View{build: build, backend: backend, elements: make(map[string]*element), bitmaps: make(map[[32]byte]bitmapAsset)}
 	v.ExtendBaseWidget(v)
 	v.reconcile()
 	return v
@@ -201,7 +204,12 @@ func (v *View) ApplyMeasurements(measurements map[string]Style) error {
 			return err
 		}
 		e := v.elements[id]
-		if err := v.backend.Validate(style, e.node.Text != "" || e.node.Kind == "input" || e.node.Kind == "textarea"); err != nil {
+		if e.node.Kind == "image" {
+			if err := validateImageStyle(id, style); err != nil {
+				return err
+			}
+		}
+		if err := v.backend.Validate(style, e.node.Kind != "image" && (e.node.Text != "" || e.node.Kind == "input" || e.node.Kind == "textarea")); err != nil {
 			return fmt.Errorf("webui: %q: %w", id, err)
 		}
 	}
@@ -259,6 +267,11 @@ func (v *View) reconcile() {
 	if err := validateNodes(nodes, ids); err != nil {
 		v.err = err
 		return // Keep the last valid native tree rather than partly mutating it.
+	}
+	nodes, err = v.freezeImages(nodes)
+	if err != nil {
+		v.err = err
+		return
 	}
 	var profileError error
 	if len(v.measurements) > 0 {
@@ -334,7 +347,7 @@ func validateNodes(nodes []Node, ids map[string]bool) error {
 		}
 		ids[n.ID] = true
 		switch n.Kind {
-		case "container", "text", "button", "input", "textarea", "link":
+		case "container", "text", "button", "input", "textarea", "link", "image":
 		default:
 			return fmt.Errorf("webui: unsupported native node kind %q at %q", n.Kind, n.ID)
 		}
@@ -346,6 +359,11 @@ func validateNodes(nodes []Node, ids map[string]bool) error {
 		}
 		if err := validateStyle(n.ID, n.Style); err != nil {
 			return err
+		}
+		if n.Kind == "image" {
+			if err := validateImageStyle(n.ID, n.Style); err != nil {
+				return err
+			}
 		}
 		if err := validateNodes(n.Children, ids); err != nil {
 			return err
@@ -399,6 +417,7 @@ func finite(v float32) bool { return !math.IsNaN(float64(v)) && !math.IsInf(floa
 func visualState(nodes []Node) string {
 	type stateNode struct {
 		ID, Kind, Text, Value, Placeholder, Href, Variant, Size string
+		ImageHash                                               string
 		Disabled                                                bool
 		Style                                                   Style
 		Children                                                []stateNode
@@ -407,8 +426,13 @@ func visualState(nodes []Node) string {
 	state = func(nodes []Node) []stateNode {
 		out := make([]stateNode, len(nodes))
 		for i, n := range nodes {
-			out[i] = stateNode{n.ID, n.Kind, n.Text, n.Value, n.Placeholder, n.Href, n.Variant, n.Size,
-				n.Disabled, n.Style, state(n.Children)}
+			imageHash := ""
+			if n.Kind == "image" && n.ImageResource != nil {
+				imageHash = fmt.Sprintf("%x", sha256.Sum256(n.ImageResource.Content()))
+			}
+			out[i] = stateNode{ID: n.ID, Kind: n.Kind, Text: n.Text, Value: n.Value,
+				Placeholder: n.Placeholder, Href: n.Href, Variant: n.Variant, Size: n.Size,
+				ImageHash: imageHash, Disabled: n.Disabled, Style: n.Style, Children: state(n.Children)}
 		}
 		return out
 	}
@@ -471,6 +495,9 @@ type element struct {
 	input          Editor
 	renderer       *elementRenderer
 	suppressChange bool
+	image          *canvas.Image
+	imageHash      [32]byte
+	imageSize      fyne.Size
 }
 
 func newElement(v *View, n Node) *element {
@@ -524,6 +551,16 @@ func (e *element) update() {
 	}
 	if w, ok := e.object.(*actionWidget); ok {
 		w.disabled = e.node.Disabled
+	}
+	if e.node.Kind == "image" {
+		hash := sha256.Sum256(e.node.ImageResource.Content())
+		if e.image == nil || e.imageHash != hash {
+			asset := e.view.bitmaps[hash]
+			e.image = canvas.NewImageFromResource(asset.resource)
+			e.image.FillMode = canvas.ImageFillStretch
+			e.image.ScaleMode = canvas.ImageScaleSmooth
+			e.imageHash, e.imageSize = hash, asset.size
+		}
 	}
 	if e.input != nil {
 		e.suppressChange = true
@@ -619,7 +656,7 @@ func (e *element) childObjects() []fyne.CanvasObject {
 	return out
 }
 func (e *element) textLines(width float32) []string {
-	if e.node.Text == "" {
+	if e.node.Text == "" || e.node.Kind == "image" {
 		return nil
 	}
 	if e.style.WhiteSpace == "nowrap" {
@@ -638,6 +675,13 @@ func (e *element) minSize() fyne.Size {
 	}
 	var size fyne.Size
 	switch e.node.Kind {
+	case "image":
+		size = e.imageSize
+		if s.Width > 0 && s.Height == 0 {
+			size.Height *= s.Width / size.Width
+		} else if s.Height > 0 && s.Width == 0 {
+			size.Width *= s.Height / size.Height
+		}
 	case "container":
 		size = flowMin(e.childObjects(), s.Direction == "row", s.Gap)
 	case "button", "input", "textarea":
@@ -677,6 +721,10 @@ func (w *plainWidget) AccessibilityLabel() string {
 	return w.element.node.Text
 }
 func (w *plainWidget) AccessibilityRole() fyne.AccessibleRole {
+	if w.element.node.Kind == "image" {
+		// Fyne 2.8 exposes no image role; retain the explicit alternative text.
+		return fyne.AccessibleRoleText
+	}
 	if w.element.node.Kind == "container" {
 		return fyne.AccessibleRoleContainer
 	}
@@ -792,6 +840,9 @@ func (r *elementRenderer) Refresh() {
 	if e.input != nil {
 		r.objects = append(r.objects, e.input.Object())
 	}
+	if e.image != nil {
+		r.objects = append(r.objects, e.image)
+	}
 	r.objects = append(r.objects, e.childObjects()...)
 	r.Layout(e.object.Size())
 	canvas.Refresh(e.object)
@@ -804,6 +855,10 @@ func (r *elementRenderer) Layout(size fyne.Size) {
 	height := max(size.Height-top-s.PaddingBottom-s.BorderWidth, 0)
 	if e.input != nil {
 		e.input.Layout(fyne.NewPos(left, top), fyne.NewSize(width, height))
+	}
+	if e.image != nil {
+		e.image.Move(fyne.NewPos(left, top))
+		e.image.Resize(fyne.NewSize(width, height))
 	}
 	if len(e.children) > 0 {
 		if s.Measured {
@@ -825,6 +880,9 @@ func (r *elementRenderer) Layout(size fyne.Size) {
 		r.objects = r.box.Objects()
 		if e.input != nil {
 			r.objects = append(r.objects, e.input.Object())
+		}
+		if e.image != nil {
+			r.objects = append(r.objects, e.image)
 		}
 		r.objects = append(r.objects, e.childObjects()...)
 		for i, text := range texts {
