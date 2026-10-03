@@ -62,6 +62,9 @@ An entry may also select a named `export`, declare a `measurements` JSON file or
 profile must match those values during generation. Use
 `--entry Counter` to select one entry in a larger configuration. Generated Go and
 `*.report.json` files belong to the generator; edits belong in Astro/TSX or the native host.
+Output names must end in `.gen.go`. Before writing any artifact, the compiler checks that
+existing Go files carry its generated header and existing reports identify its generator.
+It refuses to overwrite hand-written files, including a report at a generated output path.
 
 ## Use the generated Go
 
@@ -162,6 +165,11 @@ still report `exact: false`. Passing the geometry scenario certifies that scenar
 The generator report always starts with `pixelPerfectVerified: false`. Generation and matching
 bounding boxes do not establish visual equality. Keep the comparator result with both captures
 and the measurement file as the evidence for a passing profile.
+
+Measured constructors declare the captured device scale. After assigning the widget to its
+canvas, hosts must call `view.BindCanvas(window.Canvas())` and check `view.ValidateCanvas()`
+before certifying or exporting it. A measured profile requires its exact logical viewport and
+device scale; the runtime reports changes to either as errors.
 
 ## License
 

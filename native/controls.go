@@ -108,7 +108,7 @@ func (w *actionWidget) AccessibilityLabel() string {
 // and clipboard shortcuts. IME composition, rich text, undo and platform spellcheck
 // need a host editor adapter and are not claimed by this initial backend.
 type primitiveEditor struct {
-	widget.BaseWidget
+	canvas                      *editorCanvas
 	backend                     FyneBackend
 	style                       Style
 	text, placeholder           string
@@ -119,10 +119,13 @@ type primitiveEditor struct {
 
 func (b FyneBackend) Editor(multiline bool, style Style, onChange func(string)) Editor {
 	e := &primitiveEditor{backend: b, style: style, multiline: multiline, onChange: onChange}
-	e.ExtendBaseWidget(e)
+	e.canvas = &editorCanvas{editor: e}
+	e.canvas.ExtendBaseWidget(e.canvas)
 	return e
 }
-func (e *primitiveEditor) Object() fyne.CanvasObject { return e }
+func (e *primitiveEditor) Object() fyne.CanvasObject { return e.canvas }
+func (e *primitiveEditor) Refresh()                  { e.canvas.Refresh() }
+func (e *primitiveEditor) Size() fyne.Size           { return e.canvas.Size() }
 func (e *primitiveEditor) Text() string              { return e.text }
 func (e *primitiveEditor) SetText(text string) {
 	if text == e.text {
@@ -137,8 +140,8 @@ func (e *primitiveEditor) SetPlaceholder(text string) { e.placeholder = text; e.
 func (e *primitiveEditor) SetDisabled(disabled bool)  { e.disabled = disabled; e.Refresh() }
 func (e *primitiveEditor) SetStyle(style Style)       { e.style = style; e.Refresh() }
 func (e *primitiveEditor) Layout(position fyne.Position, size fyne.Size) {
-	e.Move(position)
-	e.Resize(size)
+	e.canvas.Move(position)
+	e.canvas.Resize(size)
 }
 func (e *primitiveEditor) FocusGained()   { e.active = true; e.Refresh() }
 func (e *primitiveEditor) FocusLost()     { e.active = false; e.Refresh() }
@@ -247,28 +250,49 @@ func (e *primitiveEditor) Tapped(event *fyne.PointEvent) {
 	if e.disabled {
 		return
 	}
-	if app := fyne.CurrentApp(); app != nil {
-		if c := app.Driver().CanvasForObject(e); c != nil {
-			c.Focus(e)
-		}
-	}
 	if event == nil {
 		return
 	}
-	runes := []rune(e.text)
+	lines := strings.Split(e.text, "\n")
+	row := 0
+	if e.multiline && e.style.LineHeight > 0 {
+		row = min(max(int(event.Position.Y/e.style.LineHeight), 0), len(lines)-1)
+	}
+	runes := []rune(lines[row])
+	x := event.Position.X
+	width := e.backend.Measure(lines[row], e.style).Width
+	switch e.style.TextAlign {
+	case "center":
+		x -= (e.Size().Width - width) / 2
+	case "right", "end":
+		x -= e.Size().Width - width
+	}
 	cursor := len(runes)
+	previous := float32(0)
 	for i := range runes {
-		width := e.backend.Measure(string(runes[:i+1]), e.style).Width
-		if event.Position.X < width {
+		advance := e.backend.Measure(string(runes[:i+1]), e.style).Width
+		if x < (previous+advance)/2 {
 			cursor = i
 			break
 		}
+		previous = advance
+	}
+	for _, line := range lines[:row] {
+		cursor += len([]rune(line)) + 1
 	}
 	e.cursor, e.anchor = cursor, cursor
 	e.Refresh()
 }
-func (e *primitiveEditor) AccessibilityLabel() string             { return e.placeholder }
-func (e *primitiveEditor) AccessibilityRole() fyne.AccessibleRole { return fyne.AccessibleRoleText }
+
+// editorCanvas owns only drawing. Keeping keyboard focus on inputWidget avoids
+// exposing two tab stops and two accessibility controls for one HTML input.
+type editorCanvas struct {
+	widget.BaseWidget
+	editor *primitiveEditor
+}
+
+func (c *editorCanvas) CreateRenderer() fyne.WidgetRenderer { return c.editor.CreateRenderer() }
+
 func (e *primitiveEditor) CreateRenderer() fyne.WidgetRenderer {
 	r := &editorRenderer{editor: e, cursor: canvas.NewRectangle(parseColor(e.style.Color)), selection: canvas.NewRectangle(color.NRGBA{59, 130, 246, 60})}
 	r.Refresh()
@@ -285,6 +309,7 @@ type editorRenderer struct {
 func (r *editorRenderer) MinSize() fyne.Size           { return fyne.NewSize(0, r.editor.style.LineHeight) }
 func (r *editorRenderer) Objects() []fyne.CanvasObject { return r.objects }
 func (r *editorRenderer) Destroy()                     {}
+func (r *editorRenderer) IsClip()                      {}
 func (r *editorRenderer) Refresh() {
 	e := r.editor
 	s := e.style
@@ -307,7 +332,7 @@ func (r *editorRenderer) Refresh() {
 	}
 	r.objects = append(r.objects, r.cursor)
 	r.Layout(e.Size())
-	canvas.Refresh(e)
+	canvas.Refresh(e.canvas)
 }
 func (r *editorRenderer) Layout(size fyne.Size) {
 	e := r.editor

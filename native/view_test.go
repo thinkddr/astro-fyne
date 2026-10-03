@@ -4,10 +4,12 @@
 package webui
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"math"
 	"os"
+	"strings"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -27,12 +29,165 @@ func TestNativeTapReevaluatesGeneratedState(t *testing.T) {
 		}}}
 	})
 	button := v.Object("increment")
-	test.Tap(button)
+	tap(t, button)
 	if count != 1 || v.elements["count"].node.Text != "1" {
 		t.Fatalf("tap did not update generated state: %d %+v", count, v.elements["count"].node)
 	}
 	if button != v.Object("increment") {
 		t.Fatal("a stable ID unnecessarily replaced its native object")
+	}
+}
+
+func TestBuilderFailurePreservesLastValidMeasuredTree(t *testing.T) {
+	cause := errors.New("missing native prop")
+	fail := false
+	v := NewView(func() []Node {
+		if fail {
+			panic(cause)
+		}
+		return []Node{{ID: "panel", Kind: "container"}}
+	})
+	v.SetViewport(40, 30)
+	if err := v.ApplyMeasurements(map[string]Style{"panel": {X: 3.5, Y: 2.5, Width: 20, Height: 10, Background: "#ff0000", Opacity: 1, Measured: true}}); err != nil {
+		t.Fatal(err)
+	}
+	panel := v.Object("panel")
+	fail = true
+	v.Refresh()
+	if !errors.Is(v.Error(), cause) {
+		t.Fatalf("builder error was lost: %v", v.Error())
+	}
+	if v.Object("panel") != panel || panel.Position() != fyne.NewPos(3.5, 2.5) || panel.Size() != fyne.NewSize(20, 10) {
+		t.Fatal("builder failure replaced or repositioned the last valid measured tree")
+	}
+	fail = false
+	v.Refresh()
+	if v.Error() != nil {
+		t.Fatalf("a successful render did not clear its earlier build error: %v", v.Error())
+	}
+	broken := NewView(func() []Node { panic("invalid initial expression") })
+	if broken.Error() == nil || len(broken.elements) != 0 {
+		t.Fatal("an invalid initial builder did not return an empty view with an error")
+	}
+}
+
+func TestNavigationFailureSurvivesRefreshAndClearsOnSuccessfulRetry(t *testing.T) {
+	href := "://invalid"
+	v := NewView(func() []Node { return []Node{{ID: "link", Kind: "link", Text: "Open", Href: href}} })
+	tap(t, v.Object("link"))
+	if v.Error() == nil {
+		t.Fatal("navigation failure disappeared in the action's automatic refresh")
+	}
+	message := v.Error().Error()
+	v.Refresh()
+	if v.Error() == nil || v.Error().Error() != message {
+		t.Fatal("ordinary rendering erased the navigation error")
+	}
+	href = "https://example.com"
+	v.Refresh()
+	tap(t, v.Object("link"))
+	if v.Error() != nil {
+		t.Fatalf("successful navigation retry did not clear its error: %v", v.Error())
+	}
+}
+
+func TestInputsHaveOneTabStopAndDisabledFieldsAreSkipped(t *testing.T) {
+	v := NewView(func() []Node {
+		return []Node{{ID: "root", Kind: "container", Children: []Node{
+			{ID: "first", Kind: "input", Value: "one", AccessibleLabel: "First"},
+			{ID: "disabled", Kind: "input", Value: "two", Disabled: true, AccessibleLabel: "Disabled"},
+			{ID: "last", Kind: "input", Value: "three", AccessibleLabel: "Last"},
+		}}}
+	})
+	w := test.NewWindow(v)
+	defer w.Close()
+	w.SetPadded(false)
+	w.Resize(fyne.NewSize(240, 140))
+	first := v.Object("first").(fyne.Focusable)
+	last := v.Object("last").(fyne.Focusable)
+	w.Canvas().Focus(first)
+	w.Canvas().FocusNext()
+	if w.Canvas().Focused() != last {
+		t.Fatalf("Tab entered an inner editor or a disabled field: %T", w.Canvas().Focused())
+	}
+	w.Canvas().FocusNext()
+	if w.Canvas().Focused() != first {
+		t.Fatal("tab chain contained an extra inner editor")
+	}
+	w.Canvas().FocusPrevious()
+	if w.Canvas().Focused() != last {
+		t.Fatal("reverse tab chain did not skip disabled fields and inner editors")
+	}
+	disabled, ok := v.Object("disabled").(fyne.Disableable)
+	if !ok || !disabled.Disabled() {
+		t.Fatal("disabled input does not satisfy Fyne's focus-manager contract")
+	}
+	w.Canvas().Focus(v.Object("disabled").(fyne.Focusable))
+	if w.Canvas().Focused() != last {
+		t.Fatal("programmatic focus entered a disabled input")
+	}
+	if _, ok := v.elements["first"].input.Object().(fyne.Focusable); ok {
+		t.Fatal("input drawing exposes a second focusable control")
+	}
+}
+
+func TestInputPointerPositionsCursorWithoutChangingFocusOwner(t *testing.T) {
+	value := "ab"
+	v := NewView(func() []Node {
+		return []Node{{ID: "field", Kind: "input", Value: value, OnChange: func(s string) { value = s }}}
+	})
+	w := test.NewWindow(v)
+	defer w.Close()
+	w.SetPadded(false)
+	w.Resize(fyne.NewSize(240, 50))
+	field := v.Object("field")
+	style := v.elements["field"].style
+	field.(fyne.Tappable).Tapped(&fyne.PointEvent{Position: fyne.NewPos(style.PaddingLeft+style.BorderWidth, style.PaddingTop+style.BorderWidth+10)})
+	field.(fyne.Focusable).TypedRune('X')
+	if value != "Xab" || w.Canvas().Focused() != field {
+		t.Fatalf("pointer/cursor/focus mismatch: value=%q focus=%T", value, w.Canvas().Focused())
+	}
+}
+
+func TestCaptureBindingRejectsUnknownAndChangingDeviceScale(t *testing.T) {
+	v := NewView(func() []Node { return []Node{{ID: "panel", Kind: "container"}} })
+	v.SetViewport(100, 40)
+	if err := v.ApplyMeasurements(map[string]Style{"panel": {Width: 100, Height: 40, Background: "#ffffff", Opacity: 1, Measured: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.SetCaptureScale(2); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.ValidateCanvas(); err == nil {
+		t.Fatal("unbound device scale was assumed to be correct")
+	}
+	c := software.NewCanvas()
+	c.SetPadded(false)
+	c.SetScale(2)
+	c.Resize(fyne.NewSize(100, 40))
+	c.SetContent(v)
+	if err := v.BindCanvas(c); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.ValidateCanvas(); err != nil {
+		t.Fatal(err)
+	}
+	c.SetScale(1)
+	if err := v.ValidateCanvas(); err == nil || !strings.Contains(err.Error(), "device scale") {
+		t.Fatalf("changed driver scale was accepted: %v", err)
+	}
+	v.Refresh()
+	if v.Error() == nil {
+		t.Fatal("refresh did not record the bound canvas's scale mismatch")
+	}
+	c.SetScale(2)
+	v.Refresh()
+	if v.Error() != nil {
+		t.Fatalf("restored matching scale remained invalid: %v", v.Error())
+	}
+	c.Resize(fyne.NewSize(200, 40))
+	if err := v.ValidateCanvas(); err == nil {
+		t.Fatal("bound canvas silently changed the captured viewport")
 	}
 }
 
@@ -195,3 +350,11 @@ func capture(view *View, scale, width, height float32) image.Image {
 	return c.Capture()
 }
 func rgba(c color.Color) color.NRGBA { return color.NRGBAModel.Convert(c).(color.NRGBA) }
+func tap(t *testing.T, object fyne.CanvasObject) {
+	t.Helper()
+	button, ok := object.(fyne.Tappable)
+	if !ok {
+		t.Fatalf("native object %T is not tappable", object)
+	}
+	test.Tap(button)
+}

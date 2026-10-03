@@ -8,6 +8,7 @@ package webui
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image/color"
 	"math"
@@ -73,7 +74,11 @@ type View struct {
 	measurements     map[string]Style
 	measurementState string
 	viewport         fyne.Size
+	captureScale     float32
+	boundCanvas      fyne.Canvas
 	err              error
+	canvasErr        error
+	navigationErr    error
 	refreshing       bool
 }
 
@@ -102,7 +107,60 @@ func (v *View) Object(id string) fyne.CanvasObject {
 
 // Error reports invalid source contracts and stale measurement profiles. Consumers
 // must surface this error; a measured page with an error is not parity certified.
-func (v *View) Error() error { return v.err }
+func (v *View) Error() error { return errors.Join(v.err, v.canvasErr, v.navigationErr) }
+
+// SetCaptureScale declares the browser capture's device-pixel ratio. Loading a
+// profile before mounting remains possible; certification also requires BindCanvas
+// and ValidateCanvas once the native canvas has its final size and scale.
+func (v *View) SetCaptureScale(scale float32) error {
+	if !finite(scale) || scale <= 0 {
+		return fmt.Errorf("webui: capture scale must be positive and finite")
+	}
+	v.captureScale = scale
+	if v.boundCanvas != nil {
+		v.Refresh()
+		return v.ValidateCanvas()
+	}
+	return nil
+}
+
+// BindCanvas explicitly associates a native canvas with this generated view.
+// Auto-discovery is insufficient: named generated widgets embed View, and a
+// windowless software canvas is not registered in the application driver's windows.
+func (v *View) BindCanvas(target fyne.Canvas) error {
+	if target == nil {
+		return fmt.Errorf("webui: a native canvas is required")
+	}
+	v.boundCanvas = target
+	v.Refresh()
+	return v.ValidateCanvas()
+}
+
+// ValidateCanvas proves that a mounted measurement profile uses the captured
+// viewport AND device scale. Call it immediately before exporting pixels, even
+// if no resize/refresh occurred after a driver changed its scale.
+func (v *View) ValidateCanvas() error {
+	if len(v.measurements) == 0 {
+		return nil
+	}
+	if v.boundCanvas == nil {
+		return fmt.Errorf("webui: bind the native canvas before validating a capture")
+	}
+	if v.viewport.Width <= 0 || v.viewport.Height <= 0 {
+		return fmt.Errorf("webui: measured capture requires an explicit viewport")
+	}
+	if v.captureScale <= 0 {
+		return fmt.Errorf("webui: measured capture requires an explicit device scale")
+	}
+	if err := v.ValidateViewport(v.boundCanvas.Size()); err != nil {
+		return err
+	}
+	actual := v.boundCanvas.Scale()
+	if !finite(actual) || actual != v.captureScale {
+		return fmt.Errorf("webui: captured device scale %v cannot render at %v; capture that scale", v.captureScale, actual)
+	}
+	return nil
+}
 
 // SetViewport declares the CSS viewport captured by the browser. Canvas scale is
 // independent: a 400px page at device scale 2 still has a 400px native logical width.
@@ -161,7 +219,7 @@ func (v *View) ApplyMeasurements(measurements map[string]Style) error {
 	}
 	v.measurementState = visualState(v.nodes)
 	v.Refresh()
-	return v.err
+	return errors.Join(v.err, v.canvasErr)
 }
 
 // ClearMeasurements returns to source layout; useful before changing state and
@@ -173,9 +231,7 @@ func (v *View) ClearMeasurements() {
 
 // Resize keeps the native canvas and the captured CSS viewport accountable.
 func (v *View) Resize(size fyne.Size) {
-	if err := v.ValidateViewport(size); err != nil {
-		v.err = err
-	}
+	v.canvasErr = v.ValidateViewport(size)
 	v.BaseWidget.Resize(size)
 }
 
@@ -194,7 +250,11 @@ func (v *View) reconcile() {
 		v.err = fmt.Errorf("webui: a generated view requires a build function")
 		return
 	}
-	nodes := v.build()
+	nodes, err := buildSafely(v.build)
+	if err != nil {
+		v.err = err
+		return
+	}
 	ids := make(map[string]bool)
 	if err := validateNodes(nodes, ids); err != nil {
 		v.err = err
@@ -250,6 +310,21 @@ func (v *View) reconcile() {
 			}
 		}
 	}
+}
+
+// Only generated expression evaluation is a recoverable boundary. Panics in
+// renderer/backend code remain visible as implementation failures in the CI.
+func buildSafely(build func() []Node) (nodes []Node, err error) {
+	defer func() {
+		if failure := recover(); failure != nil {
+			if cause, ok := failure.(error); ok {
+				err = fmt.Errorf("webui: generated render failed: %w", cause)
+			} else {
+				err = fmt.Errorf("webui: generated render failed: %v", failure)
+			}
+		}
+	}()
+	return build(), nil
 }
 
 func validateNodes(nodes []Node, ids map[string]bool) error {
@@ -361,10 +436,15 @@ func (r *viewRenderer) MinSize() fyne.Size {
 	return flowMin(r.objects, false, 0)
 }
 func (r *viewRenderer) Layout(size fyne.Size) {
-	if err := r.view.ValidateViewport(size); err != nil {
-		r.view.err = err
+	r.view.canvasErr = r.view.ValidateViewport(size)
+	if r.view.boundCanvas != nil {
+		r.view.canvasErr = errors.Join(r.view.canvasErr, r.view.ValidateCanvas())
 	}
-	if len(r.view.measurements) != 0 && r.view.err == nil {
+	measured := len(r.view.measurements) != 0
+	for _, e := range r.view.roots {
+		measured = measured && e.style.Measured
+	}
+	if measured {
 		for _, e := range r.view.roots {
 			placeMeasured(e)
 		}
@@ -407,11 +487,9 @@ func newElement(v *View, n Node) *element {
 				e.node.OnTap()
 			} else if e.node.Kind == "link" && e.node.Href != "" {
 				if destination, err := url.Parse(e.node.Href); err == nil {
-					if err = fyne.CurrentApp().OpenURL(destination); err != nil {
-						e.view.err = err
-					}
+					e.view.navigationErr = fyne.CurrentApp().OpenURL(destination)
 				} else {
-					e.view.err = err
+					e.view.navigationErr = err
 				}
 			}
 			e.view.Refresh()
@@ -647,6 +725,16 @@ func (w *inputWidget) TypedShortcut(s fyne.Shortcut) {
 	}
 }
 func (w *inputWidget) Disabled() bool { return w.element.node.Disabled }
+func (w *inputWidget) Enable() {
+	w.element.node.Disabled = false
+	w.element.input.SetDisabled(false)
+	w.Refresh()
+}
+func (w *inputWidget) Disable() {
+	w.element.node.Disabled = true
+	w.element.input.SetDisabled(true)
+	w.Refresh()
+}
 func (w *inputWidget) AccessibilityLabel() string {
 	if w.element.label != "" {
 		return w.element.label
@@ -654,12 +742,24 @@ func (w *inputWidget) AccessibilityLabel() string {
 	return w.element.node.Placeholder
 }
 func (w *inputWidget) AccessibilityRole() fyne.AccessibleRole { return fyne.AccessibleRoleText }
-func (w *inputWidget) Tapped(*fyne.PointEvent) {
+func (w *inputWidget) Tapped(event *fyne.PointEvent) {
 	if w.element.node.Disabled {
 		return
 	}
-	if c := fyne.CurrentApp().Driver().CanvasForObject(w); c != nil {
+	c := w.element.view.boundCanvas
+	if c == nil {
+		c = fyne.CurrentApp().Driver().CanvasForObject(w)
+	}
+	if c != nil {
 		c.Focus(w)
+	}
+	if event != nil {
+		if pointer, ok := w.element.input.(interface{ Tapped(*fyne.PointEvent) }); ok {
+			local := *event
+			style := w.element.style
+			local.Position = local.Position.Subtract(fyne.NewPos(style.PaddingLeft+style.BorderWidth, style.PaddingTop+style.BorderWidth))
+			pointer.Tapped(&local)
+		}
 	}
 }
 

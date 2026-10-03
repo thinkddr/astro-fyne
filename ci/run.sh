@@ -6,9 +6,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 bun install --frozen-lockfile --ignore-scripts
 bun run typecheck
 bun test src
-bunx --no-install prettier --check src capture example astro-fyne.json visual.json package.json tsconfig.json
+bunx --no-install prettier --check src capture example astro-fyne.json visual.json conformance.json package.json tsconfig.json
 bun src/cli.ts generate --config astro-fyne.json
 bun src/cli.ts check --config astro-fyne.json
+bun src/cli.ts generate --config conformance.json
+bun src/cli.ts check --config conformance.json
 bun src/cli.ts analyze --config visual.json > artifacts-analysis.json
 task_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-analysis.json").json()).sourceHash)')"
 bunx --no-install astro build --root example
@@ -39,3 +41,4 @@ go vet ./...
 GOMAXPROCS=2 go test -p=2 -race ./...
 go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/web.png --native ../artifacts/native.png --out ../artifacts/diff.png | tee ../artifacts/comparison.json
 test -z "$(gofmt -l .)"
+go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
