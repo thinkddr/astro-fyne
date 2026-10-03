@@ -24,6 +24,17 @@ async function program(source: string) {
 
 const options = { name: "Page", packageName: "generated" };
 
+test("HTML input and change events keep distinct immediate and commit callbacks", async () => {
+  const source =
+    await program(`export function Page({onEdit,onCommit}) { return <input
+    onInput={event=>onEdit(event.currentTarget.value)}
+    onChange={event=>onCommit(event.currentTarget.value)} />; }`);
+  const go = emitGo(source, options);
+  expect(go).toContain("OnChange: func(value string)");
+  expect(go).toContain("OnCommit: func(value string)");
+  expect(go).toContain("view.SetAutoRefreshEvents(false)");
+});
+
 test("invalid capture metadata or wrong style types never produce invalid Go", async () => {
   const source = await program(
     `export function Page() { return <div id="panel" />; }`,
