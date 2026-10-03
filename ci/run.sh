@@ -6,7 +6,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 bun install --frozen-lockfile --ignore-scripts
 bun run typecheck
 bun test src
-bunx --no-install prettier --check src capture example astro-fyne.json visual.json conformance.json package.json tsconfig.json
+bunx --no-install prettier --check src capture example astro-fyne.json visual.json conformance.json conformance-scenario.json package.json tsconfig.json
 bun src/cli.ts generate --config astro-fyne.json
 bun src/cli.ts check --config astro-fyne.json
 bun src/cli.ts generate --config conformance.json
@@ -31,6 +31,7 @@ if [[ "$task_preview_ready" != true ]]; then
   exit 1
 fi
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/geometry --out artifacts --width 320 --height 240 --scale 1 --source-hash "$task_source_hash"
+bun capture/behavior.ts http://127.0.0.1:4321/conformance conformance-scenario.json artifacts/web-behavior.json
 bun src/cli.ts generate --config visual.json --entry Geometry --measurements artifacts/measurements.json
 bun src/cli.ts check --config visual.json --entry Geometry --measurements artifacts/measurements.json
 
@@ -40,5 +41,6 @@ go mod tidy
 go vet ./...
 GOMAXPROCS=2 go test -p=2 -race ./...
 go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/web.png --native ../artifacts/native.png --out ../artifacts/diff.png | tee ../artifacts/comparison.json
+bun ../capture/compare-behavior.ts ../artifacts/web-behavior.json ../artifacts/native-behavior.json | tee ../artifacts/behavior-comparison.json
 test -z "$(gofmt -l .)"
 go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...

@@ -11,5 +11,9 @@
     "jsx": "react-jsx",
     "jsxImportSource": "preact"
   },
-  "include": ["src/**/*.ts", "example/src/components/**/*.tsx"]
+  "include": [
+    "src/**/*.ts",
+    "capture/**/*.ts",
+    "example/src/components/**/*.tsx"
+  ]
 }
