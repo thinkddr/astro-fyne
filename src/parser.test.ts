@@ -129,7 +129,7 @@ export default ({ onCount }) => {
         {
           kind: "binary",
           op: "+",
-          left: { kind: "name", name: "count" },
+          left: { kind: "current", name: "count" },
           right: { kind: "literal", value: 1 },
         },
       ],
@@ -169,7 +169,7 @@ export function Counter(props) {
     {
       kind: "binary",
       op: "+",
-      left: { kind: "name", name: "count" },
+      left: { kind: "current", name: "count" },
       right: { kind: "literal", value: 1 },
     },
     {
@@ -179,6 +179,85 @@ export function Counter(props) {
       right: { kind: "literal", value: 2 },
     },
   ]);
+});
+
+test("updater parameters remain distinct from captured names of this and other states", async () => {
+  const entry = await source(
+    "Page.tsx",
+    `import {useState} from 'preact/hooks';
+export function Page() {
+  const [a,setA] = useState(0); const [b,setB] = useState(1);
+  return <button onClick={() => { setB(2); setA(current => current + b); setA(current => current + a); }} />;
+}`,
+  );
+  const compiled = await compile(entry);
+  const steps = elements(compiled.components[0]!.body)[0]!.events.onClick!
+    .steps;
+  expect(steps[1]!.args[0]).toEqual({
+    kind: "binary",
+    op: "+",
+    left: { kind: "current", name: "a" },
+    right: { kind: "name", name: "b" },
+  });
+  expect(steps[2]!.args[0]).toEqual({
+    kind: "binary",
+    op: "+",
+    left: { kind: "current", name: "a" },
+    right: { kind: "name", name: "a" },
+  });
+});
+
+test("an updater alias shadows an outer state only inside that updater", async () => {
+  const entry = await source(
+    "Page.tsx",
+    `import {useState} from 'preact/hooks';
+export function Page() {
+  const [prev,setPrev] = useState(2); const [count,setCount] = useState(0);
+  return <button onClick={() => { setPrev(9); setCount(prev => prev + 1); setCount(current => current + prev); }} />;
+}`,
+  );
+  const compiled = await compile(entry);
+  const steps = elements(compiled.components[0]!.body)[0]!.events.onClick!
+    .steps;
+  expect(steps[1]!.args[0]).toEqual({
+    kind: "binary",
+    op: "+",
+    left: { kind: "current", name: "count" },
+    right: { kind: "literal", value: 1 },
+  });
+  expect(steps[2]!.args[0]).toEqual({
+    kind: "binary",
+    op: "+",
+    left: { kind: "current", name: "count" },
+    right: { kind: "name", name: "prev" },
+  });
+});
+
+test("handlers reject unreachable steps after return with their source location", async () => {
+  const entry = await source(
+    "Page.tsx",
+    `import {useState} from 'preact/hooks';
+export function Page() {
+  const [count,setCount] = useState(0);
+  return <button onClick={() => { return setCount(1); setCount(2); }} />;
+}`,
+  );
+  await expect(compile(entry)).rejects.toThrow(
+    "Código después de return en un handler",
+  );
+});
+
+test("updater parameters with defaults or rest require an explicit adapter", async () => {
+  for (const parameter of ["current = 1", "...current"]) {
+    const entry = await source(
+      "Page.tsx",
+      `import {useState} from 'preact/hooks';
+export function Page() { const [count,setCount] = useState(0); return <button onClick={() => setCount((${parameter}) => current + 1)} />; }`,
+    );
+    await expect(compile(entry)).rejects.toThrow(
+      "El updater del setter debe ser valor",
+    );
+  }
 });
 
 test("inline and imported CSS require measurement and all stylesheet hashes are kept", async () => {

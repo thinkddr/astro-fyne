@@ -5,6 +5,8 @@ export type Expr =
   | { kind: "literal"; value: string | number | boolean | null }
   | { kind: "undefined" }
   | { kind: "name"; name: string }
+  /** Only the lexical updater parameter reads pending state; closures stay fixed. */
+  | { kind: "current"; name: string }
   | { kind: "get"; object: Expr; key: Expr }
   | { kind: "binary"; op: string; left: Expr; right: Expr }
   | { kind: "unary"; op: string; value: Expr }
