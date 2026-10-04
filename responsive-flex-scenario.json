@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "name": "01-224",
+      "width": 224,
+      "height": 640,
+      "scale": 1
+    },
+    {
+      "name": "02-368",
+      "width": 368,
+      "height": 640,
+      "scale": 1
+    },
+    {
+      "name": "03-512",
+      "width": 512,
+      "height": 640,
+      "scale": 1
+    },
+    {
+      "name": "04-368-return",
+      "width": 368,
+      "height": 640,
+      "scale": 1
+    },
+    {
+      "name": "05-224-return",
+      "width": 224,
+      "height": 640,
+      "scale": 1
+    },
+    {
+      "name": "06-224-scale2",
+      "width": 224,
+      "height": 640,
+      "scale": 2
+    }
+  ],
+  "ids": [
+    "responsive-flex",
+    "justify-start",
+    "justify-start-1",
+    "justify-start-2",
+    "justify-start-3",
+    "justify-end",
+    "justify-end-1",
+    "justify-end-2",
+    "justify-end-3",
+    "justify-center",
+    "justify-center-1",
+    "justify-center-2",
+    "justify-center-3",
+    "justify-between",
+    "justify-between-1",
+    "justify-between-2",
+    "justify-between-3",
+    "justify-around",
+    "justify-around-1",
+    "justify-around-2",
+    "justify-around-3",
+    "justify-evenly",
+    "justify-evenly-1",
+    "justify-evenly-2",
+    "justify-evenly-3",
+    "grow-shrink",
+    "grow-shrink-1",
+    "grow-shrink-2",
+    "align-self",
+    "align-self-start",
+    "align-self-center",
+    "align-self-end",
+    "stretch",
+    "stretch-auto",
+    "stretch-zero",
+    "stretch-fixed",
+    "nested",
+    "nested-1",
+    "nested-1-top",
+    "nested-1-bottom",
+    "nested-2",
+    "nested-2-top",
+    "nested-2-bottom",
+    "partial-grow",
+    "partial-grow-1",
+    "partial-grow-2"
+  ]
+}
