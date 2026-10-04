@@ -49,7 +49,7 @@ test("CSS family identifiers collapse spaces and reserved tokens require quotes"
     "Astro menu",
   ]) {
     const invalid = await program(make(value));
-    expect(() => emitGo(invalid, options)).toThrow("familia literal");
+    expect(() => emitGo(invalid, options)).toThrow("literal family");
   }
 });
 
@@ -318,10 +318,10 @@ test("object initializer callbacks retain source order across integer-like keys"
     .constants[0]!.value;
   if (object.kind !== "object") throw new Error("missing record literal");
   object.order = ["z", "2", "2"];
-  expect(() => emitGo(source, options)).toThrow("orden de inicialización");
+  expect(() => emitGo(source, options)).toThrow("initialization order");
   for (const invalid of [null, false, 0, ["z", "2", 1], ["z", "2"]]) {
     object.order = invalid as unknown as string[];
-    expect(() => emitGo(source, options)).toThrow("orden de inicialización");
+    expect(() => emitGo(source, options)).toThrow("initialization order");
   }
 });
 
@@ -584,9 +584,7 @@ test("symbolic Tailwind colors require browser capture instead of invalid Go sty
     const source = await program(
       `export function Page() { return <div id="panel" className="${className}" />; }`,
     );
-    expect(() => emitGo(source, options)).toThrow(
-      "capturar su color calculado",
-    );
+    expect(() => emitGo(source, options)).toThrow("computed color");
     const measurements: Measurements = {
       schema: 1,
       sourceHash: sourceHash(source),
@@ -616,7 +614,7 @@ test("unsupported CSS numeric units never become a string in a Go numeric field"
     `export function Page() { return <div style={{width:'50%'}} />; }`,
   );
   expect(() => emitGo(source, options)).toThrow(
-    "width necesita px/rem o captura",
+    "width requires px/rem or browser capture",
   );
 });
 
@@ -697,7 +695,7 @@ test("responsive flex serializes explicit solid borders and rejects other border
       await program(`export function Page() { return <main id="root"
       style={{display:'flex',borderStyle:'${borderStyle}',borderWidth:2}}/>; }`);
     expect(() => emitGo(invalid, options)).toThrow(
-      "CSS borderStyle sin soporte",
+      "CSS borderStyle is unsupported",
     );
   }
   const missing = await program(`export function Page() { return <main id="root"
@@ -716,7 +714,7 @@ test("responsive flex serializes explicit solid borders and rejects other border
       await program(`export function Page() { return <main id="root"
       style={{display:'flex',${declaration}}}/>; }`);
     expect(() => emitGo(implicit, options)).toThrow(
-      "CSS borderStyle solid requiere",
+      "CSS borderStyle solid requires",
     );
   }
   const zero = await program(`export function Page() { return <main id="root"
@@ -760,10 +758,14 @@ test("responsive flex rejects unsupported units, intrinsic sizing and formatting
   const missingContext =
     await program(`export function Page() { return <div id="orphan"
     style={{width:'100%'}}/>; }`);
-  expect(() => emitGo(missingContext, options)).toThrow("metadata explícita");
+  expect(() => emitGo(missingContext, options)).toThrow(
+    "explicit responsive flex metadata",
+  );
   const classes = await program(`export function Page() { return <main id="root"
     className="p-2" style={{display:'flex'}}/>; }`);
-  expect(() => emitGo(classes, options)).toThrow("estilos inline sin clases");
+  expect(() => emitGo(classes, options)).toThrow(
+    "inline styles without classes",
+  );
 });
 
 test("responsive item metadata is emitted before dynamic parents are validated natively", async () => {
@@ -790,7 +792,7 @@ test("responsive flex validates non-finite public IR values before emitting Go",
   for (const property of ["flexGrow", "width"])
     for (const value of [NaN, Infinity, -Infinity, 1e100]) {
       root.attrs.style.entries[property] = { kind: "literal", value };
-      expect(() => emitGo(source, options)).toThrow("finito");
+      expect(() => emitGo(source, options)).toThrow("finite");
       root.attrs.style.entries[property] = { kind: "literal", value: 1 };
     }
 });
@@ -835,7 +837,7 @@ test("lexical shadows fail explicitly rather than overwrite props or choose a mo
     `const props = 'module'; export function Page(props) { return <p>{props.label}</p>; }`,
   ]) {
     const compiled = await program(source);
-    expect(() => emitGo(compiled, options)).toThrow("colisión lexical");
+    expect(() => emitGo(compiled, options)).toThrow("lexical collision");
   }
 });
 
@@ -906,7 +908,7 @@ test("HTML forms require native submission behavior rather than a silent contain
       `export function Page() { return ${body}; }`,
     );
     expect(() => emitGo(compiled, options)).toThrow(
-      "semántica submit requiere binding nativo",
+      "submit semantics require a native binding",
     );
   }
   const supported = await program(
