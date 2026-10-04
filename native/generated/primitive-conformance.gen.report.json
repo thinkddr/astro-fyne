@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "generator": "astro-fyne",
+  "name": "PrimitiveConformance",
+  "sourceHash": "d127f290e3f3c0a3bb40078bc9dfe868bc0885389a70c8ea38e93bfdc4a05e3d",
+  "sources": [
+    {
+      "path": "example/src/components/PrimitiveConformance.tsx",
+      "hash": "f3aa630a434e7961e1b377cd49e5848fee636da8b33d1428d88c12d7b22fe9bc"
+    }
+  ],
+  "resources": [],
+  "actions": [],
+  "components": [
+    "PrimitiveConformance_354b45f4"
+  ],
+  "compatibility": "declarative-stage-1",
+  "visual": {
+    "measured": false,
+    "pixelPerfectVerified": false
+  }
+}
