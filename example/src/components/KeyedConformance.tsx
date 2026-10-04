@@ -67,9 +67,21 @@ export function KeyedConformance() {
   const [visible, setVisible] = useState(true);
   const [revision, setRevision] = useState(0);
   const [renamed, setRenamed] = useState(false);
+  const [prepended, setPrepended] = useState(false);
   const a = { id: `a/${revision}`, label: "a" };
   const b = { id: "b", label: "b" };
-  const items = visible ? (reversed ? [b, a] : [a, b]) : [b];
+  const c = { id: "c", label: "c" };
+  const items = visible
+    ? reversed
+      ? prepended
+        ? [c, b, a]
+        : [b, a]
+      : prepended
+        ? [c, a, b]
+        : [a, b]
+    : prepended
+      ? [c, b]
+      : [b];
   const [primitives, setPrimitives] = useState(["x", "y"]);
   return (
     <main id="keyed-conformance">
@@ -111,11 +123,18 @@ export function KeyedConformance() {
                 ? renamed
                   ? "a-renamed-input"
                   : "a-input"
-                : "b-input"
+                : `${item.label}-input`
             }
           />
         ))}
       </div>
+      <button
+        id="prepend-row"
+        type="button"
+        onClick={() => setPrepended((previous) => !previous)}
+      >
+        Prepend or remove C
+      </button>
       <button
         id="swap-primitives"
         type="button"

@@ -7,6 +7,8 @@
     "a-branch-count",
     "a-branch-text",
     "a-branch-label",
+    "c-value",
+    "c-text",
     "x-primitive",
     "y-primitive"
   ],
@@ -23,6 +25,14 @@
     "toggle-a",
     "a-increment",
     "change-key",
-    "swap-primitives"
+    "swap-primitives",
+    "reorder",
+    "edit-b",
+    "reorder",
+    "prepend-row",
+    "edit-a",
+    "prepend-row",
+    "prepend-row",
+    "edit-b"
   ]
 }
