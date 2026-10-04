@@ -1,0 +1,37 @@
+{
+  "ids": [
+    "controls-title",
+    "controls-input",
+    "controls-commit",
+    "controls-toggle-disabled",
+    "status-value",
+    "status-inputs",
+    "status-commits",
+    "status-clicks",
+    "status-events",
+    "status-disabled"
+  ],
+  "actions": [
+    "click-input",
+    "type-BC",
+    "resize-368",
+    "type-D",
+    "resize-512",
+    "resize-224",
+    "click-commit",
+    "click-input",
+    "type-E",
+    "press-enter",
+    "press-enter",
+    "click-toggle-disabled",
+    "click-disabled-input",
+    "click-disabled-button",
+    "resize-368",
+    "click-toggle-disabled",
+    "click-input",
+    "type-F",
+    "click-commit",
+    "resize-224",
+    "click-canvas"
+  ]
+}

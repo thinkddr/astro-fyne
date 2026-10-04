@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "cases": [
+    { "name": "01-224", "width": 224, "height": 96, "scale": 1 },
+    { "name": "02-368", "width": 368, "height": 96, "scale": 1 },
+    { "name": "03-512", "width": 512, "height": 96, "scale": 1 },
+    { "name": "04-368-return", "width": 368, "height": 96, "scale": 1 },
+    { "name": "05-224-return", "width": 224, "height": 96, "scale": 1 }
+  ],
+  "ids": ["responsive-bitmap", "bitmap-left", "bitmap-image", "bitmap-right"]
+}

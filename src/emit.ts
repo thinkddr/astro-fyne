@@ -624,6 +624,13 @@ function style(
                 "unset",
                 "revert",
                 "revert-layer",
+                "default",
+                "caption",
+                "icon",
+                "menu",
+                "message-box",
+                "small-caption",
+                "status-bar",
                 "serif",
                 "sans-serif",
                 "monospace",
@@ -637,12 +644,14 @@ function style(
                 "emoji",
                 "math",
                 "fangsong",
-              ].includes(name.toLowerCase()))
+              ].some((keyword) =>
+                name.toLowerCase().split(/ +/).includes(keyword),
+              ))
           )
             throw new Error(
               `${node.id}: CSS fontFamily necesita una única familia literal con recurso explícito.`,
             );
-          values[field] = raw;
+          values[field] = quoted ? raw : name.split(/ +/).join(" ");
         } else {
           const choices: Record<string, string[]> = {
             FontStyle: ["normal", "italic"],
@@ -1111,11 +1120,20 @@ export function emitGo(
       })),
     );
   const fontNames = new Set<string>();
+  const fontWebSources = new Map<string, string>();
   const fontEmbedded = fonts
     .map((face) => {
       if (!identifier.test(face.name) || fontNames.has(face.name))
         throw new Error("Nombre de recurso font inválido o duplicado.");
       fontNames.add(face.name);
+      if (
+        fontWebSources.has(face.webSrc) &&
+        fontWebSources.get(face.webSrc) !== face.hash
+      )
+        throw new Error(
+          `fonts.webSrc ${face.webSrc} vincula archivos con hashes diferentes.`,
+        );
+      fontWebSources.set(face.webSrc, face.hash);
       const bytes = Buffer.from(face.content, "base64");
       if (
         bytes.toString("base64") !== face.content ||

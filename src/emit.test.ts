@@ -31,6 +31,28 @@ const responsiveControlReset =
 const responsiveLeaf = (leaf: string) =>
   `export function Page() { return <main id="root" style={{display:'flex',width:'100%',height:80,boxSizing:'border-box'}}>${leaf}</main>; }`;
 
+test("CSS family identifiers collapse spaces and reserved tokens require quotes", async () => {
+  const make = (family: string) =>
+    responsiveLeaf(
+      `<span id="text" style={{${responsiveTextStyle.replace("fontFamily:'AstroNoto'", `fontFamily:${JSON.stringify(family)}`)}}}>Text</span>`,
+    );
+  expect(emitGo(await program(make("Astro  Noto")), options)).toContain(
+    'FontFamily: "Astro Noto"',
+  );
+  expect(emitGo(await program(make('"Astro  Noto"')), options)).toContain(
+    'FontFamily: "\\\"Astro  Noto\\\""',
+  );
+  for (const value of [
+    "Astro inherit",
+    "Astro serif",
+    "Astro default",
+    "Astro menu",
+  ]) {
+    const invalid = await program(make(value));
+    expect(() => emitGo(invalid, options)).toThrow("familia literal");
+  }
+});
+
 test("responsive text and native controls emit complete literal typography and resets", async () => {
   const source = await program(`import {useState} from 'preact/hooks';
     export function Page() { const [value,setValue]=useState('A');return <main id="root"

@@ -107,6 +107,36 @@ and editing. The default `webui.FyneBackend` uses public Fyne primitives. Measur
 explicit font resources matching the browser's loaded font family, weight and style; supplying
 the same font file is necessary but does not by itself prove matching rasterization.
 
+An entry can automate the matching font resources with `fonts`:
+
+```json
+"fonts": [{
+  "family": "AstroNoto",
+  "weight": 400,
+  "style": "normal",
+  "source": "example/public/fonts/NotoSans-Regular.ttf",
+  "webSrc": "/fonts/NotoSans-Regular.ttf"
+}]
+```
+
+Generation embeds the original bytes, emits `New<Name>Backend()` and includes the fonts
+in `New<Name>Resources()`. The widget constructor selects this backend automatically when
+the host supplies none. It also emits `<entry>.gen.fonts.css`, which the Astro host imports
+to load the declared `@font-face`. The configuration binds a CSS family alias, face and web
+URL to a content digest; changing any binding invalidates the source hash. Reports list
+the font inventory without its binary content. With one declared family, the generated
+theme uses its available regular/bold/italic faces; with several families, the theme keeps
+its base fonts and the widget backend resolves each explicit family.
+
+This contract accepts licensed, static TrueType files with weight 400 or 700 and normal or
+italic style. It checks the SFNT table bounds, checksums, metrics and declared face before
+writing any output. Native validation also parses the font and checks the supported text's
+glyph coverage. Variable/color fonts, WOFF, CFF, font collections, synthesized faces and
+implicit fallback require a separate rendering contract. Font sources must remain inside
+the configuration's project directory, including through symlinks. Each file is limited
+to 20 MiB, with 40 MiB across at most 16 faces. The example font retains its
+[SIL Open Font License](example/public/fonts/LICENSE-NotoSans.txt).
+
 A custom backend can delegate its `Editor` method to `webui.NewEditor(backend, multiline,
 style, onChange)`. This shares the native editing engine while using that backend's text
 measurement and placement; the generated view owns keyboard focus and commit events.

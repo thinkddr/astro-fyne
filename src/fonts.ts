@@ -191,6 +191,7 @@ export async function loadFonts(
   validateFontFaces(faces);
   const canonicalRoot = await realpath(root);
   const result: FontResource[] = [];
+  const webSources = new Map<string, string>();
   let total = 0;
   for (const face of faces) {
     const path = resolve(root, face.source),
@@ -210,6 +211,11 @@ export async function loadFonts(
       throw new Error("Las fuentes fonts superan 40 MiB en total.");
     const hash = digest(bytes),
       relativePath = relative(root, path).replaceAll("\\", "/");
+    if (webSources.has(face.webSrc) && webSources.get(face.webSrc) !== hash)
+      throw new Error(
+        `fonts.webSrc ${face.webSrc} vincula archivos con hashes diferentes.`,
+      );
+    webSources.set(face.webSrc, hash);
     result.push({
       name: `font_${digest(`${face.family.toLowerCase()}:${face.weight}:${face.style}:${relativePath}:${hash}`).slice(0, 24)}`,
       path: relativePath,

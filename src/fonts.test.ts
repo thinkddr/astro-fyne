@@ -16,6 +16,9 @@ import { generate } from "./cli.ts";
 const bytes = await readFile(
   resolve(import.meta.dir, "../example/public/fonts/NotoSans-Regular.ttf"),
 );
+const boldBytes = await readFile(
+  resolve(import.meta.dir, "../example/public/fonts/NotoSans-Bold.ttf"),
+);
 const face = {
   family: "AstroNoto",
   weight: 400 as const,
@@ -167,6 +170,26 @@ test("multiple CSS aliases for one file keep one native resource inventory key",
   expect(go).toContain(
     '"OtherAlias": {{Weight: 400, Italic: false}: fontPage_',
   );
+});
+
+test("a browser font URL cannot be bound to different native bytes", async () => {
+  await writeFile(join(directory, "bold.ttf"), boldBytes);
+  const bold = { ...face, weight: 700 as const, source: "bold.ttf" };
+  await expect(loadFonts([face, bold], directory)).rejects.toThrow(
+    "hashes diferentes",
+  );
+  const program = await compile(join(directory, "Page.tsx"), undefined, {
+    root: directory,
+    fonts: [face, { ...bold, webSrc: "/fonts/bold.ttf" }],
+  });
+  expect(program.fonts).toHaveLength(2);
+  expect(emitGo(program, { name: "Page", packageName: "generated" })).toContain(
+    "{Bold: true, Italic: false}",
+  );
+  program.fonts![1]!.webSrc = face.webSrc;
+  expect(() =>
+    emitGo(program, { name: "Page", packageName: "generated" }),
+  ).toThrow("hashes diferentes");
 });
 
 test("CLI generates matching web fonts CSS, native backend, theme and resource inventory atomically", async () => {
