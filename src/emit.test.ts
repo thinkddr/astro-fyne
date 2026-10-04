@@ -115,14 +115,35 @@ test("measured CSS attributes stay state-bound instead of disappearing into a st
       },
     },
   });
+  expect(go).toContain("capturedAttrs := webui.Scope{");
   expect(go).toContain(
-    'CaptureSignature: webui.SnapshotAttributes("div", webui.Scope{',
+    'CaptureSignature: webui.SnapshotAttributes("div", capturedAttrs)',
   );
   expect(go).toContain(
     '"className": func() any { if webui.Truth(webui.Get(scope, "active"))',
   );
   expect(go).toContain('"style": webui.Scope{"backgroundColor": func() any');
   expect(go).toContain('"aria-label": webui.Get(scope, "active")');
+});
+
+test("capture signatures reuse evaluated attributes without extra host calls", async () => {
+  const source = await program(
+    `export function Page() { return <input id="field" value={t("seed")}/>; }`,
+  );
+  const go = emitGo(source, {
+    ...options,
+    measurements: {
+      schema: 1,
+      sourceHash: sourceHash(source),
+      state: "default",
+      viewport: { width: 100, height: 30, scale: 1 },
+      nodes: { field: { measured: true, width: 100, height: 30, opacity: 1 } },
+    },
+  });
+  expect(go.split('actions["t"]("seed")')).toHaveLength(2);
+  expect(go).toContain(
+    'Value: webui.String(webui.Get(capturedAttrs, "value"))',
+  );
 });
 
 test("missing scalar props keep undefined semantics in emitted Go", async () => {

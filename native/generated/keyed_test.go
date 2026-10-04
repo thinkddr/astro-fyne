@@ -34,7 +34,59 @@ func keyedView(t *testing.T) (*KeyedConformanceWidget, fyne.Window) {
 	if err := view.Error(); err != nil {
 		t.Fatal(err)
 	}
+	// The test canvas has no painter. Materialize the genuine renderer tree as a
+	// drawn first frame would: Fyne's focus walker skips unrendered ancestors.
+	snapshot, err := view.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var render func([]webui.SnapshotNode)
+	render = func(nodes []webui.SnapshotNode) {
+		for _, node := range nodes {
+			if widget, ok := node.Object.(fyne.Widget); ok {
+				test.WidgetRenderer(widget)
+			}
+			render(node.Children)
+		}
+	}
+	render(snapshot.Roots)
 	return view, window
+}
+
+// activateKeyed matches browser HTMLElement.click(), which is programmatic
+// activation. Fyne test.Tap additionally blurs the focused input like a pointer.
+func activateKeyed(t *testing.T, view *KeyedConformanceWidget, id string) {
+	t.Helper()
+	object := view.Object(id)
+	tappable, ok := object.(fyne.Tappable)
+	if !ok {
+		t.Fatalf("keyed action %q is not tappable: %T", id, object)
+	}
+	tappable.Tapped(nil)
+	if err := view.Error(); err != nil {
+		t.Fatalf("keyed action %q: %v", id, err)
+	}
+}
+
+func typeKeyed(t *testing.T, view *KeyedConformanceWidget, window fyne.Window, id string) fyne.Focusable {
+	t.Helper()
+	input, ok := view.Object(id).(fyne.Focusable)
+	if !ok {
+		t.Fatalf("keyed input %q is not focusable", id)
+	}
+	window.Canvas().Focus(input)
+	if window.Canvas().Focused() != input {
+		t.Fatalf("initial focus %q: got %T (%p), want %p", id, window.Canvas().Focused(), window.Canvas().Focused(), input)
+	}
+	input.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEnd})
+	if window.Canvas().Focused() != input {
+		t.Fatalf("End lost focus for %q", id)
+	}
+	input.TypedRune('!')
+	if window.Canvas().Focused() != input {
+		t.Fatalf("controlled typing lost focus for %q; view error: %v", id, view.Error())
+	}
+	return input
 }
 
 func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
@@ -134,12 +186,9 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 			if action == "edit-branch-a" {
 				id = "a-branch-input"
 			}
-			input := view.Object(id).(fyne.Focusable)
-			window.Canvas().Focus(input)
-			input.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEnd})
-			input.TypedRune('!')
+			typeKeyed(t, view, window, id)
 		} else {
-			tapGenerated(t, view, action)
+			activateKeyed(t, view, action)
 		}
 		snapshot(action)
 	}
@@ -158,18 +207,21 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 func TestGeneratedCompatibleBranchesPreserveStateObjectAndFocus(t *testing.T) {
 	view, window := keyedView(t)
 	branch := view.Object("a-branch-input")
-	focus := branch.(fyne.Focusable)
-	window.Canvas().Focus(focus)
-	focus.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEnd})
-	focus.TypedRune('!')
-	tapGenerated(t, view, "a-branch-increment")
-	tapGenerated(t, view, "a-branch-toggle")
-	if view.Object("a-branch-input") != branch || window.Canvas().Focused() != focus ||
-		keyedText(t, view, "a-branch-count") != "1" || keyedText(t, view, "a-branch-text") != "initial!" ||
-		keyedText(t, view, "a-branch-label") != "alternate" {
-		t.Fatal("same component branch changed identity, initializer state or focus instead of just its props")
+	focus := typeKeyed(t, view, window, "a-branch-input")
+	activateKeyed(t, view, "a-branch-increment")
+	activateKeyed(t, view, "a-branch-toggle")
+	if view.Object("a-branch-input") != branch {
+		t.Fatal("compatible branch recreated its editor")
 	}
-	tapGenerated(t, view, "a-branch-toggle")
+	if window.Canvas().Focused() != focus {
+		t.Fatal("compatible branch lost editor focus")
+	}
+	for id, expected := range map[string]string{"a-branch-count": "1", "a-branch-text": "initial!", "a-branch-label": "alternate"} {
+		if actual := keyedText(t, view, id); actual != expected {
+			t.Fatalf("compatible branch %q: got %q, want %q", id, actual, expected)
+		}
+	}
+	activateKeyed(t, view, "a-branch-toggle")
 	if view.Object("a-branch-input") != branch || keyedText(t, view, "a-branch-count") != "1" {
 		t.Fatal("returning to the first compatible branch lost its instance")
 	}
@@ -192,21 +244,27 @@ func keyedA(view *KeyedConformanceWidget) fyne.CanvasObject {
 	return view.Object("a-input")
 }
 
-func TestGeneratedKeyedReorderPreservesStateObjectsAndFocus(t *testing.T) {
+func TestGeneratedKeyedReorderPreservesStateObjectsAndMatchesFocusProfile(t *testing.T) {
 	view, window := keyedView(t)
 	a, b := view.Object("a-input"), view.Object("b-input")
-	aFocus := a.(fyne.Focusable)
-	window.Canvas().Focus(aFocus)
-	aFocus.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEnd})
-	aFocus.TypedRune('!')
-	tapGenerated(t, view, "a-increment")
-	tapGenerated(t, view, "change-input-id")
-	if view.Object("a-input") != nil || view.Object("a-renamed-input") != a || window.Canvas().Focused() != aFocus {
-		t.Fatal("changing DOM id replaced a stable keyed editor or lost its focus")
+	aFocus := typeKeyed(t, view, window, "a-input")
+	activateKeyed(t, view, "a-increment")
+	activateKeyed(t, view, "change-input-id")
+	if view.Object("a-input") != nil {
+		t.Fatal("changing DOM id left the old public ID")
 	}
-	tapGenerated(t, view, "reorder")
-	if keyedA(view) != a || view.Object("b-input") != b || window.Canvas().Focused() != aFocus {
-		t.Fatal("keyed reorder replaced an editor or lost its focus")
+	if view.Object("a-renamed-input") != a {
+		t.Fatal("changing DOM id recreated a stable keyed editor")
+	}
+	if window.Canvas().Focused() != aFocus {
+		t.Fatal("changing DOM id lost editor focus")
+	}
+	activateKeyed(t, view, "reorder")
+	if keyedA(view) != a || view.Object("b-input") != b {
+		t.Fatal("keyed reorder replaced an editor")
+	}
+	if window.Canvas().Focused() != nil {
+		t.Fatal("keyed DOM reorder must blur the moved focused subtree in the Chromium conformance profile")
 	}
 	if keyedText(t, view, "a-value") != "1" || keyedText(t, view, "b-value") != "0" || keyedText(t, view, "a-text") != "a!" {
 		t.Fatal("state moved with list position instead of key")
@@ -214,11 +272,11 @@ func TestGeneratedKeyedReorderPreservesStateObjectsAndFocus(t *testing.T) {
 	if view.Object("b-row").Position().Y >= view.Object("a-row").Position().Y {
 		t.Fatal("native keyed rows did not reorder")
 	}
-	tapGenerated(t, view, "a-increment")
+	activateKeyed(t, view, "a-increment")
 	if keyedText(t, view, "a-value") != "2" {
 		t.Fatal("reordered handler lost its owning component prefix")
 	}
-	tapGenerated(t, view, "swap-primitives")
+	activateKeyed(t, view, "swap-primitives")
 	if view.Object("y-primitive").Position().Y >= view.Object("x-primitive").Position().Y {
 		t.Fatal("primitive keyed elements did not reorder")
 	}
@@ -227,19 +285,19 @@ func TestGeneratedKeyedReorderPreservesStateObjectsAndFocus(t *testing.T) {
 func TestGeneratedKeyedRemovalRemountAndKeyChangeResetOnlyTheirInstance(t *testing.T) {
 	view, _ := keyedView(t)
 	a, b := view.Object("a-input"), view.Object("b-input")
-	tapGenerated(t, view, "a-increment")
-	tapGenerated(t, view, "b-increment")
-	tapGenerated(t, view, "toggle-a")
+	activateKeyed(t, view, "a-increment")
+	activateKeyed(t, view, "b-increment")
+	activateKeyed(t, view, "toggle-a")
 	if view.Object("a-input") != nil {
 		t.Fatal("removed keyed component retained its native object")
 	}
-	tapGenerated(t, view, "toggle-a")
+	activateKeyed(t, view, "toggle-a")
 	if view.Object("a-input") == a || view.Object("b-input") != b || keyedText(t, view, "a-value") != "0" || keyedText(t, view, "b-value") != "1" {
 		t.Fatal("keyed remount reused dead state or recreated a sibling")
 	}
 	a = view.Object("a-input")
-	tapGenerated(t, view, "a-increment")
-	tapGenerated(t, view, "change-key")
+	activateKeyed(t, view, "a-increment")
+	activateKeyed(t, view, "change-key")
 	if view.Object("a-input") == a || view.Object("b-input") != b || keyedText(t, view, "a-value") != "0" || keyedText(t, view, "a-text") != "a" || keyedText(t, view, "b-value") != "1" {
 		t.Fatal("changing key with a fixed DOM id did not reset just that native instance")
 	}

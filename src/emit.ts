@@ -544,26 +544,31 @@ function nodeCode(
                   : undefined;
   if (!kind)
     throw new Error(`${node.id}: etiqueta ${tag} sin renderer nativo.`);
+  const attributeValue = (key: string) =>
+    measured
+      ? `webui.Get(capturedAttrs, ${quote(key)})`
+      : expression(node.attrs[key]!);
   const fields = [
-    `ID: ${node.attrs.id ? `webui.String(${expression(node.attrs.id)})` : `prefix + ${quote("/" + node.id)}`}`,
+    `ID: ${node.attrs.id ? `webui.String(${attributeValue("id")})` : `prefix + ${quote("/" + node.id)}`}`,
     `Identity: prefix + ${quote("/" + (node.identity ?? node.id))}`,
     `Kind: ${quote(kind)}`,
     `Style: ${style(node, measured, bitmap)}`,
   ];
+  let capturedAttributes = "";
   if (measured) {
     // The captured CSS can depend on every ordinary source attribute, not only
     // the fields implemented by the native widget. Preserve those evaluated
     // values so a class/style/selector change invalidates the frozen profile.
-    const attributes = Object.entries(node.attrs)
+    capturedAttributes = Object.entries(node.attrs)
       .filter(([key]) => key !== "key" && !key.startsWith("client:"))
       .map(([key, value]) => `${quote(key)}: ${expression(value)}`)
       .join(", ");
     fields.push(
-      `CaptureSignature: webui.SnapshotAttributes(${quote(tag)}, webui.Scope{${attributes}})`,
+      `CaptureSignature: webui.SnapshotAttributes(${quote(tag)}, capturedAttrs)`,
     );
   }
   if (bitmap) fields.push(`ImageResource: image${context.name}_${bitmap.name}`);
-  for (const [key, value] of Object.entries(node.attrs)) {
+  for (const key of Object.keys(node.attrs)) {
     if (ignoredAttrs.has(key)) continue;
     if (bitmap && ["src", "width", "height"].includes(key)) continue;
     if (bitmap && key === "alt") {
@@ -571,16 +576,16 @@ function nodeCode(
         throw new Error(
           `${node.id}: img alt y aria-label simultáneos necesitan prioridad accesible explícita.`,
         );
-      fields.push(`AccessibleLabel: webui.String(${expression(value)})`);
+      fields.push(`AccessibleLabel: webui.String(${attributeValue(key)})`);
       continue;
     }
     if (key === "disabled") {
-      fields.push(`Disabled: webui.Truth(${expression(value)})`);
+      fields.push(`Disabled: webui.Truth(${attributeValue(key)})`);
       continue;
     }
     if (key.startsWith("client:")) continue;
     if (fieldAttrs[key]) {
-      fields.push(`${fieldAttrs[key]}: webui.String(${expression(value)})`);
+      fields.push(`${fieldAttrs[key]}: webui.String(${attributeValue(key)})`);
       continue;
     }
     throw new Error(`${node.id}: atributo ${key} sin conversión.`);
@@ -618,7 +623,10 @@ function nodeCode(
     );
   } else if (kind !== "image")
     fields.push(`Children: ${nodesCode(node.children, component, context)}`);
-  return `[]webui.Node{{${fields.join(", ")}}}`;
+  const result = `[]webui.Node{{${fields.join(", ")}}}`;
+  return measured
+    ? `func() []webui.Node { capturedAttrs := webui.Scope{${capturedAttributes}}; return ${result} }()`
+    : result;
 }
 
 function nodesCode(
