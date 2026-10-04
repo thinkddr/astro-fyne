@@ -5,14 +5,9 @@ package webui
 
 import "unicode/utf8"
 
-// GroupList records one stable direct-child array/Fragment source site. Generated
-// code calls it once after building the complete list, with the enclosing source
-// namespace and each site's ID. Only physical roots belong to this group: lists
-// within a root's Children retain their own independent groups.
-//
-// A physical root cannot carry two nested virtual list boundaries. Represent
-// those boundaries with containers or reject the source instead of flattening
-// them and silently changing DOM movement/focus behavior.
+// GroupList tags a completed direct-child array/Fragment by its stable source site.
+// Only physical roots are tagged; child lists keep their own groups. Nested virtual
+// boundaries on one physical root require a container or an unsupported-source error.
 func GroupList(nodes []Node, group string) []Node {
 	if group == "" || !utf8.ValidString(group) {
 		panic("webui: list group requires a nonempty Unicode source-site identity")

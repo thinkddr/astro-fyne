@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-import { readFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { applyArtifacts, generatedJSON, generatedText } from "./artifacts.js";
 import { emitWebScene } from "./reverse.js";
+import { helpText, readCLIJSON, usageError, wantsHelp } from "./cli-help.js";
 
 export interface ReverseOptions {
   scene: string;
@@ -17,18 +17,18 @@ export async function generateReverse(options: ReverseOptions): Promise<void> {
   const scenePath = resolve(options.scene);
   const output = resolve(options.out);
   const publicDir = resolve(options.publicDir ?? join(output, "public"));
-  const result = emitWebScene(JSON.parse(await readFile(scenePath, "utf8")), {
+  const result = emitWebScene(await readCLIJSON(scenePath, "Scene"), {
     name: options.name,
     ...(options.actionsModule ? { actionsModule: options.actionsModule } : {}),
   });
   const destination = (path: string, directory = output): string => {
-    if (isAbsolute(path)) throw new Error(`Ruta de salida absoluta: ${path}`);
+    if (isAbsolute(path)) throw new Error(`Absolute output path: ${path}`);
     const resolved = resolve(directory, path);
     const rel = relative(directory, resolved);
     if (!rel || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel))
-      throw new Error(`Ruta fuera del directorio de salida: ${path}`);
+      throw new Error(`Path escapes the output directory: ${path}`);
     if (resolved === scenePath)
-      throw new Error("La salida no puede reemplazar la escena de entrada.");
+      throw new Error("Output cannot replace the input scene.");
     return resolved;
   };
   await applyArtifacts(
@@ -71,16 +71,22 @@ export async function generateReverse(options: ReverseOptions): Promise<void> {
     { check: options.check ?? false },
   );
   process.stdout.write(
-    `${options.check ? "Comprobada" : "Generada"} ${options.name}: Fyne → Astro + Preact; fidelidad visual requiere comparación de capturas.\n`,
+    `${options.check ? "Checked" : "Generated"} ${options.name}: Fyne → Astro + Preact; visual fidelity requires comparing captures.\n`,
   );
 }
 
-export async function reverseMain(argv: string[]): Promise<void> {
+export async function reverseMain(args: readonly string[]): Promise<void> {
+  const argv = [...args];
+  if (wantsHelp(argv)) {
+    process.stdout.write(helpText("reverse"));
+    return;
+  }
   const options: Partial<ReverseOptions> = {};
   const seen = new Set<string>();
   while (argv.length) {
     const flag = argv.shift()!;
-    if (seen.has(flag)) throw new Error(`Opción duplicada: ${flag}`);
+    if (seen.has(flag))
+      throw usageError(`Duplicate option: ${flag}`, "reverse");
     seen.add(flag);
     if (flag === "--check") {
       options.check = true;
@@ -95,19 +101,23 @@ export async function reverseMain(argv: string[]): Promise<void> {
         "--public-dir",
       ].includes(flag)
     )
-      throw new Error(`Opción desconocida: ${flag}`);
+      throw usageError(`Unknown option: ${flag}`, "reverse");
     const value = argv.shift();
-    if (!value || value.startsWith("--"))
-      throw new Error(`Falta valor de ${flag}`);
+    if (!value || value.startsWith("-"))
+      throw usageError(`Missing value for ${flag}.`, "reverse");
     if (flag === "--scene") options.scene = value;
     else if (flag === "--out") options.out = value;
     else if (flag === "--name") options.name = value;
     else if (flag === "--public-dir") options.publicDir = value;
     else options.actionsModule = value;
   }
-  if (!options.scene || !options.out || !options.name)
-    throw new Error(
-      "Uso: astro-fyne reverse --scene escena.json --out directorio --name Nombre [--public-dir Astro/public] [--actions-module ./actions] [--check]",
+  const missing = ["scene", "out", "name"].filter(
+    (key) => !options[key as keyof ReverseOptions],
+  );
+  if (missing.length)
+    throw usageError(
+      `Missing required options: ${missing.map((key) => `--${key}`).join(", ")}.`,
+      "reverse",
     );
   await generateReverse(options as ReverseOptions);
 }

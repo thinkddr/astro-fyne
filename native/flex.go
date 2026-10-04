@@ -10,16 +10,13 @@ import (
 	"fyne.io/fyne/v2"
 )
 
-// FlexStyle opts source nodes into a deliberately narrow CSS flex layout. It is
-// not a computed browser style: a nil pointer means an omitted declaration,
-// whereas an explicit zero is significant. Dimensions and basis use border-box
-// CSS pixels; WidthSet/HeightSet distinguish an explicit 0px from auto.
+// FlexStyle enables the supported single-line source layout. Numeric pointers
+// preserve omitted declarations versus zero; WidthSet/HeightSet distinguish 0px
+// from auto. Dimensions and bases use border-box CSS pixels.
 //
-// The supported tree has one width:100% root with a definite pixel height,
-// containers and explicitly styled text/button/input/bitmap leaves, one flex
-// line, definite pixel bases, and explicit item minima of zero. Intrinsic sizing,
-// wrapping, order/reverse, nonzero margins, percentage bases, nonzero minima and
-// maximum constraints require a larger layout contract.
+// The tree requires a width:100% root with fixed height, pixel item bases and min0.
+// Intrinsic sizing, wrap/order/reverse, nonzero margins/minima, percentage bases
+// and max constraints are unsupported. Text/control/bitmap leaves need explicit styles.
 type FlexStyle struct {
 	Grow           *float32 `json:"grow,omitempty"`
 	Shrink         *float32 `json:"shrink,omitempty"`
@@ -42,9 +39,7 @@ type FlexStyle struct {
 // FlexValue preserves presence for numeric CSS declarations, including zero.
 func FlexValue(value float32) *float32 { return &value }
 
-// freezeImages already copies the node hierarchy. Clone the new pointer metadata
-// in that owned copy so changing a host's next source style cannot mutate the last
-// valid frame when a subsequent builder or validation fails.
+// Clone pointer metadata in the owned tree so host edits cannot change the last valid frame.
 func freezeFlexStyles(nodes []Node) {
 	for i := range nodes {
 		if source := nodes[i].Style.Flex; source != nil {
@@ -231,9 +226,7 @@ func validateFlexTree(nodes []Node) error {
 	return check(nodes[0], nil)
 }
 
-// Source border widths are deliberately integral CSS pixels. CSS also snaps a
-// border to device pixels; a nonintegral width at the actual scale would require
-// computing a different used border before both layout and native painting.
+// Source borders require integral CSS and device pixels; snapping is unsupported.
 func (v *View) validateFlexCanvas() error {
 	bordered := false
 	for _, e := range v.elements {
@@ -303,10 +296,9 @@ type flexItem struct {
 	frozen                            bool
 }
 
-// flexibleSizes follows the single-line flexible-length resolution steps:
-// hypothetical sizes select grow/shrink; zero factors and below-floor shrink
-// bases freeze first; scaled shrink uses the inner base; floor violations freeze
-// and redistribute. No max constraints exist in this explicitly bounded subset.
+// flexibleSizes resolves one line: hypothetical sizes choose grow/shrink,
+// scaled shrink uses inner bases, and decoration floors freeze and redistribute.
+// Zero factors and below-floor shrink bases freeze first; max constraints are absent.
 func flexibleSizes(children []*element, main float32, row bool, gap float32) []float32 {
 	items := make([]flexItem, len(children))
 	available := float64(main) - float64(gap)*float64(max(len(children)-1, 0))

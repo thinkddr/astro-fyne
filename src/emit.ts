@@ -24,19 +24,19 @@ export function validateMeasurements(
   value: unknown,
 ): asserts value is Measurements {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("La captura debe ser un objeto JSON de medidas.");
+    throw new Error("Capture must be a JSON measurements object.");
   const data = value as Partial<Measurements>;
   if (
     data.schema !== 1 ||
     typeof data.sourceHash !== "string" ||
     !/^[a-f0-9]{64}$/.test(data.sourceHash)
   )
-    throw new Error("La captura necesita schema:1 y sourceHash SHA-256.");
+    throw new Error("Capture requires schema:1 and a SHA-256 sourceHash.");
   if (
     typeof data.state !== "string" ||
     !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(data.state)
   )
-    throw new Error("Estado de captura inválido.");
+    throw new Error("Invalid capture state.");
   if (
     !data.viewport ||
     ![data.viewport.width, data.viewport.height].every(
@@ -45,14 +45,14 @@ export function validateMeasurements(
     ) ||
     ![1, 2].includes(data.viewport.scale)
   )
-    throw new Error("Viewport de captura inválido.");
+    throw new Error("Invalid capture viewport.");
   if (
     !data.nodes ||
     typeof data.nodes !== "object" ||
     Array.isArray(data.nodes) ||
     !Object.keys(data.nodes).length
   )
-    throw new Error("La captura necesita un mapa de nodos medidos.");
+    throw new Error("Capture requires a map of measured nodes.");
   if (
     data.tokens !== undefined &&
     (!data.tokens ||
@@ -60,7 +60,7 @@ export function validateMeasurements(
       Array.isArray(data.tokens) ||
       Object.values(data.tokens).some((token) => typeof token !== "string"))
   )
-    throw new Error("Los tokens de captura deben ser cadenas CSS.");
+    throw new Error("Capture tokens must be CSS strings.");
 }
 
 export function sourceHash(program: Program): string {
@@ -125,7 +125,7 @@ function expression(value: Expr, scope = "scope"): string {
               typeof key !== "string" || !Object.hasOwn(value.entries, key),
           ))
       )
-        throw new Error("El orden de inicialización del objeto es inválido.");
+        throw new Error("Invalid object initialization order.");
       return `webui.Scope{${(value.order ?? Object.keys(value.entries))
         .map((key) => [key, value.entries[key]!] as const)
         .map(([key, item]) => `${quote(key)}: ${expression(item, scope)}`)
@@ -150,7 +150,7 @@ function literal(value: Expr | undefined, fallback: string): string {
   if (!value) return fallback;
   if (value.kind !== "literal" || typeof value.value !== "string")
     throw new Error(
-      "La clase o propiedad de estilo debe ser una cadena literal; captura el CSS calculado para estilos dinámicos.",
+      "Class and style values must be literal strings; capture computed CSS for dynamic styles.",
     );
   return value.value;
 }
@@ -242,7 +242,7 @@ function style(
         Number(raw) <= 0
       )
         throw new Error(
-          `${node.id}: img ${dimension} necesita píxeles positivos literales en stage 01.`,
+          `${node.id}: img ${dimension} requires literal positive pixels in stage 01.`,
         );
       values[dimension === "width" ? "Width" : "Height"] = Number(raw);
     }
@@ -296,7 +296,7 @@ function style(
     for (const property of required)
       if (!Object.hasOwn(inline.entries, property))
         throw new Error(
-          `${node.id}: CSS ${property} explícito es obligatorio en la hoja responsive ${node.tag}.`,
+          `${node.id}: explicit CSS ${property} is required on responsive ${node.tag} leaves.`,
         );
     if (control) {
       const type = node.attrs.type;
@@ -305,14 +305,14 @@ function style(
         type.value !== (node.tag === "button" ? "button" : "text")
       )
         throw new Error(
-          `${node.id}: ${node.tag} responsive requiere type=${node.tag === "button" ? "button" : "text"} literal explícito.`,
+          `${node.id}: responsive ${node.tag} requires an explicit literal type=${node.tag === "button" ? "button" : "text"}.`,
         );
     }
     if (bitmap) {
       const display = inline.entries.display;
       if (display?.kind !== "literal" || display.value !== "block")
         throw new Error(
-          `${node.id}: img responsive requiere display:block explícito.`,
+          `${node.id}: responsive img requires explicit display:block.`,
         );
       for (const dimension of ["width", "height"])
         if (
@@ -320,7 +320,7 @@ function style(
           !Object.hasOwn(node.attrs, dimension)
         )
           throw new Error(
-            `${node.id}: img responsive requiere ${dimension} explícito; no se infiere su tamaño intrínseco.`,
+            `${node.id}: responsive img requires explicit ${dimension}; intrinsic sizing is unsupported.`,
           );
     }
   }
@@ -333,12 +333,12 @@ function style(
     for (const property of ["borderWidth", "borderColor"])
       if (!Object.hasOwn(inline.entries, property))
         throw new Error(
-          `${node.id}: CSS borderStyle solid requiere ${property} explícito en el contrato flex responsive.`,
+          `${node.id}: CSS borderStyle solid requires explicit ${property} in responsive flex.`,
         );
   const finite = (value: number, property: string): number => {
     if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value)))
       throw new Error(
-        `${node.id}: CSS ${property} necesita un número finito representable en float32.`,
+        `${node.id}: CSS ${property} requires a finite number representable in float32.`,
       );
     return value;
   };
@@ -348,16 +348,14 @@ function style(
     );
     if (typeof value === "string" && !match)
       throw new Error(
-        `${node.id}: CSS ${property} necesita un número o px en el contrato flex responsive.`,
+        `${node.id}: CSS ${property} requires a number or px in responsive flex.`,
       );
     const result = finite(
       typeof value === "number" ? value : Number(match![1]),
       property,
     );
     if (result < 0)
-      throw new Error(
-        `${node.id}: CSS ${property} no admite valores negativos.`,
-      );
+      throw new Error(`${node.id}: CSS ${property} cannot be negative.`);
     return result;
   };
   const spacing = (number: string): number => Number(number) * 3.5;
@@ -375,7 +373,7 @@ function style(
     .filter(Boolean)) {
     if (responsive)
       throw new Error(
-        `${node.id}: el contrato flex responsive requiere estilos inline sin clases; CSS externo requiere captura.`,
+        `${node.id}: responsive flex requires inline styles without classes; external CSS requires capture.`,
       );
     if (bitmap && className === "object-fill") continue;
     if (className === "flex") {
@@ -433,7 +431,7 @@ function style(
     }
     if (className === "border") {
       throw new Error(
-        `${node.id}: clase border necesita capturar su color calculado; el runtime público no inventa tokens.`,
+        `${node.id}: capture the computed color of the border class; the runtime cannot infer CSS tokens.`,
       );
     }
     const radius: Record<string, number> = {
@@ -453,17 +451,17 @@ function style(
       );
     if (color?.[2]) {
       throw new Error(
-        `${node.id}: clase ${className} necesita capturar su color calculado; el runtime público no inventa tokens.`,
+        `${node.id}: capture the computed color of class ${className}; the runtime cannot infer CSS tokens.`,
       );
     }
     throw new Error(
-      `${node.id}: clase ${className} sin conversión. Usa medidas del navegador; nunca se ignora CSS.`,
+      `${node.id}: unsupported class ${className}. Supply browser measurements; CSS cannot be ignored.`,
     );
   }
   if (node.attrs.style) {
     if (node.attrs.style.kind !== "object")
       throw new Error(
-        `${node.id}: style necesita un objeto literal o medidas del navegador.`,
+        `${node.id}: style requires a literal object or browser measurements.`,
       );
     const fields: Record<string, string> = {
       width: "Width",
@@ -494,7 +492,7 @@ function style(
           val.value !== (property === "objectFit" ? "fill" : "50% 50%")
         )
           throw new Error(
-            `${node.id}: img ${property} sin soporte nativo en stage 01.`,
+            `${node.id}: img ${property} has no native support in stage 01.`,
           );
         continue;
       }
@@ -504,7 +502,7 @@ function style(
           (typeof val.value !== "number" && typeof val.value !== "string")
         )
           throw new Error(
-            `${node.id}: CSS padding requiere un único número o px literal.`,
+            `${node.id}: CSS padding requires one literal number or px value.`,
           );
         const padding = pixels(val.value, "padding");
         for (const side of ["Top", "Right", "Bottom", "Left"])
@@ -517,7 +515,7 @@ function style(
           !["flex", "block"].includes(String(val.value))
         )
           throw new Error(
-            `${node.id}: CSS display requiere flex/block o captura.`,
+            `${node.id}: CSS display requires flex/block or capture.`,
           );
         values.Display = String(val.value);
         if (val.value === "flex") values.Direction ??= "row";
@@ -531,7 +529,7 @@ function style(
           val.kind !== "literal" ||
           (typeof val.value !== "number" && typeof val.value !== "string")
         )
-          throw new Error(`${node.id}: CSS ${property} requiere un literal.`);
+          throw new Error(`${node.id}: CSS ${property} requires a literal.`);
         const choices: Record<string, string[]> = {
           JustifyContent: [
             "flex-start",
@@ -553,18 +551,18 @@ function style(
             !choices[flexField]!.includes(val.value)
           )
             throw new Error(
-              `${node.id}: CSS ${property} sin soporte en el contrato flex responsive.`,
+              `${node.id}: CSS ${property} is unsupported in responsive flex.`,
             );
           flex[flexField] = val.value;
         } else if (["Grow", "Shrink"].includes(flexField)) {
           if (typeof val.value !== "number")
             throw new Error(
-              `${node.id}: CSS ${property} necesita un número no negativo sin unidad.`,
+              `${node.id}: CSS ${property} requires a nonnegative unitless number.`,
             );
           const result = finite(val.value, property);
           if (result < 0)
             throw new Error(
-              `${node.id}: CSS ${property} necesita un número no negativo sin unidad.`,
+              `${node.id}: CSS ${property} requires a nonnegative unitless number.`,
             );
           flex[flexField] = result;
         } else {
@@ -578,7 +576,7 @@ function style(
             result !== 0
           )
             throw new Error(
-              `${node.id}: CSS ${property} necesita cero explícito en el contrato flex responsive.`,
+              `${node.id}: CSS ${property} requires explicit zero in responsive flex.`,
             );
           flex[flexField] = flexField === "MarginSet" ? true : result;
         }
@@ -593,14 +591,14 @@ function style(
         (typeof val.value !== "number" && typeof val.value !== "string")
       )
         throw new Error(
-          `${node.id}: CSS ${property} requiere captura del navegador.`,
+          `${node.id}: CSS ${property} requires browser capture.`,
         );
       if (
         ["FontFamily", "FontStyle", "TextAlign", "WhiteSpace"].includes(field)
       ) {
         if (typeof val.value !== "string")
           throw new Error(
-            `${node.id}: CSS ${property} requiere una cadena literal.`,
+            `${node.id}: CSS ${property} requires a literal string.`,
           );
         if (field === "FontFamily") {
           const raw = val.value.trim();
@@ -649,7 +647,7 @@ function style(
               ))
           )
             throw new Error(
-              `${node.id}: CSS fontFamily necesita una única familia literal con recurso explícito.`,
+              `${node.id}: CSS fontFamily requires one literal family with an explicit resource.`,
             );
           values[field] = quoted ? raw : name.split(/ +/).join(" ");
         } else {
@@ -660,7 +658,7 @@ function style(
           };
           if (!choices[field]!.includes(val.value))
             throw new Error(
-              `${node.id}: CSS ${property} sin soporte en el contrato de texto responsive.`,
+              `${node.id}: CSS ${property} is unsupported in responsive text.`,
             );
           values[field] = val.value;
         }
@@ -674,7 +672,7 @@ function style(
           val.value > 1000
         )
           throw new Error(
-            `${node.id}: CSS fontWeight necesita un entero literal entre 1 y 1000.`,
+            `${node.id}: CSS fontWeight requires a literal integer from 1 to 1000.`,
           );
         values[field] = val.value;
         continue;
@@ -686,7 +684,7 @@ function style(
           (typeof size.value !== "number" && typeof size.value !== "string")
         )
           throw new Error(
-            `${node.id}: CSS lineHeight numérico es un multiplicador y requiere fontSize explícito en px.`,
+            `${node.id}: numeric CSS lineHeight is a multiplier and requires an explicit pixel fontSize.`,
           );
         const fontSize = pixels(size.value, "fontSize");
         const lineHeight = finite(val.value * fontSize, "lineHeight");
@@ -696,7 +694,7 @@ function style(
           Math.fround(lineHeight) <= 0
         )
           throw new Error(
-            `${node.id}: CSS lineHeight y fontSize necesitan valores positivos.`,
+            `${node.id}: CSS lineHeight and fontSize must be positive.`,
           );
         values[field] = lineHeight;
         continue;
@@ -705,7 +703,7 @@ function style(
       if (["Width", "Height"].includes(field) && val.value === "100%") {
         if (!responsive)
           throw new Error(
-            `${node.id}: ${property} 100% requiere metadata explícita del contrato flex responsive o captura.`,
+            `${node.id}: ${property} 100% requires explicit responsive flex metadata or capture.`,
           );
         flex[field + "Percent"] = 100;
         flex[field + "Set"] = true;
@@ -714,10 +712,10 @@ function style(
       }
       if (["Background", "Color", "BorderColor", "Direction"].includes(field)) {
         if (typeof val.value !== "string")
-          throw new Error(`${node.id}: ${property} requiere una cadena.`);
+          throw new Error(`${node.id}: ${property} requires a string.`);
         if (field === "Direction" && !["row", "column"].includes(val.value))
           throw new Error(
-            `${node.id}: CSS flexDirection necesita row/column; reverse requiere captura.`,
+            `${node.id}: CSS flexDirection requires row/column; reverse requires capture.`,
           );
         values[field] = val.value;
       } else {
@@ -727,7 +725,7 @@ function style(
         }
         if (typeof val.value === "string" && !numeric)
           throw new Error(
-            `${node.id}: ${property} necesita px/rem o captura del navegador.`,
+            `${node.id}: ${property} requires px/rem or browser capture.`,
           );
         values[field] = finite(
           numeric?.[1]
@@ -748,7 +746,7 @@ function style(
         !(Math.fround(Number(values[field])) > 0)
       )
         throw new Error(
-          `${node.id}: ${field} necesita píxeles positivos representables en la hoja responsive.`,
+          `${node.id}: ${field} requires positive representable pixels on responsive leaves.`,
         );
   if (bitmap) {
     for (const field of [
@@ -761,7 +759,7 @@ function style(
     ]) {
       if (Number(values[field] ?? 0) !== 0)
         throw new Error(
-          `${node.id}: img ${field} requiere clipping o una caja nativa adicional.`,
+          `${node.id}: img ${field} requires clipping or an additional native box.`,
         );
     }
     if (
@@ -784,7 +782,7 @@ function style(
         Number(values.Height) <= 0)
     )
       throw new Error(
-        `${node.id}: dimensiones img necesitan píxeles positivos o una captura.`,
+        `${node.id}: img dimensions require positive pixels or capture.`,
       );
   }
   if (!bitmap || responsive)
@@ -814,7 +812,7 @@ function handler(value: Handler, component: Component): string {
       .join(", ");
     if (step.kind === "call") return `actions[${quote(step.name)}](${args})`;
     if (!component.states.some((state) => state.name === step.name))
-      throw new Error(`Setter desconocido: ${step.name}`);
+      throw new Error(`Unknown setter: ${step.name}`);
     return `pending[${quote(step.name)}] = ${args}`;
   });
   const names = [
@@ -868,7 +866,7 @@ function nodeCode(
       let no = "nil";
       if (node.no.length) {
         if (node.no.length !== 1 || node.no[0]!.kind !== "text")
-          throw new Error("JSX && necesita una rama falsa de texto o vacía.");
+          throw new Error("JSX && requires a text or empty false branch.");
         no = textNodeCode(node.no[0]!, "left", context);
       }
       return `func() []webui.Node { left := ${expression(node.test)}; if webui.Truth(left) { return ${yes} }; return ${no} }()`;
@@ -894,7 +892,7 @@ function nodeCode(
           CardTitle: "h2",
         } as Record<string, string>
       )[name];
-      if (!tag) throw new Error(`Componente UI sin renderer: ${name}`);
+      if (!tag) throw new Error(`UI component has no renderer: ${name}`);
       return nodeCode(
         {
           kind: "element",
@@ -911,7 +909,7 @@ function nodeCode(
     }
     if (node.children.length)
       throw new Error(
-        `${node.name}: children/slots necesitan un contrato explícito.`,
+        `${node.name}: children/slots require an explicit contract.`,
       );
     const props = Object.entries(node.props)
       .map(([key, value]) => `${quote(key)}: ${expression(value)}`)
@@ -921,13 +919,13 @@ function nodeCode(
   const tag = node.tag;
   if (tag === "form")
     throw new Error(
-      `${node.id}: la semántica submit requiere binding nativo; form no se convierte en un contenedor sin comportamiento.`,
+      `${node.id}: submit semantics require a native binding; form cannot become a container without behavior.`,
     );
   const bitmap = node.imageResource
     ? context.resources.get(node.imageResource)
     : undefined;
   if (tag === "img" && !bitmap)
-    throw new Error(`${node.id}: img no tiene un recurso bitmap validado.`);
+    throw new Error(`${node.id}: img has no validated bitmap resource.`);
   if (bitmap && node.attrs.style?.kind === "object") {
     for (const [property, val] of Object.entries(node.attrs.style.entries)) {
       if (
@@ -936,7 +934,7 @@ function nodeCode(
           val.value !== (property === "objectFit" ? "fill" : "50% 50%"))
       )
         throw new Error(
-          `${node.id}: img ${property} sin soporte nativo en stage 01.`,
+          `${node.id}: img ${property} has no native support in stage 01.`,
         );
     }
   }
@@ -956,8 +954,7 @@ function nodeCode(
                 : containers.has(tag)
                   ? "container"
                   : undefined;
-  if (!kind)
-    throw new Error(`${node.id}: etiqueta ${tag} sin renderer nativo.`);
+  if (!kind) throw new Error(`${node.id}: tag ${tag} has no native renderer.`);
   const attributeValue = (key: string) =>
     measured
       ? `webui.Get(capturedAttrs, ${quote(key)})`
@@ -970,9 +967,8 @@ function nodeCode(
   ];
   let capturedAttributes = "";
   if (measured) {
-    // The captured CSS can depend on every ordinary source attribute, not only
-    // the fields implemented by the native widget. Preserve those evaluated
-    // values so a class/style/selector change invalidates the frozen profile.
+    // Preserve all evaluated attributes: selectors can change captured CSS even
+    // when the native widget does not consume that attribute.
     capturedAttributes = Object.entries(node.attrs)
       .filter(([key]) => key !== "key" && !key.startsWith("client:"))
       .map(([key, value]) => `${quote(key)}: ${expression(value)}`)
@@ -988,7 +984,7 @@ function nodeCode(
     if (bitmap && key === "alt") {
       if (node.attrs["aria-label"])
         throw new Error(
-          `${node.id}: img alt y aria-label simultáneos necesitan prioridad accesible explícita.`,
+          `${node.id}: simultaneous img alt and aria-label require explicit accessible-name precedence.`,
         );
       fields.push(`AccessibleLabel: webui.String(${attributeValue(key)})`);
       continue;
@@ -1002,7 +998,7 @@ function nodeCode(
       fields.push(`${fieldAttrs[key]}: webui.String(${attributeValue(key)})`);
       continue;
     }
-    throw new Error(`${node.id}: atributo ${key} sin conversión.`);
+    throw new Error(`${node.id}: attribute ${key} has no conversion.`);
   }
   if (
     node.attrs.type &&
@@ -1010,12 +1006,12 @@ function nodeCode(
       literal(node.attrs.type, ""),
     )
   )
-    throw new Error(`${node.id}: type necesita renderer especializado.`);
+    throw new Error(`${node.id}: type requires a specialized renderer.`);
   for (const [name, event] of Object.entries(node.events)) {
     if (name === "onClick" && ["button", "link"].includes(kind)) {
       if (event.parameter)
         throw new Error(
-          `${node.id}: el evento click con parámetro requiere binding nativo.`,
+          `${node.id}: click event parameters require a native binding.`,
         );
       fields.push(`OnTap: func() { ${handler(event, component)} }`);
     } else if (
@@ -1025,12 +1021,12 @@ function nodeCode(
       fields.push(
         `${name === "onChange" ? "OnCommit" : "OnChange"}: func(value string) { ${handler(event, component)} }`,
       );
-    else throw new Error(`${node.id}: evento ${name} sin contrato nativo.`);
+    else throw new Error(`${node.id}: event ${name} has no native contract.`);
   }
   if (["text", "button", "link"].includes(kind)) {
     if (node.children.some((child) => child.kind !== "text"))
       throw new Error(
-        `${node.id}: texto con elementos anidados necesita un renderer de texto rico.`,
+        `${node.id}: nested text elements require a rich-text renderer.`,
       );
     fields.push(
       `Text: ${node.children.map((child) => (child.kind === "text" ? `webui.ChildText(${expression(child.value)})` : '""')).join(" + ") || '""'}`,
@@ -1061,7 +1057,7 @@ export function emitGo(
   },
 ): string {
   if (!identifier.test(options.name) || !identifier.test(options.packageName))
-    throw new Error("Nombre y paquete Go deben ser identificadores válidos.");
+    throw new Error("Go name and package must be valid identifiers.");
   if (options.measurements !== undefined)
     validateMeasurements(options.measurements);
   if (
@@ -1070,7 +1066,7 @@ export function emitGo(
       options.measurements.sourceHash !== sourceHash(program))
   )
     throw new Error(
-      "Las medidas pertenecen a otra versión de la fuente. Recaptura el navegador.",
+      "Measurements belong to another source revision. Capture the browser again.",
     );
   const measured = Boolean(options.measurements);
   if (options.measurements && options.profile) {
@@ -1083,7 +1079,7 @@ export function emitGo(
       actual.viewport.scale !== expected.scale
     )
       throw new Error(
-        "Las medidas no corresponden al estado, viewport y escala configurados.",
+        "Measurements do not match the configured state, viewport, and scale.",
       );
   }
   const resources = program.resources ?? [];
@@ -1094,15 +1090,15 @@ export function emitGo(
     resources: new Map(resources.map((resource) => [resource.name, resource])),
   };
   if (context.resources.size !== resources.length)
-    throw new Error("Nombres de recursos bitmap duplicados.");
+    throw new Error("Duplicate bitmap resource names.");
   const embedded = resources
     .map((resource) => {
       if (!identifier.test(resource.name))
-        throw new Error(`Nombre de recurso bitmap no válido: ${resource.name}`);
+        throw new Error(`Invalid bitmap resource name: ${resource.name}`);
       const bytes = Buffer.from(resource.content, "base64");
       if (createHash("sha256").update(bytes).digest("hex") !== resource.hash)
         throw new Error(
-          `${resource.path}: bytes bitmap y SHA-256 no coinciden.`,
+          `${resource.path}: bitmap bytes do not match their SHA-256 digest.`,
         );
       const encoded = bytes.toString("hex").replace(/../g, "\\x$&");
       return `// Resource SHA-256: ${resource.hash}\nvar image${options.name}_${resource.name} = fyne.NewStaticResource(${quote(resource.path)}, []byte("${encoded}"))`;
@@ -1124,14 +1120,14 @@ export function emitGo(
   const fontEmbedded = fonts
     .map((face) => {
       if (!identifier.test(face.name) || fontNames.has(face.name))
-        throw new Error("Nombre de recurso font inválido o duplicado.");
+        throw new Error("Invalid or duplicate font resource name.");
       fontNames.add(face.name);
       if (
         fontWebSources.has(face.webSrc) &&
         fontWebSources.get(face.webSrc) !== face.hash
       )
         throw new Error(
-          `fonts.webSrc ${face.webSrc} vincula archivos con hashes diferentes.`,
+          `fonts.webSrc ${face.webSrc} binds files with different hashes.`,
         );
       fontWebSources.set(face.webSrc, face.hash);
       const bytes = Buffer.from(face.content, "base64");
@@ -1139,7 +1135,9 @@ export function emitGo(
         bytes.toString("base64") !== face.content ||
         createHash("sha256").update(bytes).digest("hex") !== face.hash
       )
-        throw new Error(`${face.path}: bytes font y SHA-256 no coinciden.`);
+        throw new Error(
+          `${face.path}: font bytes do not match their SHA-256 digest.`,
+        );
       inspectFont(bytes, face);
       const encoded = bytes.toString("hex").replace(/../g, "\\x$&");
       return `// Font SHA-256: ${face.hash}\nvar font${options.name}_${face.name} = fyne.NewStaticResource(${quote(face.path + "#sha256=" + face.hash)}, []byte("${encoded}"))`;
@@ -1179,11 +1177,11 @@ export function emitGo(
     : "";
   if (program.hasStyles && !measured)
     throw new Error(
-      "La fuente contiene CSS. Captura sus medidas calculadas antes de generar Fyne; el CSS no se aproxima ni se descarta.",
+      "Source contains CSS. Capture computed browser measurements before generating Fyne; CSS cannot be approximated or discarded.",
     );
   const components = program.components.map((component) => {
     if (!identifier.test(component.name))
-      throw new Error(`Nombre de componente no válido: ${component.name}`);
+      throw new Error(`Invalid component name: ${component.name}`);
     const bindings = new Set<string>();
     for (const name of [
       ...component.props,
@@ -1193,7 +1191,7 @@ export function emitGo(
     ]) {
       if (bindings.has(name))
         throw new Error(
-          `${component.name}: colisión lexical de ${name}; separar ámbitos de módulo y componente requiere un namespace explícito en stage 01.`,
+          `${component.name}: lexical collision for ${name}; separating module and component scopes requires an explicit namespace in stage 01.`,
         );
       bindings.add(name);
     }
@@ -1265,9 +1263,9 @@ function measurementsGo(measurements: Measurements): string {
   ]);
   const nodes = Object.entries(measurements.nodes).map(([id, values]) => {
     if (!id || !values || typeof values !== "object" || Array.isArray(values))
-      throw new Error(`${id}: nodo de captura inválido.`);
+      throw new Error(`${id}: invalid capture node.`);
     if (values.measured !== true)
-      throw new Error(`${id}: falta la medida real del navegador.`);
+      throw new Error(`${id}: actual browser measurement is missing.`);
     const fields = Object.entries(values).map(([key, value]) => {
       if (
         !measuredFields.has(key) ||
@@ -1280,7 +1278,7 @@ function measurementsGo(measurements: Measurements): string {
               !Number.isFinite(Math.fround(value)) ||
               (key !== "x" && key !== "y" && value < 0))
       )
-        throw new Error(`${id}: medida ${key} inválida.`);
+        throw new Error(`${id}: invalid measurement ${key}.`);
       return `${key[0]?.toUpperCase()}${key.slice(1)}: ${typeof value === "string" ? quote(value) : value}`;
     });
     return `${quote(id)}: {${fields.join(", ")}}`;

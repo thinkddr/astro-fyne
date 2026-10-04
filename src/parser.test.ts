@@ -46,7 +46,7 @@ test("type-changing branches cannot steal an unkeyed sibling's component state",
       return <main>{visible ? <Counter label="a"/> : <p id="empty">empty</p>}<Counter label="b"/></main>;
     }`,
   );
-  await expect(compile(entry)).rejects.toThrow(/otro hermano sin key/);
+  await expect(compile(entry)).rejects.toThrow(/another unkeyed sibling/);
 
   const compatible = await source(
     "Compatible.tsx",
@@ -80,7 +80,7 @@ test("keyed component groups require one physical root through component indirec
       function Alias({ item }) { return <Row item={item}/>; }
       export function Page() { return <main>{['a', 'b'].map(item => <Alias key={item} item={item}/>)}</main>; }`,
     );
-    await expect(compile(entry)).rejects.toThrow(/raíz física única/);
+    await expect(compile(entry)).rejects.toThrow(/one physical root/);
   }
   const entry = await source(
     "Single.tsx",
@@ -97,7 +97,7 @@ test("unkeyed maps retain their own child-type boundary", async () => {
     function CounterB({ label }) { return <article>{label}</article>; }
     export function Page() { return <main>{['a','b'].map(item => item === 'a' ? <CounterA label={item}/> : <CounterB label={item}/>)}</main>; }`,
   );
-  await expect(compile(entry)).rejects.toThrow(/map sin key.*tipo/);
+  await expect(compile(entry)).rejects.toThrow(/unkeyed map.*row type/);
   const stable = await source(
     "Stable.tsx",
     `function Switch({ label }) { return label === 'a' ? <section>{label}</section> : <article>{label}</article>; }
@@ -141,7 +141,7 @@ test("Boolean hook slots require a Boolean initializer and every setter", async 
       return <main><Row/>{visible && <Row/>}<button onClick={() => setVisible(0)}>Change type</button></main>;
     }`,
   );
-  await expect(compile(changedType)).rejects.toThrow(/otro hermano sin key/);
+  await expect(compile(changedType)).rejects.toThrow(/another unkeyed sibling/);
   const shadowed = await source(
     "ShadowedHook.tsx",
     `${shared} export function Page() {
@@ -149,7 +149,7 @@ test("Boolean hook slots require a Boolean initializer and every setter", async 
       return <main>{[false, 0].map(visible => visible && <Row/>)}</main>;
     }`,
   );
-  await expect(compile(shadowed)).rejects.toThrow(/map sin key.*tipo/);
+  await expect(compile(shadowed)).rejects.toThrow(/unkeyed map.*row type/);
 });
 
 test("nested list roots require their own physical parent through component aliases", async () => {
@@ -159,7 +159,7 @@ test("nested list roots require their own physical parent through component alia
     export function Page() { return <main>{['a','b'].map(item => <Rows item={item}/>)}</main>; }`,
   );
   await expect(compile(entry)).rejects.toThrow(
-    /Listas anidadas sin.*contenedor/,
+    /Nested lists without a containing element/,
   );
   const owned = await source(
     "Owned.tsx",
@@ -379,7 +379,7 @@ export function Page() {
 }`,
   );
   await expect(compile(entry)).rejects.toThrow(
-    "Código después de return en un handler",
+    "Code after return in a handler",
   );
 });
 
@@ -391,7 +391,7 @@ test("updater parameters with defaults or rest require an explicit adapter", asy
 export function Page() { const [count,setCount] = useState(0); return <button onClick={() => setCount((${parameter}) => current + 1)} />; }`,
     );
     await expect(compile(entry)).rejects.toThrow(
-      "El updater del setter debe ser valor",
+      "Setter updaters must have the form value",
     );
   }
 });
@@ -481,7 +481,7 @@ export function Page() { return <p>{absent === empty}</p>; }`,
 export function Overflow() { return <p>{value}</p>; }`,
       ),
     ),
-  ).rejects.toThrow("debe ser finito");
+  ).rejects.toThrow("must be finite");
 });
 
 test("map key is consumed as reconciliation metadata and never a component prop", async () => {
@@ -558,7 +558,7 @@ test("conditional virtual groups and ambiguous child positions fail explicitly",
           `export function AmbiguousBranches({active,other,items}) { return ${body}; }`,
         ),
       ),
-    ).rejects.toThrow(/contrato|posiciones virtuales/);
+    ).rejects.toThrow(/contract|virtual positions/);
 });
 
 test("keys without a single stable map root fail explicitly", async () => {
@@ -587,7 +587,7 @@ test("keys without a single stable map root fail explicitly", async () => {
 export function FragmentKeys({items}) { return <main>{items.map(item => <Group key={item.id}><p/><p/></Group>)}</main>; }`,
       ),
     ),
-  ).rejects.toThrow("contrato de grupo keyed");
+  ).rejects.toThrow("keyed group contract");
 });
 
 test("loose equality requires a native adapter instead of an unsupported runtime operator", async () => {
@@ -597,7 +597,7 @@ test("loose equality requires a native adapter instead of an unsupported runtime
       `export function Page({ count }) { return <p>{count ${operator} '0'}</p>; }`,
     );
     await expect(compile(entry)).rejects.toThrow(
-      `Operador no soportado: ${operator}`,
+      `Unsupported operator: ${operator}`,
     );
   }
 });
@@ -609,7 +609,7 @@ test("package adapters are optional and unavailable external components fail exp
 export function Page({ onSave }) { return <Card><Action onClick={() => onSave()}>Guardar</Action></Card>; }`,
   );
   await expect(compile(entry)).rejects.toThrow(
-    "Componente externo sin adaptador",
+    "External component has no adapter",
   );
   const program = await compile(entry, undefined, {
     adapters: { "@example/design": { Button: "Button", Card: "Card" } },
@@ -650,37 +650,37 @@ test("SSR, unknown hooks, DOM, network and unknown callbacks are never skipped",
     [
       "Page.astro",
       `---\nconst data = await fetch('/api/private');\n---\n<p>{data}</p>`,
-      "no convertible",
+      "cannot be converted",
     ],
     [
       "Page.tsx",
       `import { useEffect } from 'preact/hooks';\nexport function Page() { useEffect(() => {}, []); return <p>Hola</p>; }`,
-      "otros efectos",
+      "other effects",
     ],
     [
       "Page.tsx",
       `export function Page() { return <p>{document.title}</p>; }`,
-      "Binding desconocido: document",
+      "Unknown binding: document",
     ],
     [
       "Page.tsx",
       `export function Page() { const data = fetch('/api'); return <p>{data}</p>; }`,
-      "no convertible",
+      "cannot be converted",
     ],
     [
       "Page.tsx",
       `export function Page() { return <button onClick={() => save()}>Guardar</button>; }`,
-      "no declarada en props",
+      "not declared in props",
     ],
     [
       "Page.tsx",
       `export function Page() { return <div dangerouslySetInnerHTML={{__html: '<p>x</p>'}} />; }`,
-      "depende del DOM",
+      "depends on the DOM",
     ],
     [
       "Page.astro",
       `---\nconst title = Astro.locals.title;\n---\n<p>{title}</p>`,
-      "depende de SSR",
+      "depends on SSR",
     ],
   ];
   for (const [path, text, message] of cases) {
@@ -701,7 +701,7 @@ test("spread, duplicate IDs, complex setters and recursive components fail with 
   for (const text of cases) {
     try {
       await compile(await source("Page.tsx", text));
-      throw new Error("La conversión aceptó una construcción no soportada.");
+      throw new Error("Conversion accepted an unsupported construct.");
     } catch (error) {
       expect(error).toBeInstanceOf(ConversionError);
       expect((error as Error).message).toMatch(/^Page\.tsx:\d+:\d+: /);
@@ -821,7 +821,7 @@ test("shadowed conversion builtins fail instead of using the global builtin", as
       `export function Page({items}) { return <main>{items.map(${name} => <p>{${name}(1)}</p>)}</main>; }`,
     ]) {
       const entry = await source("Page.tsx", input);
-      await expect(compile(entry)).rejects.toThrow(`Builtin ${name} sombreado`);
+      await expect(compile(entry)).rejects.toThrow(`shadows builtin ${name}`);
     }
   }
 });
@@ -837,7 +837,7 @@ test("only declared callback props authorize host action calls", async () => {
     `export function Page({items,save}) { const handle=()=>save(); return <main>{items.map(handle=><button onClick={handle} />)}</main>; }`,
   ]) {
     await expect(compile(await source("Page.tsx", input))).rejects.toThrow(
-      "no declarad",
+      "not declared",
     );
   }
 });
@@ -847,7 +847,7 @@ test("an event parameter cannot silently turn into a state setter", async () => 
     "Page.tsx",
     `import {useState} from 'preact/hooks'; export function Page() { const [count,setCount]=useState(0); return <input onInput={setCount=>setCount(1)} />; }`,
   );
-  await expect(compile(entry)).rejects.toThrow("sombrea un setter");
+  await expect(compile(entry)).rejects.toThrow("shadows a setter");
 });
 
 test("module calls to translation require a native initialization lifecycle", async () => {
@@ -858,7 +858,7 @@ test("module calls to translation require a native initialization lifecycle", as
     `const title = false && t('module'); export function Page() { return <p>{title}</p>; }`,
   ]) {
     await expect(compile(await source("Page.tsx", input))).rejects.toThrow(
-      "constante de módulo con llamadas al host",
+      "Module constants that call the host",
     );
   }
 });
@@ -868,7 +868,7 @@ test("module constants cannot read a component parameter as an ambient module bi
     "Page.tsx",
     `const title = label; export function Page({label}) { return <p>{title}</p>; }`,
   );
-  await expect(compile(entry)).rejects.toThrow("Binding desconocido: label");
+  await expect(compile(entry)).rejects.toThrow("Unknown binding: label");
 });
 
 test("component translation cannot be shadowed by constants, hooks or updater parameters", async () => {
@@ -880,7 +880,7 @@ test("component translation cannot be shadowed by constants, hooks or updater pa
     `export function Page({t,items}) { return <main>{items.map(t=><p>{t('key')}</p>)}</main>; }`,
   ]) {
     await expect(compile(await source("Page.tsx", input))).rejects.toThrow(
-      "t sombreado",
+      "shadows t",
     );
   }
 });
@@ -914,7 +914,7 @@ test("object literal prototype properties cannot silently disappear from the IR"
     );
     await expect(compile(entry)).rejects.toThrow(ConversionError);
     await expect(compile(entry)).rejects.toThrow(
-      /Prototype\.tsx:2:19: La propiedad __proto__ en literales de objeto/,
+      /Prototype\.tsx:2:19: Object literal __proto__ properties/,
     );
   }
 });
@@ -963,7 +963,7 @@ test("duplicate literal keys reject discarded initializers before parsing the re
       `export function Page({t,value}) {\n  const object = {\n    ${first},\n    ${second}\n  };\n  return <p>{String(object)}</p>;\n}`,
     );
     await expect(compile(entry)).rejects.toThrow(
-      `Duplicate.jsx:4:5: La propiedad duplicada ${JSON.stringify(name)} requiere conservar la evaluación de todos sus valores`,
+      `Duplicate.jsx:4:5: Duplicate object key ${JSON.stringify(name)} requires ordered evaluation of all its values`,
     );
   }
 });
@@ -1074,7 +1074,7 @@ test("named handlers reject list shadows until lexical captures are qualified", 
     `const count=0; export function Page({save}) { const items=[10]; const add=()=>save(count+1); return <main>{items.map(count=><button onClick={add} />)}</main>; }`,
   ]) {
     await expect(compile(await source("Page.tsx", input))).rejects.toThrow(
-      "handler nombrado add se usa bajo map con bindings externos sombreados (count)",
+      "Named handler add is used under a map that shadows enclosing bindings (count)",
     );
   }
 });
@@ -1117,7 +1117,7 @@ test("lexical undefined bindings never become an absent child or ambient undefin
     `export function Page() { const value=String(undefined); const undefined=7; return <p>{value}</p>; }`,
   ]) {
     await expect(compile(await source("Page.tsx", input))).rejects.toThrow(
-      "undefined sombreado por un binding léxico",
+      "A lexical binding shadows undefined",
     );
   }
   const compiled = await compile(
@@ -1146,7 +1146,7 @@ test("ordinary component nested children require an explicit native contract", a
       `function Box({children}) { return <section>{children}</section>; } export function Page() { return ${body}; }`,
     );
     await expect(compile(entry)).rejects.toThrow(
-      "Hijos de componentes requieren un contrato nativo explícito",
+      "Component children require an explicit native contract",
     );
   }
   await source(
@@ -1158,7 +1158,7 @@ test("ordinary component nested children require an explicit native contract", a
     `---\nimport {Box} from './Box.tsx';\n---\n<Box><p>Visible</p></Box>`,
   );
   await expect(compile(astro)).rejects.toThrow(
-    "Hijos de componentes requieren un contrato nativo explícito",
+    "Component children require an explicit native contract",
   );
   const compiled = await compile(
     await source(
@@ -1187,7 +1187,7 @@ test("async list callbacks fail rather than render promised children synchronous
       "Page.tsx",
       `export function Page({items}) { return <ul>{items.map(${callback})}</ul>; }`,
     );
-    await expect(compile(entry)).rejects.toThrow("map async devuelve promesas");
+    await expect(compile(entry)).rejects.toThrow("Async map returns promises");
   }
   const compiled = await compile(
     await source(

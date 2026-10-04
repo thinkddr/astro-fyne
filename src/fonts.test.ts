@@ -114,14 +114,14 @@ test("TTF validation rejects corrupt payloads and synthesized weight or italic",
     expect(() => inspectFont(changed, face)).toThrow();
   }
   expect(() => inspectFont(bytes, { weight: 700, style: "normal" })).toThrow(
-    "no coinciden",
+    "do not match",
   );
   expect(() => inspectFont(bytes, { weight: 400, style: "italic" })).toThrow(
-    "no coinciden",
+    "do not match",
   );
   const collection = Buffer.from(bytes);
   collection.write("ttcf", 0);
-  expect(() => inspectFont(collection, face)).toThrow("TrueType estático");
+  expect(() => inspectFont(collection, face)).toThrow("static TrueType");
 });
 
 test("font symlinks cannot include files outside the public project", async () => {
@@ -132,7 +132,7 @@ test("font symlinks cannot include files outside the public project", async () =
   );
   await expect(
     loadFonts([{ ...face, source: "outside.ttf" }], directory),
-  ).rejects.toThrow("sale del proyecto");
+  ).rejects.toThrow("escapes the project");
   await expect(
     loadFonts([{ ...face, source: "missing.ttf" }], directory),
   ).rejects.toThrow();
@@ -156,7 +156,7 @@ test("emitter rejects tampered embedded fonts and repeated native resource names
   program.fonts!.push({ ...font, family: "OtherAlias" });
   expect(() =>
     emitGo(program, { name: "Page", packageName: "generated" }),
-  ).toThrow("duplicado");
+  ).toThrow("duplicate");
 });
 
 test("multiple CSS aliases for one file keep one native resource inventory key", async () => {
@@ -176,7 +176,7 @@ test("a browser font URL cannot be bound to different native bytes", async () =>
   await writeFile(join(directory, "bold.ttf"), boldBytes);
   const bold = { ...face, weight: 700 as const, source: "bold.ttf" };
   await expect(loadFonts([face, bold], directory)).rejects.toThrow(
-    "hashes diferentes",
+    "different hashes",
   );
   const program = await compile(join(directory, "Page.tsx"), undefined, {
     root: directory,
@@ -189,7 +189,7 @@ test("a browser font URL cannot be bound to different native bytes", async () =>
   program.fonts![1]!.webSrc = face.webSrc;
   expect(() =>
     emitGo(program, { name: "Page", packageName: "generated" }),
-  ).toThrow("hashes diferentes");
+  ).toThrow("different hashes");
 });
 
 test("CLI generates matching web fonts CSS, native backend, theme and resource inventory atomically", async () => {
@@ -256,7 +256,7 @@ test("handwritten web font CSS blocks all generated artifacts", async () => {
     "/* maintained by hand */\n",
   );
   await expect(generate({ config: path, check: false })).rejects.toThrow(
-    "archivo ajeno",
+    "not owned by the generator",
   );
   await expect(readFile(join(directory, "page.gen.go"))).rejects.toThrow();
 });

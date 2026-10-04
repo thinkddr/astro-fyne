@@ -7,25 +7,25 @@ export function Counter() {
   return (
     <section id="counter" className="flex flex-col gap-2 p-4">
       <h1 id="title">Astro + Preact → Fyne</h1>
-      <p id="count">{`Cuenta: ${count}`}</p>
+      <p id="count">{`Count: ${count}`}</p>
       <button
         id="increment"
         type="button"
         onClick={() => setCount((current) => current + 1)}
       >
-        Incrementar
+        Increment
       </button>
       <label id="name-label" for="name">
-        Nombre
+        Name
       </label>
       <input
         id="name"
         value={name}
         onInput={(event) => setName(event.currentTarget.value)}
       />
-      <p id="greeting">{`Hola, ${name}`}</p>
+      <p id="greeting">{`Hello, ${name}`}</p>
       {count > 0 && (
-        <p id="changed">El mismo estado funciona en las dos interfaces.</p>
+        <p id="changed">The same state works in both interfaces.</p>
       )}
     </section>
   );

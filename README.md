@@ -3,49 +3,67 @@
 
 # Astro Fyne
 
-Design and implement an interface in Astro + Preact, then generate Go that builds a native
-Fyne interface. The compiler preserves the supported component tree, properties, state and
-events. Browser measurements can supply the geometry and computed styles for a declared
-visual profile. Native widgets remain interactive; browser screenshots are verification
-artifacts.
+Build an interface in **Astro + Preact**, then generate **native Fyne widgets, Go code,
+themes and embedded resources**. Export a supported Fyne interface back into an Astro page,
+Preact component, CSS and bitmap assets.
 
-The reverse pipeline exports supported, already laid out Fyne widgets into a versioned scene
-and generates an Astro page, Preact components, CSS and bitmap assets. Native and web hosts
-provide explicit action implementations; export preserves their event bindings.
+**Early development:** the converter supports a strict declarative subset. It does not yet
+convert arbitrary Astro, JavaScript, CSS or Go applications. Unsupported features produce
+errors. Universal 1:1 conversion is the project goal, not a capability of this release.
 
-**Status: stage 01, a strict declarative subset.** The long-term goal is broad Astro + Preact
-compatibility with identical appearance and behavior. This version does not yet convert
-arbitrary applications or guarantee universal pixel parity. Unsupported constructs produce
-errors. The [compatibility contract and roadmap](COMPATIBILITY.md) define the current scope.
+[Compatibility](COMPATIBILITY.md) · [Native integration](docs/native-runtime.md) ·
+[Reverse conversion](docs/reverse-conversion.md) · [Visual verification](docs/visual-verification.md)
 
-The independent project is [thinkddr/astro-fyne](https://github.com/thinkddr/astro-fyne),
-licensed under Apache-2.0. The Go module path is `github.com/thinkddr/astro-fyne/native`.
-The compiler and default runtime use public dependencies and do not require the Sytue product
-or its private forks. CI runs on hosted ARM64 runners and preserves captures, generated code
-and comparison results as downloadable evidence.
+## Get started
 
-## Generate an interface
-
-Use Bun and a Go installation compatible with `native/go.mod`; generation invokes `gofmt`.
-Native executables also need the platform dependencies listed in the
-[Fyne installation documentation](https://docs.fyne.io/started/).
-
-From this directory:
+Install [Bun](https://bun.sh/docs/installation) and the Go version declared in
+[native/go.mod](native/go.mod). CI currently uses Bun **1.4.2** and Go **1.27.1**.
+Running a desktop window also requires the [Fyne platform dependencies](https://docs.fyne.io/started/).
+The compiler is currently installed from this repository; there is no published npm package.
 
 ```sh
-bun install
-bun src/cli.ts generate --config astro-fyne.json
-bun src/cli.ts check --config astro-fyne.json
-bun src/cli.ts watch --config astro-fyne.json
+git clone https://github.com/thinkddr/astro-fyne.git
+cd astro-fyne
+bun install --frozen-lockfile
+bun run to-fyne
+bun run check
 ```
 
-`generate` parses every selected entry and formats its Go before writing artifacts. `check`
-fails if generated Go, the shared scope helper or reports differ from the source. `watch`
-performs an initial generation and then watches source content; diagnostics remain visible
-when an edit is unsupported. These commands compile source syntax without executing the
-application's JavaScript.
+The default configuration converts `example/src/pages/index.astro` into
+`native/generated/counter.gen.go`. Its report is written beside the Go file.
 
-The configuration paths are relative to the configuration file:
+Open the web example:
+
+```sh
+bun run dev
+```
+
+Open the generated native example in another terminal:
+
+```sh
+bun run demo:native
+```
+
+Both examples use the Counter component. Change
+[example/src/components/Counter.tsx](example/src/components/Counter.tsx), then regenerate
+with `bun run to-fyne`. For automatic generation during development, run `bun run watch`.
+Watch monitors supported files under the configuration directory. Restart the native demo
+to load the new Go code. The counter demonstrates state and events;
+it is not a certified visual profile.
+
+The responsive native controls example is also available:
+
+```sh
+bun run to-fyne --config responsive-controls.json
+bun run demo:native --example responsive
+```
+
+Its web page is `/responsive-controls`. It demonstrates typing, focus, commits, disabled
+controls and resizing. Geometry and behavior are tested; text rasterization still differs.
+
+## Convert your own page
+
+Create `astro-fyne.json` at your project root:
 
 ```json
 {
@@ -53,272 +71,178 @@ The configuration paths are relative to the configuration file:
   "package": "generated",
   "entries": [
     {
-      "name": "Counter",
-      "source": "example/src/pages/index.astro",
-      "output": "native/generated/counter.gen.go"
+      "name": "Dashboard",
+      "source": "src/pages/dashboard.astro",
+      "output": "native/generated/dashboard.gen.go"
     }
   ]
 }
 ```
 
-An entry may also select a named `export`, declare a `measurements` JSON file or bind a
-`profile` containing `state`, `width`, `height` and `scale`. A measured entry with a configured
-profile must match those values during generation. Use
-`--entry Counter` to select one entry in a larger configuration. Generated Go and
-`*.report.json` files belong to the generator; edits belong in Astro/TSX or the native host.
-Output names must end in `.gen.go`. Before writing any artifact, the compiler checks that
-existing Go files carry its generated header and existing reports identify its generator.
-It refuses to overwrite hand-written files, including a report at a generated output path.
+Run the compiler from this checkout, pointing it at your configuration:
 
-## Use the generated Go
+```sh
+bun run to-fyne --config /path/to/your/project/astro-fyne.json
+bun run check --config /path/to/your/project/astro-fyne.json
+bun run watch --config /path/to/your/project/astro-fyne.json
+```
 
-The constructor returns a generated native widget, such as `*generated.CounterWidget`,
-which embeds `*webui.View`, and checks required host actions. After
-generating the Counter example, a Go host in the native module can construct it like this:
+Paths inside the configuration are relative to the configuration file. Add more entries
+for more pages; use `--entry Dashboard` to select one. A TSX entry can set `export` to choose
+a named component. See the [example configurations](responsive-controls.json) for font
+bindings and the [native integration guide](docs/native-runtime.md) for measured profiles,
+host actions and custom backends.
+
+Generation produces:
+
+| Output                    | Purpose                                                         |
+| ------------------------- | --------------------------------------------------------------- |
+| `<entry>.gen.go`          | Native widget, constructor, theme and resource factories        |
+| `<entry>.gen.report.json` | Source digest, actions, resources and compatibility information |
+| `astro_fyne_scope.gen.go` | Shared helper for the generated Go package                      |
+| `<entry>.gen.fonts.css`   | Matching web font declarations when the entry declares fonts    |
+
+Keep generated files in version control. Edit the Astro/TSX source or the host application;
+`check` catches stale output. The compiler validates every selected entry before writing
+and refuses to overwrite files it does not own.
+
+## Use widgets, themes and fonts
+
+Add `github.com/thinkddr/astro-fyne/native` to your Go application. The generated constructor
+returns a native widget embedding `*webui.View`:
 
 ```go
-import (
-    webui "github.com/thinkddr/astro-fyne/native"
-    "github.com/thinkddr/astro-fyne/native/generated"
-)
-
-view, err := generated.NewCounter(webui.Scope{}, webui.Actions{})
+view, err := generated.NewDashboard(webui.Scope{}, webui.Actions{})
 if err != nil {
     return err
 }
 window.SetContent(view)
-```
-
-The repository includes generated Go and reports for its conformance examples in
-`native/generated`. They are snapshots produced and tested by remote CI, so the native
-module can be used and tested without first rebuilding Astro. CI regenerates them and fails
-if committed snapshots or resolved Go dependencies change unexpectedly.
-
-The example contains a stateful counter, a controlled input and conditional content. State
-updates reuse objects by source position and supported list keys so the input can retain focus.
-Public HTML IDs can change while the same source instance stays mounted. Hosts should surface
-`view.Error()` when a runtime contract fails and perform UI mutations on Fyne's event
-goroutine. Background service work returns to the UI through `fyne.Do`.
-
-Application effects use named `webui.Actions`: the host implements service calls, navigation,
-storage and other platform work in Go. A missing required action is an error. The constructor
-also accepts an optional `webui.Backend`, which supplies boxes, text measurement and painting,
-and editing. The default `webui.FyneBackend` uses public Fyne primitives. Measured text requires
-explicit font resources matching the browser's loaded font family, weight and style; supplying
-the same font file is necessary but does not by itself prove matching rasterization.
-
-An entry can automate the matching font resources with `fonts`:
-
-```json
-"fonts": [{
-  "family": "AstroNoto",
-  "weight": 400,
-  "style": "normal",
-  "source": "example/public/fonts/NotoSans-Regular.ttf",
-  "webSrc": "/fonts/NotoSans-Regular.ttf"
-}]
-```
-
-Generation embeds the original bytes, emits `New<Name>Backend()` and includes the fonts
-in `New<Name>Resources()`. The widget constructor selects this backend automatically when
-the host supplies none. It also emits `<entry>.gen.fonts.css`, which the Astro host imports
-to load the declared `@font-face`. The configuration binds a CSS family alias, face and web
-URL to a content digest; changing any binding invalidates the source hash. Reports list
-the font inventory without its binary content. With one declared family, the generated
-theme uses its available regular/bold/italic faces; with several families, the theme keeps
-its base fonts and the widget backend resolves each explicit family.
-
-This contract accepts licensed, static TrueType files with weight 400 or 700 and normal or
-italic style. It checks the SFNT table bounds, checksums, metrics and declared face before
-writing any output. Native validation also parses the font and checks the supported text's
-glyph coverage. Variable/color fonts, WOFF, CFF, font collections, synthesized faces and
-implicit fallback require a separate rendering contract. Font sources must remain inside
-the configuration's project directory, including through symlinks. Each file is limited
-to 20 MiB, with 40 MiB across at most 16 faces. The example font retains its
-[SIL Open Font License](example/public/fonts/LICENSE-NotoSans.txt).
-
-A custom backend can delegate its `Editor` method to `webui.NewEditor(backend, multiline,
-style, onChange)`. This shares the native editing engine while using that backend's text
-measurement and placement; the generated view owns keyboard focus and commit events.
-
-Generation also emits an entry-specific theme type and constructor, such as
-`GeometryTheme` and `NewGeometryTheme(base fyne.Theme)`. The theme receives the CSS custom
-properties recorded by capture; the native theme adapter handles the supported token mapping
-and uses the supplied base theme for the remaining Fyne theme values. Each generated widget
-contains the source tree and layout/style data used by its native renderer. These outputs
-automate the current widget and theme construction contract; general CSS theme switching,
-arbitrary custom controls and every formatting model remain part of the compatibility roadmap.
-
-An additional source-only mode generates a responsive native Flexbox layout from literal
-inline styles. The same generated widget recalculates its rectangles when the Fyne canvas
-resizes; it does not consume browser measurements. This mode currently accepts a single
-full-width root with a fixed height, nested row/column flex containers and empty rectangular
-items. Use explicit pixel bases, `minWidth: 0`, `minHeight: 0` and
-`boxSizing: "border-box"` on every item. Growth, weighted shrinkage, gaps, main-axis
-distribution and cross-axis alignment are handled by the native layout engine. The
-[responsive layout contract](COMPATIBILITY.md#responsive-source-layout) lists the exact
-requirements and exclusions. Text, controls, wrapping and intrinsic sizing need further
-implementation before they can use this mode.
-
-Local `<img src="/images/example.png" alt="…" />` nodes generate embedded native resources
-and `canvas.Image` renderers. `NewNameResources()` exposes the resources by source path.
-URL-root paths resolve from the entry's Astro `public` directory, even for imported shared
-components; an entry can set `publicDir` explicitly. Relative image paths are source-relative.
-The resource inventory and byte hashes appear in the report and source digest. Dynamic URLs,
-remote assets, SVG, srcset, animation and color/orientation metadata require further adapters.
-The initial PNG contract is RGB/RGBA with 8-bit channels; supported JPEG files also receive
-native decoding, while actual pixel equality remains subject to the image gate.
-
-## Capture and verify a visual profile
-
-A visual profile fixes the source revision, application state, viewport, device scale, theme,
-font resources and rendering environment. The initial geometry scenario uses **320 × 240
-CSS pixels at scale 1**, with solid rectangular boxes and no text. It exercises the complete
-Astro CSS → browser measurement → generated Go → native capture → zero-difference path.
-
-CI runs browser captures, native tests and builds in a pinned environment and keeps the evidence.
-
-Start the example web preview in a separate terminal. From the project root,
-generate the source manifests consumed by the behavior example pages before building:
-
-```sh
-bun src/cli.ts analyze --config conformance.json > artifacts-conformance-analysis.json
-bun src/cli.ts analyze --config keyed-conformance.json > artifacts-keyed-analysis.json
-bun src/cli.ts analyze --config primitive-conformance.json > artifacts-primitive-analysis.json
-bunx astro build --root example
-bunx astro preview --root example --host 127.0.0.1 --port 4321
-```
-
-From the project directory, while that preview is running:
-
-```sh
-bun src/cli.ts analyze --config visual.json --entry Geometry > /tmp/astro-fyne-analysis.json
-task_source_hash="$(jq -r '.sourceHash' /tmp/astro-fyne-analysis.json)"
-bun capture/astro-fyne-capture.ts \
-  --url http://127.0.0.1:4321/geometry \
-  --out /tmp/astro-fyne-geometry --width 320 --height 240 --scale 1 \
-  --state default --source-hash "$task_source_hash"
-bun src/cli.ts generate --config visual.json --entry Geometry \
-  --measurements /tmp/astro-fyne-geometry/measurements.json
-```
-
-`--selector` defaults to `#fyne-root`. Every element within that root needs a unique explicit
-HTML `id`. Use `--ready-selector` for an application readiness signal. `--state` labels the
-state already prepared by the URL and scenario; it does not execute interactions. Capture
-waits for fonts and images, checks that the DOM and measurements remain stable, and records
-root CSS custom properties as `tokens`. It writes `web.png` and `measurements.json`, including
-source, DOM and screenshot hashes.
-
-Image captures also require `--analysis PATH` pointing to the compiler's `analyze` result.
-Capture checks the bytes of the response Chromium actually used against the compiler's
-resource digest, plus its MIME type, literal URL and natural dimensions. The image scenario
-in `image-visual.json` uses a local PNG at its natural size; its evidence is retained in
-`artifacts/images` separately from the solid-box scenario.
-
-`responsive-flex.json` exercises the source-only layout separately. CI keeps the same
-native widget through five window sizes, then captures another device scale. Its Chromium
-rectangles serve as a comparison oracle, not as native layout input. For each case, CI also
-exports the already rendered Fyne scene, generates Astro + Preact from it, and compares that
-web frame with the native image. These artifacts are retained under
-`artifacts/responsive-flex`. The inverse output freezes that frame; it does not infer a
-responsive algorithm from arbitrary Go code.
-
-Capture the generated native geometry and compare the actual images:
-
-```sh
-cd native
-ASTRO_FYNE_ARTIFACTS=/tmp/astro-fyne-geometry go test ./generated -run TestCaptureMeasuredGeometry
-go run ./visual/cmd/astro-fyne-compare \
-  --reference /tmp/astro-fyne-geometry/web.png \
-  --native /tmp/astro-fyne-geometry/native.png \
-  --out /tmp/astro-fyne-geometry/diff.png
-```
-
-The default gate permits **zero channel difference and zero changed pixels**, including
-alpha. It refuses different image dimensions and returns a failing exit code when pixels
-differ. It rejects 16-bit PNGs instead of losing their low channel bits during comparison;
-the gate compares channels represented at up to 8 bits. Animated PNGs and unsupported
-color, precision, background or orientation metadata also fail instead of being ignored.
-Its JSON result includes
-`changedPixels`, `maxChannelDelta`, `bounds`, `exact` and
-`accepted`. Optional tolerances must be selected explicitly; accepted images with differences
-still report `exact: false`. Passing the geometry scenario certifies that scenario only.
-
-The generator report always starts with `pixelPerfectVerified: false`. Generation and matching
-bounding boxes do not establish visual equality. Keep the comparator result with both captures
-and the measurement file as the evidence for a passing profile.
-
-`visual-scale2.json` defines a separate geometry profile at scale 2. CI captures its
-browser and native output at 640 × 480 physical pixels and compares all channels with
-zero tolerance. It preserves the same 320 × 240 logical viewport; this profile does
-not certify bitmap interpolation or typography at scale 2.
-
-Measured constructors declare the captured device scale. After assigning the widget to its
-canvas, hosts must call `view.BindCanvas(window.Canvas())` and check `view.ValidateCanvas()`
-before certifying or exporting it. A measured profile requires its exact logical viewport and
-device scale; the runtime reports changes to either as errors.
-
-## Export Fyne to Astro + Preact
-
-Export the actual Fyne object tree after layout on its UI goroutine. The exporter supports
-the declared native scene contract and rejects widgets or rendering features outside it:
-
-```go
-import (
-    "fyne.io/fyne/v2/theme"
-    "github.com/thinkddr/astro-fyne/native/reverse"
-)
-
-document, err := reverse.Export(root, reverse.Options{
-    Viewport: reverse.Viewport{Width: 320, Height: 240, Scale: 1},
-    Canvas: window.Canvas(),
-    CanvasBackground: theme.Color(theme.ColorNameBackground), // Standard opaque Fyne window.
-})
-if err != nil {
+if err := view.BindCanvas(window.Canvas()); err != nil {
     return err
 }
-// Encode document using encoding/json and save it as scene.json.
 ```
 
-Supply the actual background of the canvas; a transparent canvas uses `color.Transparent`.
-`CanvasBackground` may be omitted only when the exported tree itself guarantees opaque,
-unrounded and borderless coverage of the full viewport. Fyne's public canvas interface does
-not expose transparency, so the exporter requires this host assertion instead of guessing.
+Supply required props through `webui.Scope` and platform effects through named
+`webui.Actions`. Navigation, network calls and storage are implemented by the host. Surface
+`view.Error()` and perform UI changes on Fyne's event goroutine.
 
-Convert the scene into web source files, placing bitmap assets in the Astro public directory:
+`NewDashboardTheme(baseTheme)` constructs the generated theme; apply it with
+`app.Settings().SetTheme(theme)`. `NewDashboardResources()` exposes embedded assets.
+Entries with `fonts` also get `NewDashboardBackend()`, selected automatically by the widget
+constructor. Import the generated `.fonts.css` in Astro and serve the original font files
+at their configured `webSrc` URLs. Generation embeds fonts into Go; it does not copy them
+into the web project's public directory.
+
+See the runnable [native demo](native/cmd/astro-fyne-demo/main.go) and
+[font configuration](responsive-controls.json). Static TrueType regular/bold and normal/italic
+faces are supported. Font licenses remain your responsibility; the included Noto Sans files
+retain their [SIL Open Font License](example/public/fonts/LICENSE-NotoSans.txt).
+
+## Convert Fyne to Astro + Preact
+
+Export a supported, already laid out Fyne tree with the Go `reverse.Export` API and save the
+result as `scene.json`. Then run:
 
 ```sh
-bun src/cli.ts reverse --scene scene.json \
-  --out example/src/pages/native-page --name NativePage \
-  --public-dir example/public
-bun src/cli.ts reverse --scene scene.json \
-  --out example/src/pages/native-page --name NativePage \
-  --public-dir example/public --check
+bun run to-web --scene scene.json \
+  --out /path/to/your/project/src/pages/native-page --name NativePage \
+  --public-dir /path/to/your/project/public
 ```
 
-This creates `NativePage.astro`, `NativePage.tsx`, `NativePage.css` and
-`NativePage.reverse.report.json`. Without `--public-dir`, assets go into `OUT/public`;
-configure Astro to serve that directory. Existing files must carry the generator marker;
-existing bitmap bytes must match exactly. The complete scene and destinations are validated
-before writing, so unsupported input preserves previous outputs. `--check` compares source
-files, reports and bitmap bytes.
+This creates `NativePage.astro`, `NativePage.tsx`, `NativePage.css`, a report and any bitmap
+assets. The page route is `/native-page/NativePage`. Repeat the command with `--check` to
+verify that the output is current.
 
-Callbacks require named actions in `reverse.Options.Bindings` or `IDBindings`. Export reports
-a callback without its binding as an error. Use `--actions-module ./actions` for an explicit
-client module exporting `actions`. Astro loads that module in the browser; SSR props do not
-serialize Go or JavaScript functions. The generated Preact component also accepts an `actions`
-prop for direct embedding. Text fields preserve local editing, immediate input and deduplicated
-blur/Return commits. A single-line native `Entry.OnSubmitted` binds a separate `submit` action.
+To try the reverse pipeline with the included native scene:
 
-The scene freezes the current geometry, styles, values, theme tokens and resources. It does
-not translate arbitrary Go callback bodies or reconstruct the original responsive layout.
-Font-family mappings are supplied explicitly by the native host and need corresponding
-licensed web font resources. Reports contain a scene digest and leave visual verification
-false until the images pass the comparison gate.
+```sh
+bun run demo:scene
+bun run to-web --scene artifacts/reverse/scene.json \
+  --out example/src/pages/native-page --name NativePage --public-dir example/public
+bun run dev
+```
+
+Open `/native-page/NativePage`. The fixture exports real native objects using the software
+driver, so this example does not require a desktop window.
+
+The exporter captures the current frame. It preserves supported values, styles, resources
+and named event bindings; it does not translate Go function bodies or infer responsive
+layout from a screenshot. Interactive scenes need explicit action bindings and an
+`--actions-module` exporting `actions`. See the [complete reverse guide](docs/reverse-conversion.md).
+
+## Commands
+
+All conversion commands support `--help`. `bun run astro-fyne --help` lists the complete interface.
+
+| Command                                     | Use                                                     |
+| ------------------------------------------- | ------------------------------------------------------- |
+| `bun run to-fyne`                           | Generate native Go; alias of `generate`                 |
+| `bun run to-web --scene … --out … --name …` | Generate Astro + Preact; alias of `reverse`             |
+| `bun run check`                             | Verify generated native files without writing           |
+| `bun run watch`                             | Regenerate native files after source edits              |
+| `bun run analyze`                           | Print the source manifest as JSON                       |
+| `bun run dev`                               | Start the example Astro development server              |
+| `bun run demo:scene`                        | Export the included native scene for reverse conversion |
+| `bun run demo:native`                       | Run the generated desktop example                       |
+
+Forward commands default to `astro-fyne.json`. Use `--config PATH`, `--entry NAME` and,
+for a single measured entry, `--measurements PATH`. Reverse output is checked with
+`bun run to-web … --check`.
+
+## Compatibility and visual accuracy
+
+| Area                 | Current support                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| Source               | Declarative Astro/TSX components, props, supported expressions, `useState`, events and keyed lists   |
+| Native output        | Fyne widgets, generated themes, explicit host actions, local PNG/JPEG resources and static TTF faces |
+| Responsive layout    | Explicit row/column Flexbox, boxes, one-line text, buttons, single-line inputs and bitmap leaves     |
+| Browser measurements | Fixed source/state/viewport/device-scale profiles with validated styles                              |
+| Reverse output       | Supported native scenes exported into frozen web frames, with named actions                          |
+| Still unsupported    | Arbitrary JS/Go, full CSS cascade, grid, wrapping/intrinsic layout, animations and browser APIs      |
+
+CI compares browser and native captures and retains the generated code, traces, scene files
+and pixel diffs. The current corpus includes **27 exact visual comparisons** with zero RGBA
+differences, plus control behavior and geometry checks. **All 22 responsive typography frames
+still differ at zero tolerance.** Passing a profile certifies that profile only.
+
+Generation reports `pixelPerfectVerified: false`; generating code or matching rectangles
+is not proof of matching pixels. Follow the [visual verification guide](docs/visual-verification.md)
+to capture a profile and compare it. Evidence is available in the
+[GitHub Actions runs](https://github.com/thinkddr/astro-fyne/actions).
+
+## Development
+
+```sh
+bun run test
+bun run typecheck
+bun run check
+```
+
+Run `go test ./...` from `native` for the runtime tests. The desktop demo has a separate Go
+module so the runtime tests do not need a desktop graphics driver. CI additionally runs race
+checks, vet, vulnerability checks, Chromium captures, inverse conversion and strict pixel
+comparisons. Install the capture browser with `bunx --no-install playwright install chromium`
+before running the full `bash ci/run.sh` workflow locally.
+
+When contributing, include a small reproduction, preserve explicit unsupported-feature
+errors, and add behavior or visual evidence for new conversion features. See
+[COMPATIBILITY.md](COMPATIBILITY.md) for the rendering contract and remaining work.
+
+## Troubleshooting
+
+| Problem                       | Next step                                                                |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `gofmt` cannot run            | Install Go and ensure `gofmt` is on `PATH`                               |
+| Unsupported source or CSS     | Use the reported source location and check the compatibility contract    |
+| Missing host action           | Add the named function to the constructor's `webui.Actions` map          |
+| Missing font or glyph         | Declare the exact face in `fonts` and serve the same bytes in Astro      |
+| Stale generated output        | Run `to-fyne` or `to-web` again, then `check`                            |
+| Desktop build fails           | Install the Fyne dependencies for your OS                                |
+| Measured view becomes invalid | Restore its recorded state, viewport and scale, or capture a new profile |
 
 ## License
 
-The independent compiler, capture tools and native runtime are licensed under
-[Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution. Dependencies and optional
-external backend adapters retain their own licenses; this project does not distribute the
-proprietary Sytue adapter or its design assets.
+The compiler, capture tools and native runtime use [Apache-2.0](LICENSE).
+See [NOTICE](NOTICE) for attribution. Dependencies and bundled assets retain their own
+licenses. This public repository uses public Fyne dependencies and does not require private
+product code or forks.

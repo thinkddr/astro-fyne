@@ -28,10 +28,8 @@ type bitmapAsset struct {
 	resource fyne.Resource
 }
 
-// ValidateBitmap accepts fully decodable, bounded PNG/JPEG resources. Browser
-// orientation, animation and color-profile metadata require a matching decoder,
-// so the initial native subset rejects these instead of ignoring them. Scaling
-// parity still requires the browser/native pixel gate at the requested scale.
+// ValidateBitmap accepts bounded, fully decodable PNG/JPEG resources. Unsupported
+// orientation, animation and color metadata are errors. Scaling parity needs a pixel gate.
 func ValidateBitmap(resource fyne.Resource) (fyne.Size, error) {
 	content, err := bitmapContent(resource)
 	if err != nil {
@@ -164,9 +162,8 @@ func validateImageStyle(id string, style Style) error {
 	return nil
 }
 
-// Freeze validated content so a host mutating its Resource cannot change pixels
-// behind an already recorded visual-state fingerprint. Repeated state renders
-// reuse decoded validation results by content hash; each new tree is copied.
+// Own resource bytes to keep visual fingerprints stable. Cache decoded validation
+// by content hash and copy each new node tree.
 func (v *View) freezeImages(nodes []Node) ([]Node, error) {
 	out := make([]Node, len(nodes))
 	for i, node := range nodes {

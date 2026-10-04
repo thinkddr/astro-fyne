@@ -39,7 +39,7 @@ test("validation of every destination precedes every write", async () => {
     applyArtifacts([artifact(join(root, "a")), artifact(join(root, "b"))], {
       check: false,
     }),
-  ).rejects.toThrow("archivo ajeno");
+  ).rejects.toThrow("file not owned by the generator");
   expect(await Bun.file(join(root, "a")).exists()).toBe(false);
   expect(await readFile(join(root, "b"), "utf8")).toBe("handwritten");
 });
@@ -50,7 +50,7 @@ test("symlink destinations cannot replace handwritten targets", async () => {
   await symlink(join(root, "source"), join(root, "output"));
   await expect(
     applyArtifacts([artifact(join(root, "output"))], { check: false }),
-  ).rejects.toThrow("destino ajeno");
+  ).rejects.toThrow("destination not owned by the generator");
   expect(await readFile(join(root, "source"), "utf8")).toBe("handwritten");
 });
 
@@ -63,13 +63,13 @@ test("binary checking detects a one-byte change and duplicate paths before write
     applyArtifacts([item, { ...item, path: join(root, ".", "asset") }], {
       check: false,
     }),
-  ).rejects.toThrow("Salida duplicada");
+  ).rejects.toThrow("Duplicate output");
   expect(await Bun.file(path).exists()).toBe(false);
   await applyArtifacts([item], { check: false });
   await applyArtifacts([item], { check: true });
   await writeFile(path, new Uint8Array([1, 2, 4]));
   await expect(applyArtifacts([item], { check: true })).rejects.toThrow(
-    "desactualizado",
+    "out of date",
   );
 });
 
@@ -84,13 +84,13 @@ test("a linked parent cannot escape the selected root before any output is writt
     { ...artifact(join(publicDir, "assets", "bitmap.png")), root: publicDir },
   ];
   await expect(applyArtifacts(files, { check: false })).rejects.toThrow(
-    "enlaza fuera del directorio elegido",
+    "symlink points outside the selected directory",
   );
   expect(await Bun.file(join(root, "Page.tsx")).exists()).toBe(false);
   expect(await Bun.file(join(outside, "bitmap.png")).exists()).toBe(false);
   await writeFile(join(outside, "bitmap.png"), header);
   await expect(applyArtifacts([files[1]!], { check: true })).rejects.toThrow(
-    "enlaza fuera del directorio elegido",
+    "symlink points outside the selected directory",
   );
 });
 
@@ -118,5 +118,5 @@ test("an explicitly selected root alias remains usable and canonical aliases det
       ],
       { check: false },
     ),
-  ).rejects.toThrow("Salida duplicada");
+  ).rejects.toThrow("Duplicate output");
 });
