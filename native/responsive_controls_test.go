@@ -240,6 +240,43 @@ func TestResponsiveRejectedInputEditPreservesEditorAndCallbacks(t *testing.T) {
 	}
 }
 
+func TestResponsiveRejectsSmallViewportBeforeRelayoutAndRecoversWithoutBuilder(t *testing.T) {
+	builds := 0
+	v := NewView(func() []Node {
+		builds++
+		field := responsiveTestLeaf("edit", "input", 0)
+		field.Value, field.Style.Flex.Grow, field.Style.Flex.Shrink = "a", FlexValue(1), FlexValue(1)
+		return []Node{flexTestRoot(64, field)}
+	}, responsiveTestBackend())
+	w := responsiveTestWindow(t, v)
+	field := v.Object("edit").(*inputWidget)
+	field.Tapped(nil)
+	// There is no immediate handler: the longer editor value is pending until
+	// commit, and resize must validate it rather than the source's short "a".
+	for _, r := range "bcdefghijk" {
+		field.TypedRune(r)
+	}
+	if v.Error() != nil || field.element.input.Text() != "abcdefghijk" {
+		t.Fatalf("pending editor value is invalid before resize: %q %v", field.element.input.Text(), v.Error())
+	}
+	root := v.Object("root")
+	rootSize, fieldSize, fieldPosition := root.Size(), field.Size(), field.Position()
+	before := builds
+	w.Resize(fyne.NewSize(24, 64))
+	if v.Error() == nil || root.Size() != rootSize || field.Size() != fieldSize || field.Position() != fieldPosition {
+		t.Fatalf("an insufficient viewport mutated the last valid frames: root=%v edit=%v error=%v", root.Size(), field.Size(), v.Error())
+	}
+	if _, err := v.Snapshot(); err == nil {
+		t.Fatal("a rejected viewport exported a scene with stale frames")
+	}
+	w.Resize(fyne.NewSize(480, 64))
+	if v.Error() != nil || v.Object("edit") != field || builds != before || w.Canvas().Focused() != field || field.element.input.Text() != "abcdefghijk" {
+		t.Fatalf("viewport growth did not recover pending editing without a builder call: builds=%d/%d error=%v focus=%T", builds, before, v.Error(), w.Canvas().Focused())
+	}
+	flexTestFrame(t, v, "root", 0, 0, 480, 64)
+	flexTestFrame(t, v, "edit", 0, 0, 480, 32)
+}
+
 func TestResponsiveLegacyEditorTransitionUsesFrozenBackend(t *testing.T) {
 	responsive := false
 	backend := responsiveTestBackend()

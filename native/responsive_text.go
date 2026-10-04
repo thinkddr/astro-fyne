@@ -193,12 +193,15 @@ func validateResponsiveLine(backend Backend, style Style, text string, content f
 	return nil
 }
 
-func validateResponsiveFrame(nodes []Node, backend Backend, viewport fyne.Size) error {
+func validateResponsiveFrame(nodes []Node, backend Backend, viewport fyne.Size, edits map[string]string) error {
 	if viewport.Width <= 0 || viewport.Height <= 0 {
 		return nil // No native frame exists before the host supplies a viewport.
 	}
 	var candidate func(Node, Style) *element
 	candidate = func(n Node, inherited Style) *element {
+		if value, exists := edits[n.ID]; exists && n.Kind == "input" {
+			n.Value = value
+		}
 		e := &element{node: n, style: resolveStyle(n, n.Style, inherited, backend, true)}
 		for _, child := range n.Children {
 			e.children = append(e.children, candidate(child, e.style))

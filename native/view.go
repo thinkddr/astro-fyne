@@ -94,6 +94,7 @@ type View struct {
 	captureScale      float32
 	boundCanvas       fyne.Canvas
 	err               error
+	layoutErr         error
 	canvasErr         error
 	navigationErr     error
 	refreshing        bool
@@ -255,7 +256,7 @@ func (v *View) Error() error {
 	if len(v.measurements) != 0 {
 		editingErr = v.uncommittedInputError()
 	}
-	return errors.Join(v.err, v.canvasErr, v.navigationErr, editingErr, v.responsiveFrameError())
+	return errors.Join(v.err, v.layoutErr, v.canvasErr, v.navigationErr, editingErr, v.responsiveFrameError())
 }
 
 func (v *View) uncommittedInputError() error {
@@ -441,7 +442,7 @@ func (v *View) reconcile() {
 			err = validateResponsiveBackend(nodes, backend)
 		}
 		if err == nil {
-			err = validateResponsiveFrame(nodes, backend, v.Size())
+			err = validateResponsiveFrame(nodes, backend, v.Size(), nil)
 		}
 		if err != nil {
 			v.err = err
@@ -720,6 +721,7 @@ func (r *viewRenderer) MinSize() fyne.Size {
 	return flowMin(r.objects, false, 0)
 }
 func (r *viewRenderer) Layout(size fyne.Size) {
+	r.view.layoutErr = nil
 	r.view.canvasErr = r.view.ValidateViewport(size)
 	if r.view.boundCanvas != nil {
 		r.view.canvasErr = errors.Join(r.view.canvasErr, r.view.ValidateCanvas())
@@ -739,6 +741,18 @@ func (r *viewRenderer) Layout(size fyne.Size) {
 		return
 	}
 	if r.view.responsive && len(r.view.roots) == 1 {
+		// Resizing must validate the proposed frame before moving any live
+		// object. Commit-only inputs may display more than their source value.
+		edits := make(map[string]string)
+		for id, e := range r.view.elements {
+			if e.input != nil {
+				edits[id] = e.input.Text()
+			}
+		}
+		if err := validateResponsiveFrame(r.view.nodes, r.view.backend, size, edits); err != nil {
+			r.view.layoutErr = err
+			return
+		}
 		root := r.view.roots[0]
 		root.object.Move(fyne.NewPos(0, 0))
 		root.object.Resize(fyne.NewSize(max(size.Width, horizontalDecoration(root.style)), max(root.style.Height, verticalDecoration(root.style))))
@@ -836,7 +850,7 @@ func (e *element) update() {
 		}
 	}
 	if e.input != nil {
-		if editor, ok := e.input.(*primitiveEditor); ok {
+		if editor, ok := e.input.(*primitiveEditor); ok && e.view.responsive {
 			// A legacy editor may enter source mode without being remounted.
 			// Keep its drawing/metrics on the newly frozen backend as well.
 			editor.backend = e.view.backend
@@ -1208,7 +1222,7 @@ func (r *elementRenderer) Layout(size fyne.Size) {
 			}
 		} else if e.view.responsive && s.Display == "flex" {
 			if err := layoutFlex(e.children, s, fyne.NewSize(width, height), fyne.NewPos(left, top)); err != nil {
-				e.view.err = err
+				e.view.layoutErr = err
 			}
 		} else {
 			objs := e.childObjects()
