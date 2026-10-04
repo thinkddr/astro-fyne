@@ -93,6 +93,7 @@ export interface WebSceneOutput {
     sceneHash: string;
     viewport: SceneDocument["viewport"];
     nodeCount: number;
+    rootId: string;
     requiredActions: string[];
     resources: Omit<SceneResource, "content">[];
     visualVerified: false;
@@ -374,6 +375,16 @@ export function validateSceneDocument(value: unknown): SceneDocument {
           `${location}.children`,
           "only native containers can own child nodes",
         );
+      if (output.kind === "container" && output.text && output.children.length)
+        fail(
+          location,
+          "container text and children require an explicit paint-order contract",
+        );
+      if (["input", "textarea", "image"].includes(output.kind) && output.text)
+        fail(
+          `${location}.text`,
+          "control and image overlay text requires an explicit native contract",
+        );
       if (output.labelFor && output.kind !== "text")
         fail(`${location}.labelFor`, "only text nodes can label controls");
       if (output.kind === "image") {
@@ -645,6 +656,7 @@ export function emitWebScene(
         .digest("hex"),
       viewport: document.viewport,
       nodeCount,
+      rootId: rootID,
       requiredActions: document.requiredActions,
       resources: document.resources.map(
         ({ content: _, ...resource }) => resource,
