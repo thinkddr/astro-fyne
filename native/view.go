@@ -73,6 +73,9 @@ type Style struct {
 	Display       string  `json:"display"`
 	Opacity       float32 `json:"opacity"`
 	Measured      bool    `json:"measured"`
+	// Flex is source layout metadata. Snapshots resolve it to measured boxes and
+	// omit it from the portable, frozen scene schema.
+	Flex *FlexStyle `json:"flex,omitempty"`
 }
 
 // View owns reconciled native objects. All mutation, including Refresh, belongs on
@@ -96,6 +99,7 @@ type View struct {
 	refreshing        bool
 	bitmaps           map[[32]byte]bitmapAsset
 	autoRefreshEvents bool
+	responsive        bool
 }
 
 var _ fyne.Widget = (*View)(nil)
@@ -186,6 +190,7 @@ func (v *View) Snapshot() (ViewSnapshot, error) {
 			n.Style.X, n.Style.Y = position.X, position.Y
 			n.Style.Width, n.Style.Height = size.Width, size.Height
 			n.Style.Measured = true
+			n.Style.Flex = nil
 			if !e.object.Visible() {
 				n.Style.Display = "none"
 			}
@@ -294,6 +299,9 @@ func (v *View) BindCanvas(target fyne.Canvas) error {
 // if no resize/refresh occurred after a driver changed its scale.
 func (v *View) ValidateCanvas() error {
 	if len(v.measurements) == 0 {
+		if v.responsive {
+			return v.validateFlexCanvas()
+		}
 		return nil
 	}
 	if v.boundCanvas == nil {
@@ -421,11 +429,16 @@ func (v *View) reconcile() {
 		v.err = err
 		return // Keep the last valid native tree rather than partly mutating it.
 	}
+	if err := validateFlexTree(nodes); err != nil {
+		v.err = err
+		return
+	}
 	nodes, err = v.freezeImages(nodes)
 	if err != nil {
 		v.err = err
 		return
 	}
+	freezeFlexStyles(nodes)
 	var profileError error
 	if len(v.measurements) > 0 {
 		if visualState(nodes) != v.measurementState {
@@ -444,6 +457,7 @@ func (v *View) reconcile() {
 	}
 	v.err = profileError
 	v.nodes = nodes
+	v.responsive = len(nodes) == 1 && nodes[0].Style.Display == "flex"
 	// Reused elements are updated in place below. Freeze their previous sibling
 	// lists first so source reordering can distinguish a moved DOM subtree from
 	// an anchor whose index changed only because another sibling moved.
@@ -483,7 +497,7 @@ func (v *View) reconcile() {
 			if measured, ok := v.measurements[n.ID]; ok && profileError == nil {
 				style = measured
 			}
-			e.style = resolveStyle(n, style, inherited, v.backend)
+			e.style = resolveStyle(n, style, inherited, v.backend, v.responsive)
 			e.children = build(n.Children, e.style)
 			current[n.ID] = e
 			e.update()
@@ -628,6 +642,9 @@ func validateStyle(id string, s Style) error {
 	if s.WhiteSpace != "" && s.WhiteSpace != "normal" && s.WhiteSpace != "nowrap" {
 		return fmt.Errorf("webui: unsupported white-space %q on %q", s.WhiteSpace, id)
 	}
+	if err := validateFlexStyle(id, s); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -675,6 +692,12 @@ type viewRenderer struct {
 func (r *viewRenderer) Destroy()                     {}
 func (r *viewRenderer) Objects() []fyne.CanvasObject { return r.objects }
 func (r *viewRenderer) MinSize() fyne.Size {
+	if r.view.responsive && len(r.view.measurements) == 0 {
+		// The viewport is not a flex item. A fixed-height page or a root whose
+		// padding floor exceeds the viewport may overflow and be clipped by its
+		// native host; neither constraint may force the window to grow.
+		return fyne.NewSize(0, 0)
+	}
 	if r.view.viewport.Width > 0 {
 		return r.view.viewport
 	}
@@ -685,6 +708,10 @@ func (r *viewRenderer) Layout(size fyne.Size) {
 	if r.view.boundCanvas != nil {
 		r.view.canvasErr = errors.Join(r.view.canvasErr, r.view.ValidateCanvas())
 	}
+	if r.view.responsive && (!finite(size.Width) || !finite(size.Height) || size.Width < 0 || size.Height < 0) {
+		r.view.canvasErr = fmt.Errorf("webui: responsive flex viewport requires finite nonnegative dimensions")
+		return
+	}
 	measured := len(r.view.measurements) != 0
 	for _, e := range r.view.roots {
 		measured = measured && e.style.Measured
@@ -693,6 +720,12 @@ func (r *viewRenderer) Layout(size fyne.Size) {
 		for _, e := range r.view.roots {
 			placeMeasured(e)
 		}
+		return
+	}
+	if r.view.responsive && len(r.view.roots) == 1 {
+		root := r.view.roots[0]
+		root.object.Move(fyne.NewPos(0, 0))
+		root.object.Resize(fyne.NewSize(max(size.Width, horizontalDecoration(root.style)), max(root.style.Height, verticalDecoration(root.style))))
 		return
 	}
 	flowLayout(r.objects, size, false, 0)
@@ -805,11 +838,26 @@ func (e *element) update() {
 	}
 }
 
-func resolveStyle(n Node, style, inherited Style, backend Backend) Style {
+func resolveStyle(n Node, style, inherited Style, backend Backend, responsive bool) Style {
 	if style.Measured {
 		return style
 	}
 	defaults := backend.Defaults(n)
+	if responsive {
+		// Geometry is explicit CSS border-box geometry in this mode. Host widget
+		// defaults must not turn an explicit zero into padding or a fixed size.
+		if style.Color == "" {
+			style.Color = inherited.Color
+		}
+		if style.Color == "" {
+			style.Color = defaults.Color
+		}
+		if style.BorderColor == "" {
+			style.BorderColor = style.Color
+		}
+		style.Opacity = 1
+		return style
+	}
 	if style.FontSize == 0 {
 		style.FontSize = inherited.FontSize
 	}
@@ -899,6 +947,11 @@ func (e *element) minSize() fyne.Size {
 	}
 	if s.Measured {
 		return fyne.NewSize(s.Width, s.Height)
+	}
+	if e.view.responsive {
+		// Explicit min-width/min-height:0 does not make flex-basis a Fyne
+		// minimum. Only the CSS content-box floor survives as native MinSize.
+		return fyne.NewSize(horizontalDecoration(s), verticalDecoration(s))
 	}
 	var size fyne.Size
 	switch e.node.Kind {
@@ -1115,6 +1168,10 @@ func (r *elementRenderer) Layout(size fyne.Size) {
 		if s.Measured {
 			for _, child := range e.children {
 				placeMeasured(child)
+			}
+		} else if e.view.responsive && s.Display == "flex" {
+			if err := layoutFlex(e.children, s, fyne.NewSize(width, height), fyne.NewPos(left, top)); err != nil {
+				e.view.err = err
 			}
 		} else {
 			objs := e.childObjects()

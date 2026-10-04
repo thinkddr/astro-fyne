@@ -119,6 +119,17 @@ contains the source tree and layout/style data used by its native renderer. Thes
 automate the current widget and theme construction contract; general CSS theme switching,
 arbitrary custom controls and every formatting model remain part of the compatibility roadmap.
 
+An additional source-only mode generates a responsive native Flexbox layout from literal
+inline styles. The same generated widget recalculates its rectangles when the Fyne canvas
+resizes; it does not consume browser measurements. This mode currently accepts a single
+full-width root with a fixed height, nested row/column flex containers and empty rectangular
+items. Use explicit pixel bases, `minWidth: 0`, `minHeight: 0` and
+`boxSizing: "border-box"` on every item. Growth, weighted shrinkage, gaps, main-axis
+distribution and cross-axis alignment are handled by the native layout engine. The
+[responsive layout contract](COMPATIBILITY.md#responsive-source-layout) lists the exact
+requirements and exclusions. Text, controls, wrapping and intrinsic sizing need further
+implementation before they can use this mode.
+
 Local `<img src="/images/example.png" alt="…" />` nodes generate embedded native resources
 and `canvas.Image` renderers. `NewNameResources()` exposes the resources by source path.
 URL-root paths resolve from the entry's Astro `public` directory, even for imported shared
@@ -173,6 +184,14 @@ Capture checks the bytes of the response Chromium actually used against the comp
 resource digest, plus its MIME type, literal URL and natural dimensions. The image scenario
 in `image-visual.json` uses a local PNG at its natural size; its evidence is retained in
 `artifacts/images` separately from the solid-box scenario.
+
+`responsive-flex.json` exercises the source-only layout separately. CI keeps the same
+native widget through five window sizes, then captures another device scale. Its Chromium
+rectangles serve as a comparison oracle, not as native layout input. For each case, CI also
+exports the already rendered Fyne scene, generates Astro + Preact from it, and compares that
+web frame with the native image. These artifacts are retained under
+`artifacts/responsive-flex`. The inverse output freezes that frame; it does not infer a
+responsive algorithm from arbitrary Go code.
 
 Capture the generated native geometry and compare the actual images:
 

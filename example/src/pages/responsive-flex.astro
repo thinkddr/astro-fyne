@@ -1,0 +1,14 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+import { ResponsiveFlexConformance } from "../components/ResponsiveFlexConformance";
+import report from "../../../native/generated/responsive_flex.gen.report.json";
+---
+<html lang="en" data-responsive-flex-source-hash={report.sourceHash}>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body><ResponsiveFlexConformance client:load /></body>
+</html>
+<style is:global>
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+</style>
