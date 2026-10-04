@@ -30,6 +30,8 @@ export type Node =
   | {
       kind: "element";
       id: string;
+      /** A shared virtual child slot may span compatible conditional branches. */
+      identity?: string;
       tag: string;
       attrs: Record<string, Expr>;
       events: Record<string, Handler>;
@@ -37,7 +39,7 @@ export type Node =
       /** A compile-time local bitmap, never a network URL or interpreted DOM. */
       imageResource?: string;
     }
-  | { kind: "text"; value: Expr }
+  | { kind: "text"; value: Expr; identity?: string }
   | { kind: "conditional"; test: Expr; yes: Node[]; no: Node[] }
   | {
       kind: "each";
@@ -53,6 +55,7 @@ export type Node =
   | {
       kind: "component";
       id: string;
+      identity?: string;
       name: string;
       props: Record<string, Expr>;
       children: Node[];

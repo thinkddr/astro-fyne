@@ -35,11 +35,16 @@ try {
   await page.evaluate(() => {
     (
       window as unknown as {
-        keyedOriginal: { a: Element | null; b: Element | null };
+        keyedOriginal: {
+          a: Element | null;
+          b: Element | null;
+          branch: Element | null;
+        };
       }
     ).keyedOriginal = {
       a: document.getElementById("a-input"),
       b: document.getElementById("b-input"),
+      branch: document.getElementById("a-branch-input"),
     };
   });
   const frames: BehaviorFrame[] = [];
@@ -56,13 +61,18 @@ try {
         }
         const original = (
           window as unknown as {
-            keyedOriginal: { a: Element | null; b: Element | null };
+            keyedOriginal: {
+              a: Element | null;
+              b: Element | null;
+              branch: Element | null;
+            };
           }
         ).keyedOriginal;
         const a =
             document.getElementById("a-renamed-input") ??
             document.getElementById("a-input"),
           b = document.getElementById("b-input");
+        const branch = document.getElementById("a-branch-input");
         const order = [...document.getElementById("keyed-list")!.children]
           .map((element) => element.id)
           .join(",");
@@ -92,9 +102,11 @@ try {
             ? 1
             : document.activeElement === b
               ? 2
-              : document.activeElement === document.body
-                ? 0
-                : 3;
+              : branch !== null && document.activeElement === branch
+                ? 4
+                : document.activeElement === document.body
+                  ? 0
+                  : 3;
         return {
           action,
           nodes,
@@ -104,6 +116,7 @@ try {
             Number(b !== null && b === original.b),
             code,
             primitiveCode,
+            Number(branch !== null && branch === original.branch),
           ],
         };
       },
@@ -112,16 +125,19 @@ try {
     frames.push({ action: frame.action, nodes: frame.nodes });
     for (const [index, value] of frame.measurements.entries())
       observations.push({
-        prefix: `${frames.length - 1}:${["focus", "same-a", "same-b", "order", "primitive-order"][index]}`,
+        prefix: `${frames.length - 1}:${["focus", "same-a", "same-b", "order", "primitive-order", "same-branch-a"][index]}`,
         previous: value,
       });
   }
   await snapshot("initial");
   for (const action of scenario.actions) {
-    if (action === "edit-a") {
-      await page.locator("#a-input").focus();
-      await page.locator("#a-input").press("End");
-      await page.locator("#a-input").pressSequentially("!");
+    if (action === "edit-a" || action === "edit-branch-a") {
+      const input = page.locator(
+        action === "edit-a" ? "#a-input" : "#a-branch-input",
+      );
+      await input.focus();
+      await input.press("End");
+      await input.pressSequentially("!");
     } else {
       // Programmatic click preserves input focus, like native test.Tap. Pointer
       // focus transfer is a different event scenario and is not silently mixed in.

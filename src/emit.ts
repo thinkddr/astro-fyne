@@ -456,7 +456,8 @@ function nodeCode(
   const measured = context.measured;
   if (node.kind === "text") {
     const sourceID = quote("/text_" + context.textCounter++);
-    return `func() []webui.Node { text := webui.ChildText(${expression(node.value)}); if text == "" { return nil }; return []webui.Node{{ID: prefix + ${sourceID}, Identity: prefix + ${sourceID},Kind:"text", Text:text}} }()`;
+    const identity = node.identity ? quote("/" + node.identity) : sourceID;
+    return `func() []webui.Node { text := webui.ChildText(${expression(node.value)}); if text == "" { return nil }; return []webui.Node{{ID: prefix + ${sourceID}, Identity: prefix + ${identity},Kind:"text", Text:text}} }()`;
   }
   if (node.kind === "conditional")
     return `func() []webui.Node { if webui.Truth(${expression(node.test)}) { return ${nodesCode(node.yes, component, context)} }; return ${nodesCode(node.no, component, context)} }()`;
@@ -484,6 +485,7 @@ function nodeCode(
         {
           kind: "element",
           id: node.id,
+          ...(node.identity ? { identity: node.identity } : {}),
           tag,
           attrs: node.props,
           events: {},
@@ -500,7 +502,7 @@ function nodeCode(
     const props = Object.entries(node.props)
       .map(([key, value]) => `${quote(key)}: ${expression(value)}`)
       .join(", ");
-    return `build${context.name}_${node.name}(webui.Scope{${props}}, actions, refresh, state, active, prefix + ${quote("/" + node.id)})`;
+    return `build${context.name}_${node.name}(webui.Scope{${props}}, actions, refresh, state, active, prefix + ${quote("/" + (node.identity ?? node.id))})`;
   }
   const tag = node.tag;
   if (tag === "form")
@@ -544,7 +546,7 @@ function nodeCode(
     throw new Error(`${node.id}: etiqueta ${tag} sin renderer nativo.`);
   const fields = [
     `ID: ${node.attrs.id ? `webui.String(${expression(node.attrs.id)})` : `prefix + ${quote("/" + node.id)}`}`,
-    `Identity: prefix + ${quote("/" + node.id)}`,
+    `Identity: prefix + ${quote("/" + (node.identity ?? node.id))}`,
     `Kind: ${quote(kind)}`,
     `Style: ${style(node, measured, bitmap)}`,
   ];

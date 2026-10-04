@@ -1085,6 +1085,62 @@ class Compiler {
     );
   }
 
+  private conditionalIdentity(
+    yes: Node[],
+    no: Node[],
+    scope: Scope,
+    source: ts.Node,
+  ): void {
+    if (!yes.length || !no.length) return;
+    const unsupported = () =>
+      this.fail(
+        scope.source,
+        source,
+        "Ramas condicionales compatibles necesitan posiciones virtuales estables; map, fragmentos y estructuras distintas requieren un contrato de reconciliación adicional.",
+        scope,
+      );
+    if (yes.length !== 1 || no.length !== 1) unsupported();
+    const sameType = (left: Node, right: Node): boolean =>
+      left.kind === "text"
+        ? right.kind === "text"
+        : left.kind === "element"
+          ? right.kind === "element" && left.tag === right.tag
+          : left.kind === "component"
+            ? right.kind === "component" && left.name === right.name
+            : false;
+    const left = yes[0]!;
+    const right = no[0]!;
+    if (left.kind === "conditional" || right.kind === "conditional")
+      unsupported();
+    if (left.kind === "each" && right.kind === "each") unsupported();
+    if (!sameType(left, right)) return; // Different virtual types really remount.
+    const share = (left: Node, right: Node): void => {
+      if (!sameType(left, right)) unsupported();
+      if (
+        left.kind === "text" ||
+        left.kind === "element" ||
+        left.kind === "component"
+      ) {
+        const identity =
+          left.identity ?? `${scope.component.name}_slot${++this.nextID}`;
+        left.identity = identity;
+        if (
+          right.kind === "text" ||
+          right.kind === "element" ||
+          right.kind === "component"
+        )
+          right.identity = identity;
+      }
+      if (left.kind === "element" && right.kind === "element") {
+        if (left.children.length !== right.children.length) unsupported();
+        left.children.forEach((child, index) =>
+          share(child, right.children[index]!),
+        );
+      }
+    };
+    share(left, right);
+  }
+
   private async render(
     expression: ts.Expression,
     scope: Scope,
@@ -1103,12 +1159,25 @@ class Compiler {
       return [await this.jsx(node, [], scope)];
     if (ts.isJsxFragment(node)) return this.jsxChildren(node.children, scope);
     if (ts.isConditionalExpression(node)) {
+      if (
+        ts.isJsxFragment(this.unwrap(node.whenTrue)) ||
+        ts.isJsxFragment(this.unwrap(node.whenFalse))
+      )
+        this.fail(
+          scope.source,
+          node,
+          "Fragmentos en ramas condicionales requieren un contrato de grupo virtual explícito.",
+          scope,
+        );
+      const yes = await this.render(node.whenTrue, scope);
+      const no = await this.render(node.whenFalse, scope);
+      this.conditionalIdentity(yes, no, scope, node);
       return [
         {
           kind: "conditional",
           test: this.expr(node.condition, scope),
-          yes: await this.render(node.whenTrue, scope),
-          no: await this.render(node.whenFalse, scope),
+          yes,
+          no,
         },
       ];
     }

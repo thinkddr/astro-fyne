@@ -2,9 +2,34 @@
 // Copyright 2026 Astro Fyne contributors.
 import { useState } from "preact/hooks";
 
+function ConditionalEditor({ label, seed }: { label: string; seed: string }) {
+  const [count, setCount] = useState(0);
+  const [text, setText] = useState(seed);
+  return (
+    <section id={`${label}-branch`}>
+      <p id={`${label}-branch-count`}>{count}</p>
+      <p id={`${label}-branch-text`}>{text}</p>
+      <p id={`${label}-branch-label`}>{seed}</p>
+      <button
+        id={`${label}-branch-increment`}
+        type="button"
+        onClick={() => setCount((previous) => previous + 1)}
+      >
+        Increment branch
+      </button>
+      <input
+        id={`${label}-branch-input`}
+        value={text}
+        onInput={(event) => setText(event.currentTarget.value)}
+      />
+    </section>
+  );
+}
+
 function KeyedRow({ label, inputId }: { label: string; inputId: string }) {
   const [count, setCount] = useState(0);
   const [text, setText] = useState(label);
+  const [alternate, setAlternate] = useState(false);
   return (
     <section id={`${label}-row`}>
       <p id={`${label}-value`}>{count}</p>
@@ -21,6 +46,18 @@ function KeyedRow({ label, inputId }: { label: string; inputId: string }) {
         value={text}
         onInput={(event) => setText(event.currentTarget.value)}
       />
+      <button
+        id={`${label}-branch-toggle`}
+        type="button"
+        onClick={() => setAlternate((previous) => !previous)}
+      >
+        Alternate compatible component branch
+      </button>
+      {alternate ? (
+        <ConditionalEditor label={label} seed="alternate" />
+      ) : (
+        <ConditionalEditor label={label} seed="initial" />
+      )}
     </section>
   );
 }

@@ -60,6 +60,7 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 	digest := sha256.Sum256(canonical)
 	view, window := keyedView(t)
 	originalA, originalB := view.Object("a-input"), view.Object("b-input")
+	originalBranch := view.Object("a-branch-input")
 	type frame struct {
 		Action string         `json:"action"`
 		Nodes  map[string]any `json:"nodes"`
@@ -89,10 +90,12 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 		a, b := keyedA(view), view.Object("b-input")
 		focus := 0
 		if window.Canvas().Focused() != nil {
-			if a != nil && window.Canvas().Focused() == a {
+			if a != nil && window.Canvas().Focused() == a.(fyne.Focusable) {
 				focus = 1
-			} else if window.Canvas().Focused() == b {
+			} else if b != nil && window.Canvas().Focused() == b.(fyne.Focusable) {
 				focus = 2
+			} else if branch := view.Object("a-branch-input"); branch != nil && window.Canvas().Focused() == branch.(fyne.Focusable) {
+				focus = 4
 			} else {
 				focus = 3
 			}
@@ -116,14 +119,22 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 		if view.Object("y-primitive").Position().Y < view.Object("x-primitive").Position().Y {
 			primitiveOrder = 21
 		}
-		for index, value := range []int{focus, sameA, sameB, order, primitiveOrder} {
-			trace.Observations = append(trace.Observations, observation{fmt.Sprintf("%d:%s", len(trace.Frames)-1, []string{"focus", "same-a", "same-b", "order", "primitive-order"}[index]), value})
+		sameBranch := 0
+		if branch := view.Object("a-branch-input"); branch != nil && branch == originalBranch {
+			sameBranch = 1
+		}
+		for index, value := range []int{focus, sameA, sameB, order, primitiveOrder, sameBranch} {
+			trace.Observations = append(trace.Observations, observation{fmt.Sprintf("%d:%s", len(trace.Frames)-1, []string{"focus", "same-a", "same-b", "order", "primitive-order", "same-branch-a"}[index]), value})
 		}
 	}
 	snapshot("initial")
 	for _, action := range scenario.Actions {
-		if action == "edit-a" {
-			input := view.Object("a-input").(fyne.Focusable)
+		if action == "edit-a" || action == "edit-branch-a" {
+			id := "a-input"
+			if action == "edit-branch-a" {
+				id = "a-branch-input"
+			}
+			input := view.Object(id).(fyne.Focusable)
 			window.Canvas().Focus(input)
 			input.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEnd})
 			input.TypedRune('!')
@@ -141,6 +152,26 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(out, "native-keyed-behavior.json"), append(data, '\n'), 0644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestGeneratedCompatibleBranchesPreserveStateObjectAndFocus(t *testing.T) {
+	view, window := keyedView(t)
+	branch := view.Object("a-branch-input")
+	focus := branch.(fyne.Focusable)
+	window.Canvas().Focus(focus)
+	focus.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEnd})
+	focus.TypedRune('!')
+	tapGenerated(t, view, "a-branch-increment")
+	tapGenerated(t, view, "a-branch-toggle")
+	if view.Object("a-branch-input") != branch || window.Canvas().Focused() != focus ||
+		keyedText(t, view, "a-branch-count") != "1" || keyedText(t, view, "a-branch-text") != "initial!" ||
+		keyedText(t, view, "a-branch-label") != "alternate" {
+		t.Fatal("same component branch changed identity, initializer state or focus instead of just its props")
+	}
+	tapGenerated(t, view, "a-branch-toggle")
+	if view.Object("a-branch-input") != branch || keyedText(t, view, "a-branch-count") != "1" {
+		t.Fatal("returning to the first compatible branch lost its instance")
 	}
 }
 
