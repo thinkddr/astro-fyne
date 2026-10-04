@@ -430,6 +430,22 @@ test("responsive flex serializes explicit solid borders and rejects other border
   expect(missingGo).toContain(
     "if err := view.Error(); err != nil { return nil, err }",
   );
+  for (const declaration of [
+    "borderStyle:'solid',borderColor:'#123456'",
+    "borderStyle:'solid',borderWidth:0",
+  ]) {
+    const implicit =
+      await program(`export function Page() { return <main id="root"
+      style={{display:'flex',${declaration}}}/>; }`);
+    expect(() => emitGo(implicit, options)).toThrow(
+      "CSS borderStyle solid requiere",
+    );
+  }
+  const zero = await program(`export function Page() { return <main id="root"
+    style={{display:'flex',borderStyle:'solid',borderWidth:0,borderColor:'#123456'}}/>; }`);
+  const zeroGo = emitGo(zero, options);
+  expect(zeroGo).toContain('BorderStyle: "solid"');
+  expect(zeroGo).toContain("BorderWidth: 0");
 });
 
 test("responsive flex rejects unsupported units, intrinsic sizing and formatting modes", async () => {

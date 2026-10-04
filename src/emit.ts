@@ -254,6 +254,17 @@ function style(
     throw new Error(
       `${node.id}: img requiere captura; el contrato flex responsive no admite dimensionado intrínseco de imágenes.`,
     );
+  if (
+    responsive &&
+    inline?.kind === "object" &&
+    inline.entries.borderStyle?.kind === "literal" &&
+    inline.entries.borderStyle.value === "solid"
+  )
+    for (const property of ["borderWidth", "borderColor"])
+      if (!Object.hasOwn(inline.entries, property))
+        throw new Error(
+          `${node.id}: CSS borderStyle solid requiere ${property} explícito en el contrato flex responsive.`,
+        );
   const finite = (value: number, property: string): number => {
     if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value)))
       throw new Error(
