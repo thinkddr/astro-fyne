@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "package": "generated",
+  "entries": [
+    {
+      "name": "ReverseGeometry",
+      "source": "example/src/pages/reverse-generated/ReverseGeometry.tsx",
+      "output": "native/generated/reverse_geometry.gen.go",
+      "publicDir": "example/public",
+      "profile": {
+        "state": "default",
+        "width": 320,
+        "height": 240,
+        "scale": 1
+      }
+    }
+  ]
+}
