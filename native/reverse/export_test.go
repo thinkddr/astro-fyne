@@ -410,6 +410,23 @@ func TestExportDetectsBoundViewFocusWithoutOptionalCanvas(t *testing.T) {
 	}
 }
 
+func TestSnapshotDetectsActivePublicEditorWithoutCanvasDiscovery(t *testing.T) {
+	app(t)
+	v := webui.NewView(func() []webui.Node { return []webui.Node{{ID: "edit", Kind: "input"}} })
+	place(v, 0, 0, 320, 240)
+	edit := v.Object("edit").(fyne.Focusable)
+	edit.FocusGained()
+	opts := options()
+	opts.NodeFontFamilies = map[string]string{"edit": "HostFont"}
+	if _, err := Export(v, opts); err == nil || !strings.Contains(err.Error(), "focus") {
+		t.Fatalf("active renderer-only editor was omitted from scene: %v", err)
+	}
+	edit.FocusLost()
+	if _, err := Export(v, opts); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExportAfterNativePaintPreservesResourceAndFreezesChangedDecodedCache(t *testing.T) {
 	app(t)
 	r := bitmap(t)
