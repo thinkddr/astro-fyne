@@ -22,16 +22,117 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/software"
 	"fyne.io/fyne/v2/test"
+	webui "github.com/thinkddr/astro-fyne/native"
 	"github.com/thinkddr/astro-fyne/native/reverse"
 )
 
 func main() {
 	out := flag.String("out", "", "write scene.json and native.png in this directory; otherwise print the scene")
+	controls := flag.Bool("controls", false, "export an initial input/button scene and native-behavior.json event oracle instead of PNG")
 	flag.Parse()
-	if err := run(*out); err != nil {
+	var err error
+	if *controls {
+		err = runControls(*out)
+	} else {
+		err = run(*out)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+type behaviorEvent struct {
+	Action string  `json:"action"`
+	Value  *string `json:"value,omitempty"`
+}
+type behaviorTrace struct {
+	Schema     int             `json:"schema"`
+	Events     []behaviorEvent `json:"events"`
+	FinalValue string          `json:"finalValue"`
+	Disabled   struct {
+		Edit bool `json:"edit"`
+		Save bool `json:"save"`
+	} `json:"disabled"`
+}
+
+// runControls exports an unfocused initial frame, then exercises the actual native
+// input and button through Fyne interfaces. Browser automation runs the same steps;
+// these logs are produced by native callbacks, never by an expected-trace fixture.
+func runControls(out string) error {
+	if out == "" {
+		return fmt.Errorf("--controls requires --out to write both the initial scene and the native behavior trace")
+	}
+	a := test.NewApp()
+	defer a.Quit()
+	value := ""
+	trace := behaviorTrace{Schema: 1, Events: []behaviorEvent{}}
+	appendValue := func(action, text string) {
+		copy := text
+		trace.Events = append(trace.Events, behaviorEvent{Action: action, Value: &copy})
+	}
+	v := webui.NewView(func() []webui.Node {
+		return []webui.Node{{ID: "edit", Kind: "input", Value: value, Placeholder: "Edit", OnChange: func(text string) { value = text; appendValue("input", text) }, OnCommit: func(text string) { value = text; appendValue("commit", text) }}, {ID: "save", Kind: "button", Text: "Save", OnTap: func() { trace.Events = append(trace.Events, behaviorEvent{Action: "tap"}) }}}
+	})
+	c := software.NewCanvas()
+	c.SetPadded(false)
+	c.Resize(fyne.NewSize(320, 240))
+	c.SetContent(v)
+	if err := v.BindCanvas(c); err != nil {
+		return err
+	}
+	scene, err := reverse.Export(v, reverse.Options{Viewport: reverse.Viewport{Width: 320, Height: 240, Scale: 1}, Canvas: c, IDBindings: map[string]reverse.Events{"edit": {Input: "input", Change: "commit"}, "save": {Tap: "tap"}}, NodeFontFamilies: map[string]string{"edit": "sans-serif", "save": "sans-serif"}})
+	if err != nil {
+		return err
+	}
+	focusable, ok := v.Object("edit").(fyne.Focusable)
+	if !ok {
+		return fmt.Errorf("native edit is not focusable")
+	}
+	tappable, ok := v.Object("save").(fyne.Tappable)
+	if !ok {
+		return fmt.Errorf("native save is not tappable")
+	}
+	c.Focus(focusable)
+	if c.Focused() != focusable {
+		return fmt.Errorf("native editor did not acquire focus")
+	}
+	focusable.TypedRune('x')
+	focusable.TypedKey(&fyne.KeyEvent{Name: fyne.KeyReturn})
+	focusable.TypedKey(&fyne.KeyEvent{Name: fyne.KeyReturn})
+	c.Unfocus()
+	tappable.Tapped(&fyne.PointEvent{})
+	c.Focus(focusable)
+	if c.Focused() != focusable {
+		return fmt.Errorf("native editor did not reacquire focus")
+	}
+	focusable.TypedRune('y')
+	c.Unfocus()
+	trace.FinalValue = value
+	editDisabled, ok := v.Object("edit").(fyne.Disableable)
+	if !ok {
+		return fmt.Errorf("native editor disable state is missing")
+	}
+	saveDisabled, ok := v.Object("save").(fyne.Disableable)
+	if !ok {
+		return fmt.Errorf("native button disable state is missing")
+	}
+	trace.Disabled.Edit, trace.Disabled.Save = editDisabled.Disabled(), saveDisabled.Disabled()
+	if err := os.MkdirAll(out, 0755); err != nil {
+		return err
+	}
+	if err := writeJSON(filepath.Join(out, "scene.json"), scene); err != nil {
+		return err
+	}
+	return writeJSON(filepath.Join(out, "native-behavior.json"), trace)
+}
+
+func writeJSON(path string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0644)
 }
 func run(out string) error {
 	a := test.NewApp()
