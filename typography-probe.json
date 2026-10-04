@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "id": "typography-probe",
+  "fixture": "example/src/pages/typography-probe.astro",
+  "viewport": { "width": 512, "height": 256 },
+  "scales": [1, 2],
+  "font": {
+    "family": "AstroNoto",
+    "path": "example/public/fonts/NotoSans-Regular.ttf",
+    "webSrc": "/fonts/NotoSans-Regular.ttf",
+    "weight": 400,
+    "style": "normal",
+    "size": 14,
+    "lineHeight": 20
+  },
+  "foreground": "#11232b",
+  "background": "#ffffff",
+  "samples": [
+    {
+      "id": "probe-ascent",
+      "text": "Hgx",
+      "x": 16,
+      "y": 16,
+      "width": 480,
+      "height": 20
+    },
+    {
+      "id": "probe-kerning",
+      "text": "AVATAR To Wa",
+      "x": 16,
+      "y": 44,
+      "width": 480,
+      "height": 20
+    },
+    {
+      "id": "probe-ligatures",
+      "text": "ffi office afflict",
+      "x": 16,
+      "y": 72,
+      "width": 480,
+      "height": 20
+    },
+    {
+      "id": "probe-digits",
+      "text": "0123456789",
+      "x": 16,
+      "y": 100,
+      "width": 480,
+      "height": 20
+    },
+    {
+      "id": "probe-controls",
+      "text": "Responsive controls",
+      "x": 16,
+      "y": 128,
+      "width": 480,
+      "height": 20
+    },
+    {
+      "id": "probe-combining",
+      "text": "Cafe\u0301 A\u0308",
+      "x": 16,
+      "y": 156,
+      "width": 480,
+      "height": 20
+    },
+    {
+      "id": "probe-fractional",
+      "text": "AVATAR ffi Hgx",
+      "x": 16,
+      "y": 184,
+      "width": 480,
+      "height": 20,
+      "fontSize": 14.5
+    }
+  ]
+}

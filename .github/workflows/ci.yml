@@ -32,6 +32,7 @@ jobs:
           path: |
             artifacts
             native/generated
+            ci/fyne-texttrace_test.go
             native/go.sum
             native/go.mod
           if-no-files-found: warn

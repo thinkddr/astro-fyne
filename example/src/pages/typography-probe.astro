@@ -1,0 +1,82 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Astro Fyne contributors.
+import { resolve } from "node:path";
+import { readTypographyProbe } from "../../../capture/typography.ts";
+import { fontsCSS } from "../../../src/fonts.ts";
+
+// Example builds run from the repository root, as the package scripts specify.
+const { probe, identity, font } = await readTypographyProbe(
+  resolve(process.cwd(), "typography-probe.json"),
+);
+---
+<!doctype html>
+<html
+  lang="en"
+  dir="ltr"
+  data-typography-source-hash={identity.sourceHash}
+  data-typography-probe-hash={identity.probeHash}
+  data-typography-fixture-hash={identity.fixtureHash}
+  data-typography-font-hash={identity.fontHash}
+  style={{ backgroundColor: probe.background }}
+>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Typography evidence</title>
+    <style is:inline set:html={fontsCSS([font])}></style>
+  </head>
+  <body style={{ margin: 0, padding: 0, backgroundColor: probe.background }}>
+    <main
+      id={probe.id}
+      style={{
+        position: "relative",
+        width: `${probe.viewport.width}px`,
+        height: `${probe.viewport.height}px`,
+        margin: 0,
+        padding: 0,
+        border: 0,
+        boxSizing: "border-box",
+        backgroundColor: probe.background,
+        color: probe.foreground,
+        fontFamily: probe.font.family,
+        fontSize: `${probe.font.size}px`,
+        fontWeight: probe.font.weight,
+        fontStyle: probe.font.style,
+        lineHeight: `${probe.font.lineHeight}px`,
+        whiteSpace: "nowrap",
+        textAlign: "left",
+      }}
+    >
+      {probe.samples.map((sample) => (
+        <div
+          id={sample.id}
+          data-typography-sample
+          style={{
+            position: "absolute",
+            left: `${sample.x}px`,
+            top: `${sample.y}px`,
+            width: `${sample.width}px`,
+            height: `${sample.height}px`,
+            fontSize: `${sample.fontSize ?? probe.font.size}px`,
+            boxSizing: "border-box",
+            margin: 0,
+            padding: 0,
+            border: 0,
+          }}
+        ><span data-typography-text>{sample.text}</span><span
+            data-typography-baseline
+            aria-hidden="true"
+            style={{
+              display: "inline-block",
+              width: 0,
+              height: 0,
+              margin: 0,
+              padding: 0,
+              border: 0,
+              verticalAlign: "baseline",
+            }}
+          ></span></div>
+      ))}
+    </main>
+  </body>
+</html>
