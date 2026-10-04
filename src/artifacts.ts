@@ -3,17 +3,72 @@ import {
   lstat,
   mkdir,
   readFile,
+  realpath,
   rename,
+  stat,
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { randomUUID } from "node:crypto";
 
 export interface Artifact {
   path: string;
+  /** User-selected output root; descendants must remain within its real path. */
+  root?: string;
   content: string | Uint8Array;
   isOwned(saved: Uint8Array): boolean;
+}
+
+// Canonicalize existing ancestors without creating anything. An explicitly chosen
+// root may itself be an alias (including macOS /tmp); only descendants are confined.
+async function canonicalDirectory(path: string): Promise<string> {
+  const missing: string[] = [];
+  for (let current = resolve(path); ; current = dirname(current)) {
+    let exists = true;
+    try {
+      await lstat(current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      exists = false;
+    }
+    if (exists) {
+      const canonical = await realpath(current);
+      if (!(await stat(canonical)).isDirectory())
+        throw new Error(`La salida requiere un directorio: ${current}`);
+      return resolve(canonical, ...missing.reverse());
+    }
+    if (dirname(current) === current)
+      throw new Error(`No existe un directorio padre de salida: ${path}`);
+    missing.push(basename(current));
+  }
+}
+
+function contained(root: string, path: string): boolean {
+  const suffix = relative(root, path);
+  return (
+    suffix !== ".." && !suffix.startsWith(`..${sep}`) && !isAbsolute(suffix)
+  );
+}
+
+async function destination(artifact: Artifact): Promise<string> {
+  const path = resolve(artifact.path);
+  if (!artifact.root) return path;
+  const root = resolve(artifact.root);
+  if (path === root || !contained(root, path))
+    throw new Error(`Ruta fuera del directorio de salida: ${path}`);
+  const canonicalRoot = await canonicalDirectory(root);
+  const canonicalParent = await canonicalDirectory(dirname(path));
+  if (!contained(canonicalRoot, canonicalParent))
+    throw new Error(`La salida enlaza fuera del directorio elegido: ${path}`);
+  return resolve(canonicalParent, basename(path));
 }
 
 export function generatedJSON(saved: Uint8Array): boolean {
@@ -40,7 +95,7 @@ export async function applyArtifacts(
   const paths = new Set<string>();
   const pending: { path: string; content: Buffer; temporary?: string }[] = [];
   for (const artifact of artifacts) {
-    const path = resolve(artifact.path);
+    const path = await destination(artifact);
     if (paths.has(path)) throw new Error(`Salida duplicada: ${path}`);
     paths.add(path);
     let saved: Buffer | undefined;

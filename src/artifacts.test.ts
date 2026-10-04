@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyArtifacts, generatedText } from "./artifacts.js";
@@ -64,4 +71,52 @@ test("binary checking detects a one-byte change and duplicate paths before write
   await expect(applyArtifacts([item], { check: true })).rejects.toThrow(
     "desactualizado",
   );
+});
+
+test("a linked parent cannot escape the selected root before any output is written", async () => {
+  const root = await directory();
+  const outside = await directory();
+  const publicDir = join(root, "public");
+  await mkdir(publicDir);
+  await symlink(outside, join(publicDir, "assets"));
+  const files = [
+    { ...artifact(join(root, "Page.tsx")), root },
+    { ...artifact(join(publicDir, "assets", "bitmap.png")), root: publicDir },
+  ];
+  await expect(applyArtifacts(files, { check: false })).rejects.toThrow(
+    "enlaza fuera del directorio elegido",
+  );
+  expect(await Bun.file(join(root, "Page.tsx")).exists()).toBe(false);
+  expect(await Bun.file(join(outside, "bitmap.png")).exists()).toBe(false);
+  await writeFile(join(outside, "bitmap.png"), header);
+  await expect(applyArtifacts([files[1]!], { check: true })).rejects.toThrow(
+    "enlaza fuera del directorio elegido",
+  );
+});
+
+test("an explicitly selected root alias remains usable and canonical aliases detect duplicates", async () => {
+  const root = await directory();
+  const actual = join(root, "actual");
+  const chosen = join(root, "chosen");
+  await mkdir(actual);
+  await symlink(actual, chosen);
+  const output = {
+    ...artifact(join(chosen, "nested", "Page.tsx")),
+    root: chosen,
+  };
+  await applyArtifacts([output], { check: false });
+  expect(await readFile(join(actual, "nested", "Page.tsx"), "utf8")).toBe(
+    header,
+  );
+  await applyArtifacts([output], { check: true });
+  await symlink(join(actual, "nested"), join(actual, "alias"));
+  await expect(
+    applyArtifacts(
+      [
+        output,
+        { ...artifact(join(chosen, "alias", "Page.tsx")), root: chosen },
+      ],
+      { check: false },
+    ),
+  ).rejects.toThrow("Salida duplicada");
 });

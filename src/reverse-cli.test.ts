@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateReverse, reverseMain } from "./reverse-cli.ts";
@@ -164,6 +171,35 @@ test("missing callback bridges and unsupported scene data write no files", async
     generateReverse({ ...config, actionsModule: "./actions" }),
   ).rejects.toThrow("unknown field");
   expect(await Bun.file(config.out).exists()).toBe(false);
+});
+
+test("a public asset parent symlink cannot redirect the reverse CLI or create partial source outputs", async () => {
+  const scene = document();
+  const bytes = await readFile(
+    new URL("../example/public/images/local-image.png", import.meta.url),
+  );
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const metadata = inspectBitmap(bytes, "image/png");
+  const path = `assets/${hash}.png`;
+  scene.resources.push({
+    name: "image",
+    path,
+    hash,
+    mediaType: "image/png",
+    content: bytes.toString("base64"),
+    width: metadata.width,
+    height: metadata.height,
+  });
+  const config = await options(scene);
+  const outside = join(directory, "outside");
+  await mkdir(outside);
+  await mkdir(config.publicDir);
+  await symlink(outside, join(config.publicDir, "assets"));
+  await expect(generateReverse(config)).rejects.toThrow(
+    "enlaza fuera del directorio elegido",
+  );
+  expect(await Bun.file(config.out).exists()).toBe(false);
+  expect(await Bun.file(join(outside, `${hash}.png`)).exists()).toBe(false);
 });
 
 test("inverse CLI rejects missing values and duplicate flags", async () => {
