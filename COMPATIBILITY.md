@@ -135,6 +135,13 @@ Native Go functions, server behavior, custom renderers, dynamic Fyne layouts and
 full state machine require additional source or host contracts. A frozen export describes one
 rendered state. Export success alone does not prove behavior or pixel equality.
 
+Raw native entries currently require a borderless host theme; Fyne's centered asymmetric
+input chrome needs a layered paint contract. Native textarea export is rejected until shared
+hard-line and soft-wrap behavior is defined. Focus, caret and selection are outside the scene
+contract, so exporting an actively focused canvas fails. Single-line control strings that
+the browser would normalize, unsupported text formatting and unsupported paint effects also
+fail explicitly.
+
 The reverse geometry scenario starts from real native rectangles and a bitmap, builds the
 generated Astro page and compares the browser capture against the original native image.
 It then lowers that generated Preact source back into a measured native widget and compares

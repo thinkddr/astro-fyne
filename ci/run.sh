@@ -11,21 +11,25 @@ bun src/cli.ts reverse --scene artifacts/reverse/scene.json --out example/src/pa
 cp example/src/pages/reverse-generated/ReverseGeometry.* artifacts/reverse/
 bun run typecheck
 bun test src
-bunx --no-install prettier --check src capture example astro-fyne.json visual.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json package.json tsconfig.json
+bunx --no-install prettier --check src capture example astro-fyne.json visual.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json package.json tsconfig.json
 bun src/cli.ts generate --config astro-fyne.json
 bun src/cli.ts check --config astro-fyne.json
 bun src/cli.ts generate --config conformance.json
 bun src/cli.ts check --config conformance.json
 bun src/cli.ts generate --config updater-conformance.json
 bun src/cli.ts check --config updater-conformance.json
+bun src/cli.ts generate --config keyed-conformance.json
+bun src/cli.ts check --config keyed-conformance.json
 bun src/cli.ts analyze --config conformance.json > artifacts-conformance-analysis.json
 export ASTRO_FYNE_CONFORMANCE_SOURCE_HASH="$(bun -e 'console.log((await Bun.file("artifacts-conformance-analysis.json").json()).sourceHash)')"
 bun src/cli.ts analyze --config visual.json > artifacts-analysis.json
 bun src/cli.ts analyze --config image-visual.json --entry ImageGeometry > artifacts-image-analysis.json
 bun src/cli.ts analyze --config reverse-visual.json --entry ReverseGeometry > artifacts-reverse-analysis.json
+bun src/cli.ts analyze --config keyed-conformance.json > artifacts-keyed-analysis.json
 task_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-analysis.json").json()).sourceHash)')"
 task_image_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-image-analysis.json").json()).sourceHash)')"
 task_reverse_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-reverse-analysis.json").json()).sourceHash)')"
+task_keyed_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-keyed-analysis.json").json()).sourceHash)')"
 bunx --no-install astro build --root example
 bunx --no-install playwright install --with-deps chromium
 bunx --no-install astro preview --root example --host 127.0.0.1 --port 4321 > /tmp/astro-fyne-preview.log 2>&1 &
@@ -45,6 +49,7 @@ if [[ "$task_preview_ready" != true ]]; then
 fi
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/geometry --out artifacts --width 320 --height 240 --scale 1 --source-hash "$task_source_hash"
 bun capture/behavior.ts http://127.0.0.1:4321/conformance conformance-scenario.json artifacts/web-behavior.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH"
+bun capture/keyed-behavior.ts http://127.0.0.1:4321/keyed keyed-scenario.json artifacts/web-keyed-behavior.json "$task_keyed_source_hash"
 bun src/cli.ts generate --config visual.json --entry Geometry --measurements artifacts/measurements.json
 bun src/cli.ts check --config visual.json --entry Geometry --measurements artifacts/measurements.json
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/geometry-image --out artifacts/images --width 320 --height 240 --scale 1 --source-hash "$task_image_source_hash" --analysis artifacts-image-analysis.json
@@ -53,8 +58,6 @@ bun src/cli.ts check --config image-visual.json --entry ImageGeometry --measurem
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/reverse-generated/ReverseGeometry --out artifacts/reverse --width 320 --height 240 --scale 1 --source-hash "$task_reverse_source_hash" --analysis artifacts-reverse-analysis.json
 bun src/cli.ts generate --config reverse-visual.json --entry ReverseGeometry --measurements artifacts/reverse/measurements.json
 bun src/cli.ts check --config reverse-visual.json --entry ReverseGeometry --measurements artifacts/reverse/measurements.json
-git diff --exit-code HEAD -- native/generated
-test -z "$(git ls-files --others --exclude-standard -- native/generated)"
 
 export ASTRO_FYNE_ARTIFACTS="$(pwd)/artifacts"
 export ASTRO_FYNE_IMAGE_ARTIFACTS="$(pwd)/artifacts/images"
@@ -69,5 +72,9 @@ go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/images/web.png -
 go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/reverse/native.png --native ../artifacts/reverse/web.png --out ../artifacts/reverse/web-diff.png | tee ../artifacts/reverse/web-comparison.json
 go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/reverse/native.png --native ../artifacts/reverse/roundtrip.png --out ../artifacts/reverse/roundtrip-diff.png | tee ../artifacts/reverse/roundtrip-comparison.json
 bun ../capture/compare-behavior.ts ../artifacts/web-behavior.json ../artifacts/native-behavior.json ../conformance-scenario.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH" | tee ../artifacts/behavior-comparison.json
+bun ../capture/compare-behavior.ts ../artifacts/web-keyed-behavior.json ../artifacts/native-keyed-behavior.json ../keyed-scenario.json "$task_keyed_source_hash" | tee ../artifacts/keyed-behavior-comparison.json
 test -z "$(gofmt -l .)"
 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+cd ..
+git diff --exit-code HEAD -- native/generated
+test -z "$(git ls-files --others --exclude-standard -- native/generated)"
