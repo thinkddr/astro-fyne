@@ -2,16 +2,17 @@
   "schema": 1,
   "generator": "astro-fyne",
   "name": "KeyedConformance",
-  "sourceHash": "b88da0f8d8753635e352c40f29a0fcd25166b77792821298e0e38c05b9bebf52",
+  "sourceHash": "b7020f9bb82614e5c64ecfacbaf28555c47bcecd53255dd0afdd0ee5c114fd9f",
   "sources": [
     {
       "path": "example/src/components/KeyedConformance.tsx",
-      "hash": "626f35a89fc515c42564dd0177e5f7063943c6c96e76afb3190de72df9fa95b3"
+      "hash": "8f344332fe715522d88651b3f0a1044b862c7cc2629926b306fec6cc884b2468"
     }
   ],
   "resources": [],
   "actions": [],
   "components": [
+    "ConditionalEditor_e88d309c",
     "KeyedConformance_e88d309c",
     "KeyedRow_e88d309c"
   ],

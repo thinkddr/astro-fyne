@@ -50,6 +50,21 @@ test("native identities use source sites even when public DOM IDs change", async
   expect(go).toContain('Identity: prefix + "/text_0"');
 });
 
+test("compatible component branches share the same hook-state prefix", async () => {
+  const source = await program(`import {useState} from "preact/hooks";
+function Counter({seed}) { const [count,setCount] = useState(seed); return <p>{count}</p>; }
+export function Page({active}) { return <main>{active ? <Counter seed={1}/> : <Counter seed={2}/>}</main>; }`);
+  const root = source.components.find((item) => item.name === source.entry)!
+    .body[0]!;
+  if (root.kind !== "element") throw new Error("missing main");
+  const branch = root.children[0]!;
+  if (branch.kind !== "conditional") throw new Error("missing branch");
+  const component = branch.yes[0]!;
+  if (component.kind !== "component") throw new Error("missing Counter");
+  const expected = `prefix + ${JSON.stringify("/" + component.identity)}`;
+  expect(emitGo(source, options).split(expected)).toHaveLength(3);
+});
+
 test("invalid capture metadata or wrong style types never produce invalid Go", async () => {
   const source = await program(
     `export function Page() { return <div id="panel" />; }`,

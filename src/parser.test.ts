@@ -374,6 +374,57 @@ export function Page({ items }) { return <main>{items.map(item => <Counter key={
   expect(Object.hasOwn(child.props, "key")).toBe(false);
 });
 
+test("compatible conditional child slots preserve component and native source identities", async () => {
+  const entry = await source(
+    "BranchSlots.tsx",
+    `import { useState } from "preact/hooks";
+function Counter({seed}) { const [count,setCount] = useState(seed); return <p>{count}</p>; }
+export function BranchSlots({active}) { return <main>{active
+ ? <section><Counter seed={1}/><input id="on"/></section>
+ : <section><Counter seed={2}/><input id="off"/></section>}</main>; }`,
+  );
+  const program = await compile(entry);
+  const root = program.components.find((item) => item.name === program.entry)!
+    .body[0]!;
+  if (root.kind !== "element") throw new Error("missing root");
+  const branch = root.children[0]!;
+  if (branch.kind !== "conditional") throw new Error("missing conditional");
+  const yes = branch.yes[0]!,
+    no = branch.no[0]!;
+  if (yes.kind !== "element" || no.kind !== "element")
+    throw new Error("missing section");
+  expect(yes.identity).toBeDefined();
+  expect(yes.identity).toBe(no.identity);
+  for (const index of [0, 1]) {
+    const left = yes.children[index]!,
+      right = no.children[index]!;
+    if (!("identity" in left) || !("identity" in right))
+      throw new Error("missing shared child slot");
+    expect(left.identity).toBeDefined();
+    expect(left.identity).toBe(right.identity);
+  }
+  expect((yes.children[1] as { id: string }).id).toBe("on");
+  expect((no.children[1] as { id: string }).id).toBe("off");
+});
+
+test("conditional virtual groups and ambiguous child positions fail explicitly", async () => {
+  for (const body of [
+    `<main>{active ? <><p/></> : <p/>}</main>`,
+    `<main>{active ? items.map(item => <p>{item}</p>) : items.map(item => <p>{item}</p>)}</main>`,
+    `<main>{active ? <section><p/><input/></section> : <section><input/><p/></section>}</main>`,
+    `<main>{active ? <section><p/></section> : <section><p/><input/></section>}</main>`,
+    `<main>{active ? (other ? <p/> : <p/>) : <p/>}</main>`,
+  ])
+    await expect(
+      compile(
+        await source(
+          "AmbiguousBranches.tsx",
+          `export function AmbiguousBranches({active,other,items}) { return ${body}; }`,
+        ),
+      ),
+    ).rejects.toThrow(/contrato|posiciones virtuales/);
+});
+
 test("keys without a single stable map root fail explicitly", async () => {
   for (const body of [
     `<p key={items} />`,
