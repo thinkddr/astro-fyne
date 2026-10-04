@@ -14,10 +14,8 @@ import (
 	"github.com/go-text/typesetting/font"
 )
 
-// TextValidator is the additional opt-in contract for responsive native text.
-// Backend remains compatible with existing measured/prototype adapters. A source
-// text backend must diagnose unavailable glyphs instead of silently substituting
-// another font. This contract does not certify shaping or rasterization parity.
+// TextValidator requires source-text adapters to reject missing glyphs.
+// It does not certify shaping or raster parity; other Backend modes are unchanged.
 type TextValidator interface {
 	ValidateText(string, Style) error
 }
@@ -40,9 +38,8 @@ func invalidSingleLineInput(text string) bool {
 	return false
 }
 
-// sourceNowrap collapses CSS ASCII whitespace for a single text-only leaf. It
-// deliberately preserves NBSP and other Unicode spaces; strings.Fields would
-// change their browser meaning. Input values do not use CSS whitespace collapse.
+// sourceNowrap collapses ASCII whitespace, preserving NBSP and Unicode spaces.
+// Input values bypass CSS whitespace collapse.
 func sourceNowrap(text string) string {
 	var out strings.Builder
 	space := false
@@ -65,9 +62,8 @@ func responsiveHasText(n Node) bool {
 	return n.Kind == "text" || n.Kind == "button" || n.Kind == "input"
 }
 
-// freezeResponsiveFonts clones public font registrations once per View. The
-// caller's mutable maps/resource bytes therefore cannot change a painted frame
-// behind Fyne's resource-identity font cache. Only used faces are parsed below.
+// freezeResponsiveFonts owns maps and bytes once per View to keep cached fonts
+// stable despite host mutation. Only used faces are parsed.
 func freezeResponsiveFonts(backend Backend) (Backend, error) {
 	var b FyneBackend
 	switch value := backend.(type) {
@@ -240,10 +236,8 @@ func validateResponsiveFrame(nodes []Node, backend Backend, viewport fyne.Size, 
 	return check(root, fyne.NewSize(max(viewport.Width, horizontalDecoration(root.style)), max(root.style.Height, verticalDecoration(root.style))))
 }
 
-// responsiveFrameError keeps the initial source text contract explicit: one
-// fitted line, including pending input edits. This diagnostic does not resize a
-// box, alter a minimum or replace missing text with a different font. Horizontal
-// editing scroll and overflowing label paint need their own browser/native gate.
+// responsiveFrameError validates one fitted line, including pending edits.
+// It never resizes boxes or substitutes fonts; overflow and editing scroll are unsupported.
 func (v *View) responsiveFrameError() error {
 	if !v.responsive || v.Size().Width <= 0 || v.Size().Height <= 0 {
 		return nil

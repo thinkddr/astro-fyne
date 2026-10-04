@@ -20,7 +20,7 @@ import (
 	"github.com/thinkddr/astro-fyne/native/visual"
 )
 
-func TestCLIRechazaUnPixelYCreaElDiff(t *testing.T) {
+func TestCLIRejectsOneChangedPixelAndWritesDiff(t *testing.T) {
 	dir := t.TempDir()
 	referencePath, nativePath, diffPath := filepath.Join(dir, "web.png"), filepath.Join(dir, "native.png"), filepath.Join(dir, "diff.png")
 	web, native := image.NewNRGBA(image.Rect(0, 0, 2, 2)), image.NewNRGBA(image.Rect(0, 0, 2, 2))
@@ -34,14 +34,14 @@ func TestCLIRechazaUnPixelYCreaElDiff(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"--reference", referencePath, "--native", nativePath, "--out", diffPath}, &stdout, &stderr)
 	if code != 1 {
-		t.Fatalf("el proceso debe fallar por la diferencia: %d, %s", code, stderr.String())
+		t.Fatalf("the process should fail on a difference: %d, %s", code, stderr.String())
 	}
 	var result visual.Result
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || result.Exact || result.Accepted || result.ChangedPixels != 1 {
-		t.Fatalf("informe incorrecto: %+v, %v", result, err)
+		t.Fatalf("incorrect report: %+v, %v", result, err)
 	}
 	if _, err := readPNG(diffPath); err != nil {
-		t.Fatalf("debe guardar el diff incluso cuando falla el gate: %v", err)
+		t.Fatalf("the diff should be saved even when comparison fails: %v", err)
 	}
 }
 
@@ -51,9 +51,9 @@ func insertPNGChunk(encoded []byte, kind string, data []byte, afterPixels bool) 
 	copy(chunk[4:8], kind)
 	copy(chunk[8:], data)
 	binary.BigEndian.PutUint32(chunk[len(chunk)-4:], crc32.ChecksumIEEE(chunk[4:len(chunk)-4]))
-	position := 33 // Después de IHDR: antes de cualquier IDAT.
+	position := 33 // After IHDR, before IDAT.
 	if afterPixels {
-		position = len(encoded) - 12 // Antes de IEND: después de todos los IDAT.
+		position = len(encoded) - 12 // Before IEND, after IDAT.
 	}
 	result := append([]byte{}, encoded[:position]...)
 	result = append(result, chunk...)
@@ -71,9 +71,8 @@ func staticPNG(t *testing.T) []byte {
 	return encoded.Bytes()
 }
 
-func TestCLINoCertificaMetadatosIgnoradosAunqueLosPixelesCoincidan(t *testing.T) {
-	// Los chunks mantienen CRC válidas. image/png ignora estos metadatos y
-	// decodificaría los mismos canales que el PNG estático original.
+func TestCLIRejectsIgnoredMetadataEvenWhenPixelsMatch(t *testing.T) {
+	// Valid CRCs isolate ignored metadata from pixel decoding errors.
 	for _, kind := range []string{"acTL", "fcTL", "fdAT", "gAMA", "iCCP", "cHRM", "sRGB", "cICP", "mDCV", "cLLI", "eXIf", "sBIT", "bKGD", "vpAg"} {
 		for _, afterPixels := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s-after-pixels-%v", kind, afterPixels), func(t *testing.T) {
@@ -83,7 +82,7 @@ func TestCLINoCertificaMetadatosIgnoradosAunqueLosPixelesCoincidan(t *testing.T)
 				marked := insertPNGChunk(encoded, kind, data, afterPixels)
 				decoded, err := png.Decode(bytes.NewReader(marked))
 				if err != nil {
-					t.Fatalf("el decoder estándar debe ilustrar la interpretación omitida: %v", err)
+					t.Fatalf("the standard decoder should demonstrate ignored metadata: %v", err)
 				}
 				plain, err := png.Decode(bytes.NewReader(encoded))
 				if err != nil {
@@ -91,7 +90,7 @@ func TestCLINoCertificaMetadatosIgnoradosAunqueLosPixelesCoincidan(t *testing.T)
 				}
 				result, _, err := visual.Compare(plain, decoded, visual.Tolerance{})
 				if err != nil || !result.Exact {
-					t.Fatalf("el caso negativo debe conservar los mismos canales antes del guard: %+v, %v", result, err)
+					t.Fatalf("the negative fixture must retain its original channels: %+v, %v", result, err)
 				}
 				for _, markedSide := range []string{"reference", "native"} {
 					referencePath, nativePath, diffPath := filepath.Join(dir, "web.png"), filepath.Join(dir, "native.png"), filepath.Join(dir, "diff.png")
@@ -110,10 +109,10 @@ func TestCLINoCertificaMetadatosIgnoradosAunqueLosPixelesCoincidan(t *testing.T)
 					var stdout, stderr bytes.Buffer
 					code := run([]string{"--reference", referencePath, "--native", nativePath, "--out", diffPath}, &stdout, &stderr)
 					if code != 2 || stdout.Len() != 0 || !strings.Contains(stderr.String(), kind) {
-						t.Fatalf("%s %s no debe declarar paridad: código %d, stdout %s, stderr %s", markedSide, kind, code, stdout.String(), stderr.String())
+						t.Fatalf("%s %s must not claim parity: code %d, stdout %s, stderr %s", markedSide, kind, code, stdout.String(), stderr.String())
 					}
 					if _, err := os.Stat(diffPath); !os.IsNotExist(err) {
-						t.Fatalf("el rechazo no debe producir un diff: %v", err)
+						t.Fatalf("rejection must not produce a diff: %v", err)
 					}
 				}
 			})
@@ -121,7 +120,7 @@ func TestCLINoCertificaMetadatosIgnoradosAunqueLosPixelesCoincidan(t *testing.T)
 	}
 }
 
-func TestCLISigueComparandoRGBAConMetadatosDescriptivos(t *testing.T) {
+func TestCLIAllowsRGBAWithDescriptiveMetadata(t *testing.T) {
 	dir := t.TempDir()
 	encoded := staticPNG(t)
 	referencePath, nativePath, diffPath := filepath.Join(dir, "web.png"), filepath.Join(dir, "native.png"), filepath.Join(dir, "diff.png")
@@ -134,33 +133,33 @@ func TestCLISigueComparandoRGBAConMetadatosDescriptivos(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"--reference", referencePath, "--native", nativePath, "--out", diffPath}, &stdout, &stderr); code != 0 {
-		t.Fatalf("PNG RGBA estático debe seguir permitido: %d, %s", code, stderr.String())
+		t.Fatalf("static RGBA PNG should remain supported: %d, %s", code, stderr.String())
 	}
 	var result visual.Result
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || !result.Exact || !result.Accepted || result.ChangedPixels != 0 {
-		t.Fatalf("metadatos descriptivos no modifican muestras RGBA: %+v, %v", result, err)
+		t.Fatalf("descriptive metadata must not change RGBA samples: %+v, %v", result, err)
 	}
 }
 
-func TestCLINoIgnoraDatosAnexosTrasIEND(t *testing.T) {
+func TestCLIRejectsTrailingDataAfterIEND(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "trailing.png")
 	if err := os.WriteFile(path, append(staticPNG(t), []byte("hidden frame")...), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := readPNG(path); err == nil {
-		t.Fatal("PNG con payload posterior a IEND no pertenece al contrato estático")
+		t.Fatal("PNG payload after IEND violates the static image contract")
 	}
 }
 
-func TestCLINoSobrescribeLaReferencia(t *testing.T) {
+func TestCLIDoesNotOverwriteReference(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"--reference", "web.png", "--native", "native.png", "--out", "web.png"}, &stdout, &stderr); code != 2 {
-		t.Fatalf("sobrescribir la referencia es un error de uso: %d", code)
+		t.Fatalf("overwriting the reference is a usage error: %d", code)
 	}
 }
 
-func TestCLIRechaza16BitsSinDeclararParidad(t *testing.T) {
+func TestCLIRejects16BitChannelsWithoutClaimingParity(t *testing.T) {
 	dir := t.TempDir()
 	referencePath, nativePath, diffPath := filepath.Join(dir, "web16.png"), filepath.Join(dir, "native16.png"), filepath.Join(dir, "diff.png")
 	web, native := image.NewNRGBA64(image.Rect(0, 0, 1, 1)), image.NewNRGBA64(image.Rect(0, 0, 1, 1))
@@ -174,12 +173,12 @@ func TestCLIRechaza16BitsSinDeclararParidad(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"--reference", referencePath, "--native", nativePath, "--out", diffPath}, &stdout, &stderr); code != 2 {
-		t.Fatalf("dieciséis bits deben rechazarse antes de comparar: %d, %s", code, stderr.String())
+		t.Fatalf("16-bit channels must be rejected before comparison: %d, %s", code, stderr.String())
 	}
 	if stdout.Len() != 0 {
-		t.Fatalf("un formato rechazado no puede publicar un informe de igualdad: %s", stdout.String())
+		t.Fatalf("a rejected format cannot publish an equality report: %s", stdout.String())
 	}
 	if _, err := os.Stat(diffPath); !os.IsNotExist(err) {
-		t.Fatalf("el formato rechazado no debe generar un diff: %v", err)
+		t.Fatalf("a rejected format must not produce a diff: %v", err)
 	}
 }

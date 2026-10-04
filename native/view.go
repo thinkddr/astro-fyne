@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 
-// Package webui renders the deliberately supported Astro/Preact source subset as
-// native Fyne objects. Browser measurements are authoritative at their recorded
-// viewport and state; the runtime never stretches a measured page to fit a window.
+// Package webui renders supported Astro/Preact sources as native Fyne objects.
+// Captured layouts remain fixed to their recorded viewport, scale and state.
 package webui
 
 import (
@@ -44,9 +43,8 @@ type Node struct {
 	ImageResource fyne.Resource
 }
 
-// Style uses CSS pixels, including fractional pixels. Measured positions are
-// relative to the parent's border box, not its content box. Browser capture rejects
-// unsupported CSS before it supplies a Style: matching boxes alone is not parity.
+// Style uses CSS pixels. Measured positions are local to the parent's border box.
+// Capture rejects unsupported CSS; matching geometry alone does not prove parity.
 type Style struct {
 	X             float32 `json:"x"`
 	Y             float32 `json:"y"`
@@ -105,21 +103,15 @@ type View struct {
 
 var _ fyne.Widget = (*View)(nil)
 
-// NewView builds the initial tree before its first render, so the first frame is
-// complete without relying on Fyne to call a renderer's Refresh for us.
+// NewView builds the initial tree before the first render.
 func NewView(build func() []Node, backends ...Backend) *View {
 	return NewViewForWidget(func(view *View) fyne.Widget { return view }, build, backends...)
 }
 
-// NewViewForWidget builds a View owned by an extending widget. attach is called
-// once with the allocated View and must attach it to the returned widget before
-// returning (for example, &GeneratedWidget{View: view}). Only then does the View
-// bind its BaseWidget and evaluate its initial source tree. No owner methods or
-// renderers are invoked while an extending widget's embedded View is still nil.
-//
-// Fyne cannot rebind ExtendBaseWidget after NewView has already bound it to the
-// inner View. Using this factory from the beginning keeps refresh, geometry,
-// renderer cache, focus traversal and repaint attached to the actual owner.
+// NewViewForWidget creates a View owned by an extending widget. attach must set
+// the outer widget's View and return that widget before initialization continues.
+// Fyne binds its owner once: wrapping an already initialized NewView cannot rebind
+// its renderer cache, focus traversal or refresh to the outer widget.
 func NewViewForWidget(attach func(*View) fyne.Widget, build func() []Node, backends ...Backend) *View {
 	var backend Backend = FyneBackend{}
 	if len(backends) > 0 && backends[0] != nil {
@@ -152,10 +144,9 @@ func (v *View) Object(id string) fyne.CanvasObject {
 	return nil
 }
 
-// SnapshotNode is a copy of a rendered element, with resolved styles and its real
-// native object for explicit export bindings. Node.Children is empty; Children
-// contains the frozen hierarchy. Callback references are retained only so an
-// exporter can require named bindings, never to execute or serialize functions.
+// SnapshotNode copies a rendered element's resolved style and binding object.
+// Children holds the hierarchy; Node.Children is empty. Exporters require named
+// callback bindings and must never execute or serialize those callbacks.
 type SnapshotNode struct {
 	Node             Node
 	Object           fyne.CanvasObject
@@ -173,9 +164,8 @@ type ViewSnapshot struct {
 	HasFocus     bool
 }
 
-// Snapshot reads the current reconciled tree on Fyne's event goroutine. It does
-// not invoke the builder, create renderers, relayout, refresh or call callbacks.
-// An invalid or stale measured tree cannot become a valid export by freezing it.
+// Snapshot copies the valid current frame on Fyne's event goroutine without
+// building, rendering, refreshing, relayout or callbacks. Stale frames are errors.
 func (v *View) Snapshot() (ViewSnapshot, error) {
 	if err := errors.Join(v.Error(), v.ValidateCanvas()); err != nil {
 		return ViewSnapshot{}, err
@@ -238,9 +228,8 @@ func (v *View) Snapshot() (ViewSnapshot, error) {
 	return ViewSnapshot{Roots: freeze(v.roots), Size: v.Size(), CaptureScale: v.captureScale, Measured: len(v.measurements) != 0, HasFocus: hasFocus}, nil
 }
 
-// SetAutoRefreshEvents selects who reevaluates the source tree after callbacks.
-// Hand-authored nodes default to automatic refresh. Generated event handlers turn
-// it off and refresh only when they queued state, preserving action-only closures.
+// SetAutoRefreshEvents controls automatic source refresh after callbacks.
+// Manual nodes default to true; generated handlers refresh only for queued state.
 func (v *View) SetAutoRefreshEvents(enabled bool) { v.autoRefreshEvents = enabled }
 
 func (v *View) refreshAfterEvent() {
@@ -268,9 +257,8 @@ func (v *View) uncommittedInputError() error {
 	return nil
 }
 
-// SetCaptureScale declares the browser capture's device-pixel ratio. Loading a
-// profile before mounting remains possible; certification also requires BindCanvas
-// and ValidateCanvas once the native canvas has its final size and scale.
+// SetCaptureScale records the browser device-pixel ratio. BindCanvas and
+// ValidateCanvas must also verify the mounted canvas before certification.
 func (v *View) SetCaptureScale(scale float32) error {
 	if !finite(scale) || scale <= 0 {
 		return fmt.Errorf("webui: capture scale must be positive and finite")
@@ -283,9 +271,8 @@ func (v *View) SetCaptureScale(scale float32) error {
 	return nil
 }
 
-// BindCanvas explicitly associates a native canvas with this generated view.
-// Auto-discovery is insufficient: named generated widgets embed View, and a
-// windowless software canvas is not registered in the application driver's windows.
+// BindCanvas associates a canvas with this View. Auto-discovery can miss generated
+// widget wrappers and software canvases that have no registered driver window.
 func (v *View) BindCanvas(target fyne.Canvas) error {
 	if target == nil {
 		return fmt.Errorf("webui: a native canvas is required")
@@ -295,9 +282,8 @@ func (v *View) BindCanvas(target fyne.Canvas) error {
 	return v.ValidateCanvas()
 }
 
-// ValidateCanvas proves that a mounted measurement profile uses the captured
-// viewport AND device scale. Call it immediately before exporting pixels, even
-// if no resize/refresh occurred after a driver changed its scale.
+// ValidateCanvas checks the mounted viewport and scale against the capture.
+// Call it before pixel export even if the driver changed scale without a refresh.
 func (v *View) ValidateCanvas() error {
 	if len(v.measurements) == 0 {
 		if v.responsive {
@@ -345,9 +331,8 @@ func (v *View) ValidateViewport(size fyne.Size) error {
 	return nil
 }
 
-// ApplyMeasurements validates the ENTIRE current tree before replacing a profile.
-// Partial captures and extra IDs are errors: no child falls back to guessed layout.
-// Profiles describe one visual state and become invalid when that state changes.
+// ApplyMeasurements validates every node before replacing the captured profile.
+// Missing/extra IDs are errors. A profile becomes stale when visual state changes.
 func (v *View) ApplyMeasurements(measurements map[string]Style) error {
 	if err := v.uncommittedInputError(); err != nil {
 		return err
@@ -392,8 +377,7 @@ func (v *View) ApplyMeasurements(measurements map[string]Style) error {
 	return errors.Join(v.err, v.canvasErr)
 }
 
-// ClearMeasurements returns to source layout; useful before changing state and
-// supplying the matching captured profile. It explicitly removes the parity claim.
+// ClearMeasurements returns to source layout and removes capture certification.
 func (v *View) ClearMeasurements() {
 	v.measurements, v.measurementState = nil, ""
 	v.Refresh()
@@ -475,9 +459,7 @@ func (v *View) reconcile() {
 	v.nodes = nodes
 	v.responsive = responsive
 	v.backend = backend
-	// Reused elements are updated in place below. Freeze their previous sibling
-	// lists first so source reordering can distinguish a moved DOM subtree from
-	// an anchor whose index changed only because another sibling moved.
+	// Save sibling order before updates: an index change alone does not mean a DOM move.
 	previousRoots := append([]*element(nil), v.roots...)
 	previousChildren := make(map[*element][]*element, len(v.elements))
 	previousGroups := make(map[*element]string, len(v.elements))
@@ -710,9 +692,7 @@ func (r *viewRenderer) Destroy()                     {}
 func (r *viewRenderer) Objects() []fyne.CanvasObject { return r.objects }
 func (r *viewRenderer) MinSize() fyne.Size {
 	if r.view.responsive && len(r.view.measurements) == 0 {
-		// The viewport is not a flex item. A fixed-height page or a root whose
-		// padding floor exceeds the viewport may overflow and be clipped by its
-		// native host; neither constraint may force the window to grow.
+		// The host clips oversized roots; root dimensions must not enlarge the viewport.
 		return fyne.NewSize(0, 0)
 	}
 	if r.view.viewport.Width > 0 {
