@@ -35,22 +35,8 @@ func keyedView(t *testing.T) (*KeyedConformanceWidget, fyne.Window) {
 	if err := view.Error(); err != nil {
 		t.Fatal(err)
 	}
-	// The test canvas has no painter. Materialize the genuine renderer tree as a
-	// drawn first frame would: Fyne's focus walker skips unrendered ancestors.
-	snapshot, err := view.Snapshot()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var render func([]webui.SnapshotNode)
-	render = func(nodes []webui.SnapshotNode) {
-		for _, node := range nodes {
-			if widget, ok := node.Object.(fyne.Widget); ok {
-				test.WidgetRenderer(widget)
-			}
-			render(node.Children)
-		}
-	}
-	render(snapshot.Roots)
+	// Exercise the generated constructor's real Fyne ownership. Artificially
+	// warming inner renderers would hide an unattached outer widget cache.
 	return view, window
 }
 
