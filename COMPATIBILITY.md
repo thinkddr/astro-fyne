@@ -26,7 +26,7 @@ original JavaScript or execute a general ECMAScript runtime.
 | Components | Function components with supported props, constants and a declarative JSX return | Class components, arbitrary imperative component bodies and slots/children without a native contract |
 | State | Supported `useState` declarations; direct and declarative updater setters in event handlers | Other hooks, arbitrary custom hooks and general effect lifecycles |
 | Expressions | Literals, supported property/index access, arrays, objects, templates, conditionals and listed operators | Arbitrary function calls, spread, optional chaining and unsupported JavaScript constructs |
-| Branches and lists | Supported JSX conditionals and declarative `map` callbacks | General iteration, arbitrary callback bodies and full keyed Preact reconciliation guarantees |
+| Branches and lists | Supported JSX conditionals and declarative `map` callbacks; unique finite homogeneous string or number keys on a single root | General iteration, arbitrary callback bodies, mixed or changing key types and fragment keys |
 | Events | Button/link `onClick`; input/textarea `onInput` and `onChange`; Go host callbacks declared explicitly in props and the host translator `t` | Full DOM event propagation, arbitrary event payloads, browser effects and implicit platform adapters |
 | HTML nodes | Supported container, plain text, button, link, input, textarea and local bitmap image tags | Rich text nesting, forms, specialized form controls and unsupported tags |
 | Application effects | Explicit named native actions supplied by the Go host | Host calls during module initialization; automatic translation of browser APIs, networking, SSR, storage or navigation implementations |
@@ -49,6 +49,13 @@ Lexical bindings named `undefined` and asynchronous `map` callbacks are rejected
 Ordinary components cannot receive nested child nodes without a native children/slot contract;
 scalar props named `children` retain their ordinary prop value, and explicit adapters keep
 their declared native child behavior.
+
+Keyed list identities preserve native objects and component state when supported rows reorder.
+Removing a row prunes its state; reinserting it mounts a fresh instance. Keys are scoped to
+their source list, validated for duplicates before children render, and encoded without
+collisions from Unicode or path characters. A key change replaces the native object even
+when its explicit HTML ID stays the same. Mixed string/number keys or a key type change across
+renders are rejected until Preact's coercing identity rules have a complete native contract.
 
 The programmatic compiler API supports explicit package adapters. The initial CLI
 configuration only exposes entries and measurement files. Adapters must preserve a component's
@@ -110,6 +117,28 @@ The tests include a negative visual check that changes one channel of one pixel
 and requires the comparator to fail. A release should report which scenarios actually passed
 in CI and which remain untested, rather than applying a general fidelity badge to generated
 code. Failed or missing comparisons leave a profile uncertified.
+
+## Reverse native scene contract
+
+`native/reverse.Export` reads supported real Fyne objects after layout and emits schema 1.
+`webui.View.Snapshot` exports its reconciled tree without reevaluating its builder or executing
+callbacks. Unsupported objects, invalid geometry, duplicate identities, stale measured
+profiles and missing action bindings produce errors. The scene contains viewport and scale,
+parent-relative border-box coordinates, resolved styles, native control values, theme tokens,
+explicit action IDs and embedded PNG/JPEG bytes with SHA-256 digests.
+
+The web emitter validates the complete scene before generating literal JSX and scoped CSS.
+It escapes scene strings, rejects unsupported style values and verifies bitmap bytes, MIME
+types and dimensions. Text controls use browser input/textarea elements and local state;
+button callbacks and field events require an explicit client action implementation.
+Native Go functions, server behavior, custom renderers, dynamic Fyne layouts and an application's
+full state machine require additional source or host contracts. A frozen export describes one
+rendered state. Export success alone does not prove behavior or pixel equality.
+
+The reverse geometry scenario starts from real native rectangles and a bitmap, builds the
+generated Astro page and compares the browser capture against the original native image.
+It then lowers that generated Preact source back into a measured native widget and compares
+the round-trip image. Both comparisons use the same zero-difference policy as forward conversion.
 
 ## Roadmap toward broad compatibility
 

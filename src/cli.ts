@@ -1,15 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-import {
-  readFile,
-  mkdir,
-  rename,
-  writeFile,
-  readdir,
-  unlink,
-} from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { resolve, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { applyArtifacts, generatedJSON, generatedText } from "./artifacts.js";
 import { compile } from "./parser.js";
 import {
   emitGo,
@@ -219,50 +212,21 @@ export async function generate(options: Options): Promise<void> {
     outputs.set(join(directory, "astro_fyne_scope.gen.go"), formatted.stdout);
   }
   // Parse and format every entry before any write; unsupported source leaves existing output intact.
-  const artifacts = [...outputs]
-    .map(([path, text]) => ({ path, text }))
-    .concat(reports);
-  if (options.check) {
-    for (const artifact of artifacts) {
-      const saved = await readFile(artifact.path, "utf8").catch(() => "");
-      if (saved !== artifact.text)
-        throw new Error(`Generado desactualizado: ${artifact.path}`);
-    }
-  } else {
-    // Refuse to replace hand-written code or reports, even when a user selected an existing path.
-    for (const artifact of artifacts) {
-      let saved: string;
-      try {
-        saved = await readFile(artifact.path, "utf8");
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-        throw error;
-      }
-      const owned = artifact.path.endsWith(".go")
-        ? saved.startsWith(generatedHeader)
-        : (() => {
-            try {
-              return JSON.parse(saved).generator === "astro-fyne";
-            } catch {
-              return false;
-            }
-          })();
-      if (!owned)
-        throw new Error(
-          `Se conserva el archivo ajeno al generador: ${artifact.path}`,
-        );
-    }
-    for (const artifact of artifacts) {
-      await mkdir(dirname(artifact.path), { recursive: true });
-      const temporary = `${artifact.path}.${randomUUID()}.tmp`;
-      try {
-        await writeFile(temporary, artifact.text, { flag: "wx" });
-        await rename(temporary, artifact.path);
-      } finally {
-        await unlink(temporary).catch(() => undefined);
-      }
-    }
-  }
+  await applyArtifacts(
+    [
+      ...[...outputs].map(([path, content]) => ({
+        path,
+        content,
+        isOwned: generatedText(generatedHeader),
+      })),
+      ...reports.map(({ path, text }) => ({
+        path,
+        content: text,
+        isOwned: generatedJSON,
+      })),
+    ],
+    { check: options.check },
+  );
   process.stdout.write(
     `${options.check ? "Comprobadas" : "Generadas"} ${entries.length} entradas; fidelidad visual requiere comparación de capturas.\n`,
   );
@@ -300,6 +264,11 @@ async function treeFingerprint(root: string): Promise<string> {
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const command = argv.shift();
+  if (command === "reverse") {
+    const { reverseMain } = await import("./reverse-cli.js");
+    await reverseMain(argv);
+    return;
+  }
   if (!["generate", "check", "watch", "analyze"].includes(command ?? ""))
     throw new Error(
       "Uso: astro-fyne generate|check|watch|analyze --config archivo.json [--entry Nombre] [--measurements archivo.json]",
