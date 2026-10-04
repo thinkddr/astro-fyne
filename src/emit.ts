@@ -250,6 +250,10 @@ function style(
           value.kind === "literal" &&
           value.value === "flex"),
     );
+  if (bitmap && responsive)
+    throw new Error(
+      `${node.id}: img requiere captura; el contrato flex responsive no admite dimensionado intrínseco de imágenes.`,
+    );
   const finite = (value: number, property: string): number => {
     if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value)))
       throw new Error(
@@ -558,8 +562,9 @@ function style(
         `${node.id}: dimensiones img necesitan píxeles positivos o una captura.`,
       );
   }
-  for (const field of ["Width", "Height"])
-    if (Object.hasOwn(values, field)) flex[field + "Set"] = true;
+  if (!bitmap)
+    for (const field of ["Width", "Height"])
+      if (Object.hasOwn(values, field)) flex[field + "Set"] = true;
   if (responsive || Object.keys(flex).length) {
     values.Flex = `&webui.FlexStyle{${Object.entries(flex)
       .map(
