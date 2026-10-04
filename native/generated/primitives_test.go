@@ -70,8 +70,7 @@ func TestExportBrowserComparablePrimitiveBehavior(t *testing.T) {
 		for _, id := range scenario.IDs {
 			object := view.Object(id)
 			if object == nil {
-				nodes[id] = nil
-				continue
+				t.Fatalf("the unconditional primitive field %q is missing after %q", id, action)
 			}
 			text, ok := object.(interface{ AccessibilityLabel() string })
 			if !ok {
