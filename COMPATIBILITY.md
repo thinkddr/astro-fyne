@@ -20,16 +20,16 @@ The source compiler uses Astro's parser and TypeScript's AST. It lowers a declar
 to a portable intermediate representation and then generates Go. It does not evaluate the
 original JavaScript or execute a general ECMAScript runtime.
 
-| Area | Initial contract | Outside the initial contract |
-| --- | --- | --- |
-| Entry files | `.astro`, `.tsx` and `.jsx`; local component imports; default or selected named exports | General package resolution, server execution and arbitrary module side effects |
-| Components | Function components with supported props, constants and a declarative JSX return | Class components, arbitrary imperative component bodies and slots/children without a native contract |
-| State | Supported `useState` declarations; direct and declarative updater setters in event handlers | Other hooks, arbitrary custom hooks and general effect lifecycles |
-| Expressions | Literals, supported property/index access, arrays, objects, templates, conditionals and listed operators | Arbitrary function calls, spread, optional chaining and unsupported JavaScript constructs |
-| Branches and lists | Supported JSX conditionals and declarative `map` callbacks; unique finite homogeneous string or number keys on a single root | General iteration, arbitrary callback bodies, mixed or changing key types and fragment keys |
-| Events | Button/link `onClick`; input/textarea `onInput` and `onChange`; Go host callbacks declared explicitly in props and the host translator `t` | Full DOM event propagation, arbitrary event payloads, browser effects and implicit platform adapters |
-| HTML nodes | Supported container, plain text, button, link, input, textarea and local bitmap image tags | Rich text nesting, forms, specialized form controls and unsupported tags |
-| Application effects | Explicit named native actions supplied by the Go host | Host calls during module initialization; automatic translation of browser APIs, networking, SSR, storage or navigation implementations |
+| Area                | Initial contract                                                                                                                           | Outside the initial contract                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Entry files         | `.astro`, `.tsx` and `.jsx`; local component imports; default or selected named exports                                                    | General package resolution, server execution and arbitrary module side effects                                                         |
+| Components          | Function components with supported props, constants and a declarative JSX return                                                           | Class components, arbitrary imperative component bodies and slots/children without a native contract                                   |
+| State               | Supported `useState` declarations; direct and declarative updater setters in event handlers                                                | Other hooks, arbitrary custom hooks and general effect lifecycles                                                                      |
+| Expressions         | Literals, supported property/index access, arrays, objects, templates, conditionals and listed operators                                   | Arbitrary function calls, spread, optional chaining and unsupported JavaScript constructs                                              |
+| Branches and lists  | Supported JSX conditionals and declarative `map` callbacks; unique finite homogeneous string or number keys on a single root               | General iteration, arbitrary callback bodies, mixed or changing key types and fragment keys                                            |
+| Events              | Button/link `onClick`; input/textarea `onInput` and `onChange`; Go host callbacks declared explicitly in props and the host translator `t` | Full DOM event propagation, arbitrary event payloads, browser effects and implicit platform adapters                                   |
+| HTML nodes          | Supported container, plain text, button, link, input, textarea and local bitmap image tags                                                 | Rich text nesting, forms, specialized form controls and unsupported tags                                                               |
+| Application effects | Explicit named native actions supplied by the Go host                                                                                      | Host calls during module initialization; automatic translation of browser APIs, networking, SSR, storage or navigation implementations |
 
 The accepted operators and calls are defined in `src/parser.ts`; their native implementations
 live in `native/expressions.go`. This is a portable expression contract rather than proof of
@@ -90,19 +90,19 @@ its own fixed spacing and typography profile, including a 14px `rem`; it is not 
 Tailwind implementation. CSS inside Astro files or imported stylesheets requires browser
 measurements. A measured profile uses the browser's actual rectangles and computed styles.
 
-| Feature | Current boundary |
-| --- | --- |
-| Geometry | CSS pixel dimensions; viewport coordinates for roots; parent border-box coordinates for children |
-| Layout | Recorded positions for one viewport and state; source-only row/column layouts within the supported style subset |
-| Paint | Supported solid colors, uniform borders and uniform radii; the backend and zero-difference gate decide actual equivalence |
-| Opacity | Measured group opacity must be 1; translucent colors require correct composition from the backend |
-| Typography | Explicit loaded browser fonts and corresponding native resources; supported text alignment, line height and whitespace |
-| Stacking and effects | Capture rejects non-default stacking, transforms, shadows, gradients, filters, masks and pseudo content |
-| Overflow | Capture rejects content extending outside its measured box; scrolling and clipping need explicit future support |
-| Resources | Embedded local PNG RGB/RGBA8 and supported JPEG, without color/orientation metadata; SVG, media, iframe, canvas, remote images, srcset and Shadow DOM require further native adapters |
-| Themes | The capture currently requests light color scheme; dark and system-theme switching need separate scenarios and implementation |
-| Scale | Capture records device scale 1 or 2; each native profile must enforce and verify its corresponding scale |
-| Platforms | A pass in the pinned test renderer does not certify desktop GPU rendering, other operating systems or mobile devices |
+| Feature              | Current boundary                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Geometry             | CSS pixel dimensions; viewport coordinates for roots; parent border-box coordinates for children                                                                                      |
+| Layout               | Recorded positions for one viewport and state; source-only row/column layouts within the supported style subset                                                                       |
+| Paint                | Supported solid colors, uniform borders and uniform radii; the backend and zero-difference gate decide actual equivalence                                                             |
+| Opacity              | Measured group opacity must be 1; translucent colors require correct composition from the backend                                                                                     |
+| Typography           | Explicit loaded browser fonts and corresponding native resources; supported text alignment, line height and whitespace                                                                |
+| Stacking and effects | Capture rejects non-default stacking, transforms, shadows, gradients, filters, masks and pseudo content                                                                               |
+| Overflow             | Capture rejects content extending outside its measured box; scrolling and clipping need explicit future support                                                                       |
+| Resources            | Embedded local PNG RGB/RGBA8 and supported JPEG, without color/orientation metadata; SVG, media, iframe, canvas, remote images, srcset and Shadow DOM require further native adapters |
+| Themes               | The capture currently requests light color scheme; dark and system-theme switching need separate scenarios and implementation                                                         |
+| Scale                | Capture records device scale 1 or 2; each native profile must enforce and verify its corresponding scale                                                                              |
+| Platforms            | A pass in the pinned test renderer does not certify desktop GPU rendering, other operating systems or mobile devices                                                                  |
 
 Each capture carries a `sourceHash`, a state label, viewport dimensions, scale, DOM hash,
 screenshot hash and root custom-property tokens. The generator checks the source digest and
