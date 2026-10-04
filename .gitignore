@@ -9,6 +9,8 @@ artifacts-reverse-analysis.json
 artifacts-keyed-analysis.json
 artifacts-primitive-analysis.json
 artifacts-scale2-analysis.json
+artifacts-responsive-flex-analysis.json
 example/src/pages/reverse-generated/
 example/src/pages/reverse-controls/
+example/src/pages/flex-reverse/
 example/public/assets/

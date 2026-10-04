@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "package": "generated",
+  "entries": [
+    {
+      "name": "ResponsiveFlex",
+      "source": "example/src/components/ResponsiveFlexConformance.tsx",
+      "export": "ResponsiveFlexConformance",
+      "output": "native/generated/responsive_flex.gen.go"
+    }
+  ]
+}

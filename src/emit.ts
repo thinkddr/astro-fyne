@@ -200,6 +200,28 @@ function style(
   bitmap?: BitmapResource,
 ): string {
   const values: Record<string, string | number> = {};
+  const flex: Record<string, string | number | boolean> = {};
+  const flexNumbers = new Set([
+    "Grow",
+    "Shrink",
+    "Basis",
+    "MinWidth",
+    "MinHeight",
+    "WidthPercent",
+    "HeightPercent",
+  ]);
+  const flexProperties: Record<string, string> = {
+    flexGrow: "Grow",
+    flexShrink: "Shrink",
+    flexBasis: "Basis",
+    minWidth: "MinWidth",
+    minHeight: "MinHeight",
+    justifyContent: "JustifyContent",
+    alignItems: "AlignItems",
+    alignSelf: "AlignSelf",
+    boxSizing: "BoxSizing",
+    borderStyle: "BorderStyle",
+  };
   if (bitmap) {
     for (const dimension of ["width", "height"] as const) {
       const value = node.attrs[dimension];
@@ -218,6 +240,56 @@ function style(
     }
   }
   if (measured) return "webui.Style{}";
+  const inline = node.attrs.style;
+  const responsive =
+    inline?.kind === "object" &&
+    Object.entries(inline.entries).some(
+      ([name, value]) =>
+        Object.hasOwn(flexProperties, name) ||
+        (name === "display" &&
+          value.kind === "literal" &&
+          value.value === "flex"),
+    );
+  if (bitmap && responsive)
+    throw new Error(
+      `${node.id}: img requiere captura; el contrato flex responsive no admite dimensionado intrínseco de imágenes.`,
+    );
+  if (
+    responsive &&
+    inline?.kind === "object" &&
+    inline.entries.borderStyle?.kind === "literal" &&
+    inline.entries.borderStyle.value === "solid"
+  )
+    for (const property of ["borderWidth", "borderColor"])
+      if (!Object.hasOwn(inline.entries, property))
+        throw new Error(
+          `${node.id}: CSS borderStyle solid requiere ${property} explícito en el contrato flex responsive.`,
+        );
+  const finite = (value: number, property: string): number => {
+    if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value)))
+      throw new Error(
+        `${node.id}: CSS ${property} necesita un número finito representable en float32.`,
+      );
+    return value;
+  };
+  const pixels = (value: string | number, property: string): number => {
+    const match = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?)px$/.exec(
+      String(value).trim(),
+    );
+    if (typeof value === "string" && !match)
+      throw new Error(
+        `${node.id}: CSS ${property} necesita un número o px en el contrato flex responsive.`,
+      );
+    const result = finite(
+      typeof value === "number" ? value : Number(match![1]),
+      property,
+    );
+    if (result < 0)
+      throw new Error(
+        `${node.id}: CSS ${property} no admite valores negativos.`,
+      );
+    return result;
+  };
   const spacing = (number: string): number => Number(number) * 3.5;
   const fontSizes: Record<string, [number, number]> = {
     xs: [10.5, 14],
@@ -231,6 +303,10 @@ function style(
   for (const className of literal(node.attrs.className ?? node.attrs.class, "")
     .split(/\s+/)
     .filter(Boolean)) {
+    if (responsive)
+      throw new Error(
+        `${node.id}: el contrato flex responsive requiere estilos inline sin clases; CSS externo requiere captura.`,
+      );
     if (bitmap && className === "object-fill") continue;
     if (className === "flex") {
       values.Direction ??= "row";
@@ -348,15 +424,74 @@ function style(
           );
         continue;
       }
-      if (
-        property === "display" &&
-        val.kind === "literal" &&
-        ["flex", "block"].includes(String(val.value))
-      ) {
+      if (property === "display") {
+        if (
+          val.kind !== "literal" ||
+          !["flex", "block"].includes(String(val.value))
+        )
+          throw new Error(
+            `${node.id}: CSS display requiere flex/block o captura.`,
+          );
+        values.Display = String(val.value);
         if (val.value === "flex") values.Direction ??= "row";
         continue;
       }
-      const field = fields[property];
+      const flexField = Object.hasOwn(flexProperties, property)
+        ? flexProperties[property]
+        : undefined;
+      if (flexField) {
+        if (
+          val.kind !== "literal" ||
+          (typeof val.value !== "number" && typeof val.value !== "string")
+        )
+          throw new Error(`${node.id}: CSS ${property} requiere un literal.`);
+        const choices: Record<string, string[]> = {
+          JustifyContent: [
+            "flex-start",
+            "flex-end",
+            "center",
+            "space-between",
+            "space-around",
+            "space-evenly",
+          ],
+          AlignItems: ["flex-start", "flex-end", "center", "stretch"],
+          AlignSelf: ["auto", "flex-start", "flex-end", "center", "stretch"],
+          BoxSizing: ["border-box"],
+          BorderStyle: ["solid"],
+        };
+        if (choices[flexField]) {
+          if (
+            typeof val.value !== "string" ||
+            !choices[flexField]!.includes(val.value)
+          )
+            throw new Error(
+              `${node.id}: CSS ${property} sin soporte en el contrato flex responsive.`,
+            );
+          flex[flexField] = val.value;
+        } else if (["Grow", "Shrink"].includes(flexField)) {
+          if (typeof val.value !== "number")
+            throw new Error(
+              `${node.id}: CSS ${property} necesita un número no negativo sin unidad.`,
+            );
+          const result = finite(val.value, property);
+          if (result < 0)
+            throw new Error(
+              `${node.id}: CSS ${property} necesita un número no negativo sin unidad.`,
+            );
+          flex[flexField] = result;
+        } else {
+          const result = pixels(val.value, property);
+          if (["MinWidth", "MinHeight"].includes(flexField) && result !== 0)
+            throw new Error(
+              `${node.id}: CSS ${property} necesita cero explícito en el contrato flex responsive.`,
+            );
+          flex[flexField] = result;
+        }
+        continue;
+      }
+      const field = Object.hasOwn(fields, property)
+        ? fields[property]
+        : undefined;
       if (
         !field ||
         val.kind !== "literal" ||
@@ -366,18 +501,43 @@ function style(
           `${node.id}: CSS ${property} requiere captura del navegador.`,
         );
       const numeric = /^(\d+(?:\.\d+)?)(px|rem)$/.exec(String(val.value));
+      if (["Width", "Height"].includes(field) && val.value === "100%") {
+        if (!responsive)
+          throw new Error(
+            `${node.id}: ${property} 100% requiere metadata explícita del contrato flex responsive o captura.`,
+          );
+        if (bitmap)
+          throw new Error(
+            `${node.id}: dimensiones img en porcentaje requieren captura.`,
+          );
+        flex[field + "Percent"] = 100;
+        flex[field + "Set"] = true;
+        delete values[field];
+        continue;
+      }
       if (["Background", "Color", "BorderColor", "Direction"].includes(field)) {
         if (typeof val.value !== "string")
           throw new Error(`${node.id}: ${property} requiere una cadena.`);
+        if (field === "Direction" && !["row", "column"].includes(val.value))
+          throw new Error(
+            `${node.id}: CSS flexDirection necesita row/column; reverse requiere captura.`,
+          );
         values[field] = val.value;
       } else {
+        if (responsive && field !== "FontWeight") {
+          values[field] = pixels(val.value, property);
+          continue;
+        }
         if (typeof val.value === "string" && !numeric)
           throw new Error(
             `${node.id}: ${property} necesita px/rem o captura del navegador.`,
           );
-        values[field] = numeric?.[1]
-          ? Number(numeric[1]) * (numeric[2] === "rem" ? 14 : 1)
-          : Number(val.value);
+        values[field] = finite(
+          numeric?.[1]
+            ? Number(numeric[1]) * (numeric[2] === "rem" ? 14 : 1)
+            : Number(val.value),
+          property,
+        );
       }
     }
   }
@@ -413,10 +573,21 @@ function style(
         `${node.id}: dimensiones img necesitan píxeles positivos o una captura.`,
       );
   }
+  if (!bitmap)
+    for (const field of ["Width", "Height"])
+      if (Object.hasOwn(values, field)) flex[field + "Set"] = true;
+  if (responsive || Object.keys(flex).length) {
+    values.Flex = `&webui.FlexStyle{${Object.entries(flex)
+      .map(
+        ([key, value]) =>
+          `${key}: ${flexNumbers.has(key) ? `webui.FlexValue(${value})` : typeof value === "string" ? quote(value) : value}`,
+      )
+      .join(", ")}}`;
+  }
   return `webui.Style{${Object.entries(values)
     .map(
       ([key, value]) =>
-        `${key}: ${typeof value === "number" ? value : quote(value)}`,
+        `${key}: ${key === "Flex" || typeof value === "number" ? value : quote(value)}`,
     )
     .join(", ")}}`;
 }
