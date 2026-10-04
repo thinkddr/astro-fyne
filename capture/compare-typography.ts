@@ -423,6 +423,158 @@ export function compareSidecarModules(
   };
 }
 
+function painterPackages(value: unknown, label: string) {
+  const inventory = record(value, label);
+  requireValue(
+    inventory.schema === 1 &&
+      inventory.diagnosticOnly === true &&
+      inventory.pixelPerfectVerified === false &&
+      inventory.fileSelection ===
+        "Go list production compilation and embedding inputs; tests and unused module graph entries excluded",
+    `${label} must retain the actual compiled-package diagnostic protocol`,
+  );
+  requireValue(
+    Array.isArray(inventory.packages) && inventory.packages.length > 0,
+    `${label} omitted compiled painter packages`,
+  );
+  const result = new Map<string, RecordValue>();
+  for (const value of inventory.packages) {
+    const item = record(value, `${label} package`),
+      name = item.importPath;
+    requireValue(
+      typeof name === "string" && name.length > 0 && !result.has(name),
+      `${label} compiled import paths must be unique`,
+    );
+    const module = record(item.module, `${label} ${name} module`);
+    requireValue(
+      typeof module.path === "string" &&
+        module.path.length > 0 &&
+        (module.version === null ||
+          (typeof module.version === "string" && module.version.length > 0)) &&
+        typeof module.main === "boolean" &&
+        Object.hasOwn(module, "replacement"),
+      `${label} ${name} omitted its compiled module identity`,
+    );
+    if (module.replacement !== null) {
+      const replacement = record(
+        module.replacement,
+        `${label} ${name} replacement`,
+      );
+      requireValue(
+        typeof replacement.path === "string" &&
+          replacement.path.length > 0 &&
+          (replacement.version === null ||
+            (typeof replacement.version === "string" &&
+              replacement.version.length > 0)),
+        `${label} ${name} omitted its compiled replacement identity`,
+      );
+    }
+    const fyne =
+      name === "fyne.io/fyne/v2" || name.startsWith("fyne.io/fyne/v2/");
+    requireValue(
+      fyne ? module.path === "fyne.io/fyne/v2" : module.main === false,
+      `${label} ${name} has an unexpected compiled module owner`,
+    );
+    requireValue(
+      Array.isArray(item.files) && item.files.length > 0,
+      `${label} ${name} omitted compiled source files`,
+    );
+    let previous = "";
+    const files = item.files.map((value: unknown) => {
+      const file = record(value, `${label} ${name} compiled file`);
+      requireValue(
+        Object.keys(file).length === 2 &&
+          typeof file.name === "string" &&
+          file.name.length > 0 &&
+          file.name > previous &&
+          !file.name
+            .split(/[\\/]/)
+            .some((part: string) => !part || part === "." || part === "..") &&
+          !file.name.includes("\0") &&
+          typeof file.hash === "string" &&
+          /^[a-f0-9]{64}$/.test(file.hash),
+        `${label} ${name} compiled files must retain sorted, unique names and SHA256 hashes`,
+      );
+      previous = file.name;
+      return { name: file.name, hash: file.hash };
+    });
+    requireValue(
+      typeof item.sourceHash === "string" &&
+        /^[a-f0-9]{64}$/.test(item.sourceHash),
+      `${label} ${name} omitted its compiled source hash`,
+    );
+    same(
+      item.sourceHash,
+      typographyHash(JSON.stringify(files)),
+      `${label} ${name} compiled source inventory hash`,
+    );
+    result.set(name, item);
+  }
+  requireValue(
+    result.has("fyne.io/fyne/v2/internal/painter"),
+    `${label} omitted the actual Fyne painter`,
+  );
+  return result;
+}
+
+export function comparePainterPackages(
+  native: unknown,
+  sidecar: unknown,
+  label = "sidecar",
+) {
+  const original = painterPackages(native, `${label} native`),
+    compiled = painterPackages(sidecar, `${label} sidecar`);
+  same(
+    [...original.keys()].sort(),
+    [...compiled.keys()].sort(),
+    `${label} compiled import paths`,
+  );
+  let compiledFiles = 0,
+    fynePackages = 0;
+  const modules = new Set<string>();
+  for (const [name, before] of original) {
+    const after = compiled.get(name)!;
+    same(
+      before.sourceHash,
+      after.sourceHash,
+      `${label} ${name} compiled source`,
+    );
+    same(before.files, after.files, `${label} ${name} compiled files`);
+    compiledFiles += before.files.length;
+    if (name === "fyne.io/fyne/v2" || name.startsWith("fyne.io/fyne/v2/")) {
+      fynePackages++;
+      same(
+        before.module.path,
+        after.module.path,
+        `${label} ${name} Fyne module path`,
+      );
+    } else {
+      const moduleIdentity = (module: RecordValue) => [
+        module.path,
+        module.version,
+        module.main,
+        module.replacement?.path ?? null,
+        module.replacement?.version ?? null,
+      ];
+      same(
+        moduleIdentity(before.module),
+        moduleIdentity(after.module),
+        `${label} ${name} compiled module identity`,
+      );
+      modules.add(JSON.stringify(moduleIdentity(before.module)));
+    }
+  }
+  return {
+    relation: "exact-compiled-packages" as const,
+    packages: original.size,
+    compiledFiles,
+    fynePackages,
+    nonFyneModules: modules.size,
+    fyneAliasPolicy:
+      "Only Fyne version/main/replacement aliases may differ after identical compiled files and source hashes",
+  };
+}
+
 export function validateSoftwareOriginSource(
   draw: string,
   scale: string | undefined,
@@ -579,12 +731,22 @@ export async function compareTypography(directory: string) {
         download.Sum,
         `${variant} resolved Fyne bytes`,
       );
-      const sidecarDependencies = compareSidecarModules(
-        nativeModules,
-        sidecarModules,
-        `${variant} native and sidecar`,
+      const painterPackages = comparePainterPackages(
+        await json(resolve(directory, "native-painter-packages.json")),
+        await json(resolve(directory, "sidecar-painter-packages.json")),
+        `${variant} native and sidecar painter`,
       );
-      return { trace, nativeModules, sidecarDependencies };
+      return {
+        trace,
+        nativeModules,
+        painterPackages,
+        moduleGraphCounts: {
+          native: nativeModules.length,
+          sidecar: sidecarModules.length,
+          interpretation:
+            "Complete graphs retained; native/sidecar identity is checked on actual compiled painter packages",
+        },
+      };
     }),
   );
   same(
@@ -769,9 +931,10 @@ export async function compareTypography(directory: string) {
     ...expected,
     tolerance: { channel: 0, pixels: 0 },
     nativeShapingIdentical: true,
-    sidecarDependencyRelation: traces.map((trace, index) => ({
+    sidecarPainterPackageIdentity: traces.map((trace, index) => ({
       variant: variants[index],
-      ...trace.sidecarDependencies,
+      ...trace.painterPackages,
+      moduleGraphCounts: trace.moduleGraphCounts,
     })),
     shapingCases: shaping.original.size,
     metricUnits:
