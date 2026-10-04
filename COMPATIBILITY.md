@@ -185,6 +185,15 @@ remain `accepted: false` and `pixelPerfectVerified: false`; CI success for the s
 contract is not certification of those pixels. The software-canvas harness invokes the focused
 control for typing and explicitly dispatches blur after the final background hit test.
 
+A dedicated text probe compares seven rows, including combining characters, ligatures
+and a 14.5px font size, at device scales 1 and 2. Both upstream Fyne 2.8.1 and the public
+maintenance fork are rendered in separate processes with matching dependency versions.
+The real native shaping kernel supplies glyph records and signed 26.6 metrics through
+a test sidecar; Chromium supplies separate DOM Range, Canvas and inline-marker observations.
+The four browser/native comparisons and two upstream/fork comparisons retain strict
+RGBA results as diagnostics. Captured metrics and matching glyph records do not certify
+text rasterization. See the [evidence guide](docs/visual-verification.md#isolate-native-text-differences).
+
 Five additional bitmap viewports (224 → 368 → 512 → 368 → 224, height 96, scale 1) require
 zero-difference forward and inverse RGBA comparisons. Inverse pages are generated from each
 already laid out native scene, rebuilt in Astro and checked in Chromium. These image scenes

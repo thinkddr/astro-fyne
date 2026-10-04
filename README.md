@@ -215,6 +215,11 @@ and pixel diffs. The current corpus includes **27 exact visual comparisons** wit
 differences, plus control behavior and geometry checks. **All 22 responsive typography frames
 still differ at zero tolerance.** Passing a profile certifies that profile only.
 
+A separate [typography comparison](docs/visual-verification.md#isolate-native-text-differences)
+checks seven text rows at scales 1 and 2 against upstream Fyne and the published fork.
+It records actual shaped glyphs, baselines and strict pixel differences to guide native
+rendering improvements. It remains an uncertified diagnostic.
+
 Generation reports `pixelPerfectVerified: false`; generating code or matching rectangles
 is not proof of matching pixels. Follow the [visual verification guide](docs/visual-verification.md)
 to capture a profile and compare it. Evidence is available in the

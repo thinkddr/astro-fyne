@@ -86,6 +86,49 @@ browser and native output at 640 × 480 physical pixels and compares all channel
 zero tolerance. It preserves the same 320 × 240 logical viewport; this profile does
 not certify bitmap interpolation or typography at scale 2.
 
+## Isolate native text differences
+
+On a remote machine, start the example preview above, then run:
+
+```sh
+bash ci/typography.sh
+```
+
+The script compares the same seven text rows in Chromium, upstream Fyne 2.8.1 and
+the public Fyne fork `v2.8.1-sytue.16`, at device scales 1 and 2. The shared
+[probe](../typography-probe.json) includes kerning, ligatures, combining characters,
+descenders and a fractional 14.5px font size. It uses the original font bytes and an
+opaque white background. It does not align images after rendering or apply tolerances.
+
+Evidence is retained in `artifacts/typography`:
+
+| File                                       | Evidence                                                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `scale-*/web-text.json`                    | DOM Range rectangles, marker baselines, separate Canvas text metrics and applied settings             |
+| `<variant>/scale-*/native-text.json`       | Actual native text positions, driver measurements, font digest and physical-origin derivation         |
+| `<variant>/native-shaping.json`            | Real painter glyph IDs, clusters, signed 26.6 advances, offsets and extents for 42 text/H/space cases |
+| `<variant>/fyne-module.json`               | Public dependency version and verified module checksums                                               |
+| `<variant>/*-modules.jsonl`                | Resolved module versions for the native capture and painter trace                                     |
+| `<variant>/scale-*/pixels.json`            | Unchanged strict browser/native pixel comparison                                                      |
+| `upstream-versus-fork/scale-*/pixels.json` | Strict comparison of the two native captures                                                          |
+| `summary.json`                             | Width and baseline deltas, shaping agreement and explicit pixel results                               |
+
+The painter trace runs in a temporary copy of the exact downloaded Fyne module.
+A test sidecar calls its real shaping kernel; the production kernel is unchanged.
+The comparison requires the same non-Fyne dependencies and the same shaped glyph
+records in both native variants. Their physical paint origins may differ because
+the fork uses nearest-pixel placement and upstream uses ceiling placement.
+
+DOM Range rectangles describe selection/advance boxes, not glyph ink. Measuring
+prefixes on a Canvas reshapes each prefix independently; those widths are not
+contextual per-glyph advances. Logical baselines, physical placement and raster
+coverage are separate observations. Matching one does not establish the others.
+
+These files remain `diagnosticOnly: true` and `pixelPerfectVerified: false`.
+A valid diagnostic may contain a strict comparison with `accepted: false`; missing
+captures, inconsistent identities or invalid comparison results fail CI. All
+existing exact geometry and bitmap gates remain required independently.
+
 Measured constructors declare the captured device scale. After assigning the widget to its
 canvas, hosts must call `view.BindCanvas(window.Canvas())` and check `view.ValidateCanvas()`
 before certifying or exporting it. A measured profile requires its exact logical viewport and
