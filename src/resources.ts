@@ -94,6 +94,14 @@ function metadata(bytes: Buffer, extension: string) {
       if (kind === "tRNS") {
         if (transparency || data.length || bytes[25] !== 2 || length !== 6)
           throw new Error("PNG contiene tRNS inválido o fuera de orden.");
+        // Go uses low bytes; PNG 3 also requires masking unused high bits.
+        // Require canonical 8-bit samples until decoder-version parity is proven,
+        // preserving the source bytes instead of silently rewriting transparency.
+        for (let sample = offset + 8; sample < end - 4; sample += 2)
+          if (bytes.readUInt16BE(sample) > 255)
+            throw new Error(
+              "PNG tRNS RGB8 requiere muestras canónicas 0..255 en stage 01.",
+            );
         transparency = true;
       }
       if (kind === "IEND") {

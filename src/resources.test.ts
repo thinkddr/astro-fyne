@@ -242,6 +242,35 @@ test("PNG accepts RGB/RGBA8 legal filters, split IDAT and nonempty Adam7 passes"
   ).toMatchObject({ width: 1, height: 1 });
 });
 
+test("RGB8 tRNS retains canonical boundary samples and rejects high bits in each channel", () => {
+  const image = (samples: number[]) => {
+    const transparent = Buffer.alloc(6);
+    samples.forEach((sample, index) =>
+      transparent.writeUInt16BE(sample, index * 2),
+    );
+    return raster(Buffer.from([0, 0, 0, 0]), pngHeader(1, 1, 2), [
+      chunk("tRNS", transparent),
+    ]);
+  };
+  for (const samples of [
+    [0, 0, 0],
+    [255, 255, 255],
+    [0, 128, 255],
+  ])
+    expect(inspectBitmap(image(samples), "image/png")).toMatchObject({
+      width: 1,
+      height: 1,
+    });
+  for (const sample of [256, 512, 65535])
+    for (let channel = 0; channel < 3; channel++) {
+      const samples = [0, 0, 0];
+      samples[channel] = sample;
+      expect(() => inspectBitmap(image(samples), "image/png")).toThrow(
+        "tRNS RGB8 requiere muestras canónicas 0..255",
+      );
+    }
+});
+
 async function file(path: string, bytes: string | Buffer) {
   const target = join(directory, path);
   await mkdir(dirname(target), { recursive: true });
