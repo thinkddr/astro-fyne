@@ -71,7 +71,18 @@ func (rectangle *flexRectangle) UnmarshalJSON(data []byte) error {
 		}
 	}
 	type wireRectangle flexRectangle
-	return decodeFlexJSON(data, (*wireRectangle)(rectangle))
+	if err := decodeFlexJSON(data, (*wireRectangle)(rectangle)); err != nil {
+		return err
+	}
+	for _, value := range []float64{rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height} {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return fmt.Errorf("flex rectangle requires finite geometry")
+		}
+	}
+	if rectangle.Width < 0 || rectangle.Height < 0 {
+		return fmt.Errorf("flex rectangle requires nonnegative dimensions")
+	}
+	return nil
 }
 
 type flexGeometry struct {
@@ -353,6 +364,7 @@ func TestResponsiveFlexGeometryGateRejectsRealPerturbations(t *testing.T) {
 		`{"parent":null,"x":0,"y":0,"width":224}`,
 		`{"parent":null,"x":0,"y":0,"width":224,"height":null}`,
 		`{"parent":null,"x":0,"y":0,"width":224,"height":640,"extra":0}`,
+		`{"parent":null,"x":0,"y":0,"width":-1,"height":640}`,
 	} {
 		if decodeFlexJSON([]byte(invalid), &rectangle) == nil {
 			t.Fatalf("incomplete or unexpected geometry columns passed the gate: %s", invalid)
