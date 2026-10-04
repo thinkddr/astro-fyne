@@ -454,8 +454,10 @@ function nodeCode(
   context: EmitContext,
 ): string {
   const measured = context.measured;
-  if (node.kind === "text")
-    return `func() []webui.Node { text := webui.ChildText(${expression(node.value)}); if text == "" { return nil }; return []webui.Node{{ID: prefix + ${quote("/text_" + context.textCounter++)},Kind:"text", Text:text}} }()`;
+  if (node.kind === "text") {
+    const sourceID = quote("/text_" + context.textCounter++);
+    return `func() []webui.Node { text := webui.ChildText(${expression(node.value)}); if text == "" { return nil }; return []webui.Node{{ID: prefix + ${sourceID}, Identity: prefix + ${sourceID},Kind:"text", Text:text}} }()`;
+  }
   if (node.kind === "conditional")
     return `func() []webui.Node { if webui.Truth(${expression(node.test)}) { return ${nodesCode(node.yes, component, context)} }; return ${nodesCode(node.no, component, context)} }()`;
   if (node.kind === "each") {
@@ -542,6 +544,7 @@ function nodeCode(
     throw new Error(`${node.id}: etiqueta ${tag} sin renderer nativo.`);
   const fields = [
     `ID: ${node.attrs.id ? `webui.String(${expression(node.attrs.id)})` : `prefix + ${quote("/" + node.id)}`}`,
+    `Identity: prefix + ${quote("/" + node.id)}`,
     `Kind: ${quote(kind)}`,
     `Style: ${style(node, measured, bitmap)}`,
   ];

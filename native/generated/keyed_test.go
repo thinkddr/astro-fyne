@@ -86,7 +86,7 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 			}
 		}
 		trace.Frames = append(trace.Frames, frame{action, nodes})
-		a, b := view.Object("a-input"), view.Object("b-input")
+		a, b := keyedA(view), view.Object("b-input")
 		focus := 0
 		if window.Canvas().Focused() != nil {
 			if a != nil && window.Canvas().Focused() == a {
@@ -154,6 +154,13 @@ func keyedText(t *testing.T, view *KeyedConformanceWidget, id string) string {
 	return text.AccessibilityLabel()
 }
 
+func keyedA(view *KeyedConformanceWidget) fyne.CanvasObject {
+	if renamed := view.Object("a-renamed-input"); renamed != nil {
+		return renamed
+	}
+	return view.Object("a-input")
+}
+
 func TestGeneratedKeyedReorderPreservesStateObjectsAndFocus(t *testing.T) {
 	view, window := keyedView(t)
 	a, b := view.Object("a-input"), view.Object("b-input")
@@ -162,8 +169,12 @@ func TestGeneratedKeyedReorderPreservesStateObjectsAndFocus(t *testing.T) {
 	aFocus.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEnd})
 	aFocus.TypedRune('!')
 	tapGenerated(t, view, "a-increment")
+	tapGenerated(t, view, "change-input-id")
+	if view.Object("a-input") != nil || view.Object("a-renamed-input") != a || window.Canvas().Focused() != aFocus {
+		t.Fatal("changing DOM id replaced a stable keyed editor or lost its focus")
+	}
 	tapGenerated(t, view, "reorder")
-	if view.Object("a-input") != a || view.Object("b-input") != b || window.Canvas().Focused() != aFocus {
+	if keyedA(view) != a || view.Object("b-input") != b || window.Canvas().Focused() != aFocus {
 		t.Fatal("keyed reorder replaced an editor or lost its focus")
 	}
 	if keyedText(t, view, "a-value") != "1" || keyedText(t, view, "b-value") != "0" || keyedText(t, view, "a-text") != "a!" {
