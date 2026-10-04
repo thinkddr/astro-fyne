@@ -80,6 +80,8 @@ interface Scope {
   setters: Map<string, string>;
   handlers: Map<string, ts.ArrowFunction | ts.FunctionExpression>;
   substitutions: Map<string, Expr>;
+  /** Only this direct map callback root may consume JSX key metadata. */
+  keyRoot?: ts.Node;
   location?: { line: number; column: number };
 }
 
@@ -1202,12 +1204,86 @@ class Compiler {
         }
         body = callback.body.statements[0]!.expression;
       } else body = callback.body;
+      while (ts.isParenthesizedExpression(body)) body = body.expression;
+      if (ts.isJsxFragment(body))
+        this.fail(
+          scope.source,
+          body,
+          "Fragmentos en map requieren un contrato de grupo keyed explícito; devuelve un único elemento o componente.",
+          childScope,
+        );
+      const opening = ts.isJsxElement(body)
+        ? body.openingElement
+        : ts.isJsxSelfClosingElement(body)
+          ? body
+          : undefined;
+      let key: Expr | undefined;
+      if (opening) {
+        const imported = scope.source.imports.get(opening.tagName.getText());
+        if (
+          imported?.exported === "Fragment" &&
+          ["preact", "preact/compat", "preact/jsx-runtime"].includes(
+            imported.from,
+          )
+        )
+          this.fail(
+            scope.source,
+            opening,
+            "Fragmentos en map requieren un contrato de grupo keyed explícito; devuelve un único elemento o componente.",
+            childScope,
+          );
+        childScope.keyRoot = opening;
+        for (const attribute of opening.attributes.properties) {
+          if (
+            !ts.isJsxAttribute(attribute) ||
+            attribute.name.getText() !== "key"
+          )
+            continue;
+          if (key)
+            this.fail(
+              scope.source,
+              attribute,
+              "Atributo duplicado: key.",
+              childScope,
+            );
+          if (
+            !attribute.initializer ||
+            !ts.isJsxExpression(attribute.initializer) ||
+            !attribute.initializer.expression
+          )
+            this.fail(
+              scope.source,
+              attribute,
+              "key en map necesita key={item} o key={item.id}.",
+              childScope,
+            );
+          key = this.expr(attribute.initializer.expression, childScope);
+          if (
+            !(key.kind === "name" && key.name === item) &&
+            !(
+              key.kind === "get" &&
+              key.object.kind === "name" &&
+              key.object.name === item &&
+              key.key.kind === "literal" &&
+              key.key.value === "id"
+            )
+          )
+            this.fail(
+              scope.source,
+              attribute,
+              "key en map solo admite el item primitivo o item.id; claves calculadas/index requieren un contrato adicional.",
+              childScope,
+            );
+        }
+      }
       return [
         {
           kind: "each",
+          id: `${scope.component.name}_each${++this.nextID}`,
           items: this.expr(node.expression.expression, scope),
           item,
           index,
+          ...(key ? { key } : {}),
           children: await this.render(body, childScope),
         },
       ];
@@ -1324,13 +1400,15 @@ class Compiler {
           scope,
         );
       const name = attribute.name.getText();
-      if (name === "key")
+      if (name === "key") {
+        if (scope.keyRoot === opening) continue;
         this.fail(
           scope.source,
           attribute,
-          "key requiere identidad y ciclo de vida de componentes; no se aproxima en stage 01.",
+          "key solo se admite en la raíz única de un callback map; las claves de fragmentos, ramas o hermanos requieren un contrato adicional.",
           scope,
         );
+      }
       if (Object.hasOwn(attrs, name) || Object.hasOwn(events, name)) {
         this.fail(
           scope.source,

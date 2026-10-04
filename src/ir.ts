@@ -41,9 +41,13 @@ export type Node =
   | { kind: "conditional"; test: Expr; yes: Node[]; no: Node[] }
   | {
       kind: "each";
+      /** Stable source site separates sibling/nested list namespaces. */
+      id: string;
       items: Expr;
       item: string;
       index?: string;
+      /** JSX key is reconciliation metadata, never a DOM/component prop. */
+      key?: Expr;
       children: Node[];
     }
   | {

@@ -458,8 +458,13 @@ function nodeCode(
     return `func() []webui.Node { text := webui.ChildText(${expression(node.value)}); if text == "" { return nil }; return []webui.Node{{ID: prefix + ${quote("/text_" + context.textCounter++)},Kind:"text", Text:text}} }()`;
   if (node.kind === "conditional")
     return `func() []webui.Node { if webui.Truth(${expression(node.test)}) { return ${nodesCode(node.yes, component, context)} }; return ${nodesCode(node.no, component, context)} }()`;
-  if (node.kind === "each")
-    return `func() []webui.Node { var result []webui.Node; for index, item := range webui.Values(${expression(node.items)}) { scope := cloneScope(scope); scope[${quote(node.item)}] = item; ${node.index ? `scope[${quote(node.index)}] = float64(index);` : ""} prefix := prefix + "/" + webui.String(index); _ = prefix; result = append(result, ${nodesCode(node.children, component, context)}...) }; return result }()`;
+  if (node.kind === "each") {
+    const bindings = `scope := cloneScope(scope); scope[${quote(node.item)}] = item; ${node.index ? `scope[${quote(node.index)}] = float64(index);` : ""}`;
+    const validateKeys = node.key
+      ? `keys := webui.NewListKeys(); identities := make([]string, len(items)); for index, item := range items { ${bindings} identities[index] = keys.Add(${expression(node.key)}); }; webui.RememberListKeyKind(state, active, prefix + ${quote("/" + node.id)}, keys);`
+      : "";
+    return `func() []webui.Node { var result []webui.Node; items := webui.Values(${expression(node.items)}); ${validateKeys} for index, item := range items { ${bindings} prefix := prefix + ${quote("/" + node.id + "/")} + ${node.key ? "identities[index]" : `"i" + webui.String(index)`}; _ = prefix; result = append(result, webui.KeyedIdentity(${nodesCode(node.children, component, context)}, prefix)...) }; return result }()`;
+  }
   if (node.kind === "component") {
     if (node.name.startsWith("$ui.")) {
       const name = node.name.slice(4);

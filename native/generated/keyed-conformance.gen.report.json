@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "generator": "astro-fyne",
+  "name": "KeyedConformance",
+  "sourceHash": "32deecc9126ce388a7b45a0869e7d9d57deded547df590297a2b8712d3d42e9a",
+  "sources": [
+    {
+      "path": "example/src/components/KeyedConformance.tsx",
+      "hash": "4a8a3a2b155e35b68769790de0e7a4cd36b3a0157def8625dfe42c0ff3c4737e"
+    }
+  ],
+  "resources": [],
+  "actions": [],
+  "components": [
+    "KeyedConformance_e88d309c",
+    "KeyedRow_e88d309c"
+  ],
+  "compatibility": "declarative-stage-1",
+  "visual": {
+    "measured": false,
+    "pixelPerfectVerified": false
+  }
+}
