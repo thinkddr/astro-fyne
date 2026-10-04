@@ -234,8 +234,51 @@ test("DOM text normalization and exact native placeholder colors are explicit bo
   syntax(output.preact);
   expect(output.preact).toContain('initial={"\\u003cunsafe> & \\"quotes\\""}');
   expect(output.css).toContain(
-    "::placeholder{color:rgba(17,35,43,0.55);opacity:1;font:inherit;line-height:inherit;}",
+    "::placeholder{color:rgba(17, 35, 43, 0.5490196078431373);opacity:1;font:inherit;line-height:inherit;}",
   );
+});
+
+test("native solid colors become valid CSS with the exact resolved RGBA8 channels", () => {
+  // Native ParseColor accepts mixed separators, fractional channels and RGB
+  // percentages. Passing the spelling through would produce invalid CSS or
+  // leave browser rounding to differ from the native 8-bit painter.
+  const scene = document([
+    node({
+      kind: "input",
+      placeholder: "Native color",
+      placeholderColor: "rgb(100%, 0, 10.4 / 50%)",
+      style: style({
+        background: "rgba(50%, 0, 25.1 / 50%)",
+        color: "rgb(10.4 20.6 30.1 .5)",
+        borderColor: " WHITE ",
+      }),
+    }),
+  ]);
+  const validated = validateSceneDocument(scene).roots[0]!;
+  expect(validated.style.background).toBe(
+    "rgba(128, 0, 25, 0.5019607843137255)",
+  );
+  expect(validated.style.color).toBe("rgba(10, 21, 30, 0.5019607843137255)");
+  expect(validated.style.borderColor).toBe("white");
+  expect(validated.placeholderColor).toBe(
+    "rgba(255, 0, 10, 0.5019607843137255)",
+  );
+  const generated = emitWebScene(scene, { name: "Scene" });
+  expect(generated.css).toContain(
+    "background:rgba(128, 0, 25, 0.5019607843137255);",
+  );
+  expect(generated.css).toContain(
+    "::placeholder{color:rgba(255, 0, 10, 0.5019607843137255);",
+  );
+  expect(generated.css).not.toContain("50%");
+  expect(generated.css).not.toContain("10.4");
+  expect(scene.roots[0]!.style.background).toBe("rgba(50%, 0, 25.1 / 50%)");
+  for (const value of [" ", " Transparent "])
+    expect(
+      validateSceneDocument(
+        document([node({ style: style({ background: value }) })]),
+      ).roots[0]!.style.background,
+    ).toBe("transparent");
 });
 
 test("client actions require a module, exact inventory and no SSR function serialization", () => {

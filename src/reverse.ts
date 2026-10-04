@@ -161,16 +161,16 @@ function action(value: unknown, path: string): string {
 // Restrict colors to the native solid-color grammar. Values enter CSS only after
 // validation, never as arbitrary declarations, selectors, URLs or HTML.
 function color(value: string, path: string): string {
-  if (
-    ["", "transparent", "black", "white"].includes(value.toLowerCase().trim())
-  )
-    return value || "transparent";
+  const normalized = value.toLowerCase().trim();
+  if (["", "transparent", "black", "white"].includes(normalized))
+    return normalized || "transparent";
   if (/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))
     return value;
   const match = /^rgba?\(([\d.%+,\s/+-]+)\)$/i.exec(value);
   const channels = match?.[1]?.split(/[,\s/]+/).filter(Boolean);
   if (!channels || ![3, 4].includes(channels.length))
     fail(path, "unsupported native solid color");
+  const rgba = [0, 0, 0, 255];
   for (const [index, channel] of channels.entries()) {
     if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?$/.test(channel))
       fail(path, "invalid color channel");
@@ -178,8 +178,13 @@ function color(value: string, path: string): string {
     const numeric = Number(channel.replace(/%$/, ""));
     if (!Number.isFinite(numeric) || numeric < 0 || numeric > maximum)
       fail(path, "color channel outside native range");
+    rgba[index] = Math.round((numeric / maximum) * 255);
   }
-  return value;
+  // Public native ParseColor resolves channels to RGBA8 and accepts separators
+  // that CSS does not. Emit the actual native color, never its ambiguous spelling.
+  return rgba[3] === 255
+    ? `rgb(${rgba[0]}, ${rgba[1]}, ${rgba[2]})`
+    : `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${rgba[3]! / 255})`;
 }
 function style(value: unknown, path: string): SceneStyle {
   const source = record(value, path);
@@ -210,7 +215,7 @@ function style(value: unknown, path: string): SceneStyle {
     if (!allowed.includes(result[key as keyof SceneStyle] as string))
       fail(`${path}.${key}`, "unsupported native style value");
   for (const key of ["background", "color", "borderColor"] as const)
-    color(result[key], `${path}.${key}`);
+    result[key] = color(result[key], `${path}.${key}`);
   if (
     result.fontFamily &&
     !/^(?:"[^"\\\r\n<>]*"|'[^'\\\r\n<>]*'|[A-Za-z][A-Za-z\d _-]*)(?:\s*,\s*(?:"[^"\\\r\n<>]*"|'[^'\\\r\n<>]*'|[A-Za-z][A-Za-z\d _-]*))*$/.test(
@@ -327,7 +332,10 @@ export function validateSceneDocument(value: unknown): SceneDocument {
             `${location}.placeholderColor`,
             "placeholder color belongs to a text control",
           );
-        color(output.placeholderColor, `${location}.placeholderColor`);
+        output.placeholderColor = color(
+          output.placeholderColor,
+          `${location}.placeholderColor`,
+        );
       }
       if (output.placeholder && !output.placeholderColor)
         fail(
