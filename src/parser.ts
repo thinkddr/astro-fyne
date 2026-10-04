@@ -1192,6 +1192,7 @@ class Compiler {
     const node = nodes[0]!;
     if (node.kind === "element") return true;
     if (node.kind === "component") {
+      if (node.name.startsWith("$ui.")) return BUILTINS.has(node.name.slice(4));
       const component = this.components.get(node.name);
       return !!component && this.hasSinglePhysicalRoot(component.body);
     }
