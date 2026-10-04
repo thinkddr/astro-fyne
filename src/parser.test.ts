@@ -152,6 +152,23 @@ test("Boolean hook slots require a Boolean initializer and every setter", async 
   await expect(compile(shadowed)).rejects.toThrow(/map sin key.*tipo/);
 });
 
+test("nested list roots require their own physical parent through component aliases", async () => {
+  const entry = await source(
+    "Nested.tsx",
+    `function Rows({ item }) { return ['x','y'].map(child => <p>{item}{child}</p>); }
+    export function Page() { return <main>{['a','b'].map(item => <Rows item={item}/>)}</main>; }`,
+  );
+  await expect(compile(entry)).rejects.toThrow(
+    /Listas anidadas sin.*contenedor/,
+  );
+  const owned = await source(
+    "Owned.tsx",
+    `function Rows({ item }) { return <div>{['x','y'].map(child => <p>{item}{child}</p>)}</div>; }
+    export function Page() { return <main>{['a','b'].map(item => <Rows item={item}/>)}</main>; }`,
+  );
+  await expect(compile(owned)).resolves.toBeDefined();
+});
+
 test("Astro imports a Preact component, preserving props, state, events and list branches", async () => {
   const entry = await source(
     "Page.astro",

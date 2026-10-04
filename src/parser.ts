@@ -1206,6 +1206,21 @@ class Compiler {
     return false;
   }
 
+  private hasBareListGroup(nodes: Node[]): boolean {
+    return nodes.some((node) => {
+      if (node.kind === "each") return true;
+      if (node.kind === "component")
+        return this.hasBareListGroup(
+          this.components.get(node.name)?.body ?? [],
+        );
+      if (node.kind === "conditional")
+        return (
+          this.hasBareListGroup(node.yes) || this.hasBareListGroup(node.no)
+        );
+      return false; // A physical element owns its children's independent groups.
+    });
+  }
+
   private alwaysBoolean(value: Expr): boolean {
     return (
       (value.kind === "literal" && typeof value.value === "boolean") ||
@@ -1282,6 +1297,13 @@ class Compiler {
         this.validateReconciliation(node.yes, scope);
         this.validateReconciliation(node.no, scope);
       } else if (node.kind === "each") {
+        if (!node.key && this.hasBareListGroup(node.children))
+          this.fail(
+            scope.source,
+            this.reconciliationSources.get(node) ?? scope.source.ts,
+            "Listas anidadas sin un elemento contenedor necesitan grupos virtuales jerárquicos explícitos.",
+            scope,
+          );
         if (!node.key && this.virtualTypes(node.children).size > 1)
           this.fail(
             scope.source,
