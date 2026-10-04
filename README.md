@@ -212,17 +212,21 @@ to capture a profile and compare it. Evidence is available in the
 
 ## Development
 
+For development validation, run builds and tests on a remote machine or in CI, following
+[CONTRIBUTING.md](CONTRIBUTING.md). In a remote checkout, run the compiler checks:
+
 ```sh
 bun run test
 bun run typecheck
 bun run check
 ```
 
-Run `go test ./...` from `native` for the runtime tests. The desktop demo has a separate Go
-module so the runtime tests do not need a desktop graphics driver. CI additionally runs race
-checks, vet, vulnerability checks, Chromium captures, inverse conversion and strict pixel
-comparisons. Install the capture browser with `bunx --no-install playwright install chromium`
-before running the full `bash ci/run.sh` workflow locally.
+Run `go test ./...` from `native` in that remote checkout for the runtime tests. The desktop
+demo has a separate Go module so the runtime tests do not need a desktop graphics driver.
+CI additionally runs race checks, vet, vulnerability checks, Chromium captures, inverse
+conversion and strict pixel comparisons. To run the full `bash ci/run.sh` workflow on a
+remote machine, first install the capture browser with
+`bunx --no-install playwright install chromium`.
 
 When contributing, include a small reproduction, preserve explicit unsupported-feature
 errors, and add behavior or visual evidence for new conversion features. See
