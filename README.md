@@ -85,6 +85,11 @@ if err != nil {
 window.SetContent(view)
 ```
 
+The repository includes generated Go and reports for its five conformance examples in
+`native/generated`. They are snapshots produced and tested by remote CI, so the native
+module can be used and tested without first rebuilding Astro. CI regenerates them and fails
+if committed snapshots or resolved Go dependencies change unexpectedly.
+
 The example contains a stateful counter, a controlled input and conditional content. State
 updates reuse objects by identifier so the input can retain focus. Hosts should surface
 `view.Error()` when a runtime contract fails and perform UI mutations on Fyne's event

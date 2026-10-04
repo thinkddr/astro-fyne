@@ -704,3 +704,99 @@ test("named handlers remain supported outside shadows and inline handlers preser
       ],
     });
 });
+
+test("lexical undefined bindings never become an absent child or ambient undefined", async () => {
+  for (const input of [
+    `export function Page({undefined}) { return <p>{undefined}</p>; }`,
+    `export function Page() { const undefined='visible'; return <p>{String(undefined)}</p>; }`,
+    `const undefined=7; export function Page() { return <p>{undefined}</p>; }`,
+    `import {undefined} from './host'; export function Page() { return <p>{undefined}</p>; }`,
+    `export function Page(undefined) { return <p>{undefined.value}</p>; }`,
+    `export function Page({items}) { return <main>{items.map(undefined=><p>{undefined}</p>)}</main>; }`,
+    `import {useState} from 'preact/hooks'; export function Page() { const [value,setValue]=useState(''); return <input onInput={undefined=>setValue(undefined.currentTarget.value)} />; }`,
+    `import {useState} from 'preact/hooks'; export function Page() { const [count,setCount]=useState(0); return <button onClick={()=>setCount(undefined=>undefined+1)} />; }`,
+    `export function Page() { const value=String(undefined); const undefined=7; return <p>{value}</p>; }`,
+  ]) {
+    await expect(compile(await source("Page.tsx", input))).rejects.toThrow(
+      "undefined sombreado por un binding léxico",
+    );
+  }
+  const compiled = await compile(
+    await source(
+      "Page.tsx",
+      `export function Page() { return <main>{undefined}<p>{String(undefined)}</p></main>; }`,
+    ),
+  );
+  const main = elements(compiled.components[0]!.body)[0]!;
+  expect(main.children).toHaveLength(1);
+  expect(elements(main.children)[0]!.children).toEqual([
+    {
+      kind: "text",
+      value: { kind: "call", name: "String", args: [{ kind: "undefined" }] },
+    },
+  ]);
+});
+
+test("ordinary component nested children require an explicit native contract", async () => {
+  for (const body of [
+    `<Box><button>Visible</button></Box>`,
+    `<Box children="provided"><p>Visible</p></Box>`,
+  ]) {
+    const entry = await source(
+      "Page.tsx",
+      `function Box({children}) { return <section>{children}</section>; } export function Page() { return ${body}; }`,
+    );
+    await expect(compile(entry)).rejects.toThrow(
+      "Hijos de componentes requieren un contrato nativo explícito",
+    );
+  }
+  await source(
+    "Box.tsx",
+    `export function Box({children}) { return <section>{children}</section>; }`,
+  );
+  const astro = await source(
+    "Page.astro",
+    `---\nimport {Box} from './Box.tsx';\n---\n<Box><p>Visible</p></Box>`,
+  );
+  await expect(compile(astro)).rejects.toThrow(
+    "Hijos de componentes requieren un contrato nativo explícito",
+  );
+  const compiled = await compile(
+    await source(
+      "Page.tsx",
+      `function Box({children}) { return <section>{children}</section>; } export function Page() { return <main><Box /><Box children="provided" /></main>; }`,
+    ),
+  );
+  const page = compiled.components.find(
+    (component) => component.name === compiled.entry,
+  )!;
+  const components = elements(page.body)[0]!.children;
+  expect(components).toHaveLength(2);
+  expect(components[1]).toMatchObject({
+    kind: "component",
+    props: { children: { kind: "literal", value: "provided" } },
+    children: [],
+  });
+});
+
+test("async list callbacks fail rather than render promised children synchronously", async () => {
+  for (const callback of [
+    `async item=><li>{item}</li>`,
+    `async (item,index)=>{ return <li>{item}</li>; }`,
+  ]) {
+    const entry = await source(
+      "Page.tsx",
+      `export function Page({items}) { return <ul>{items.map(${callback})}</ul>; }`,
+    );
+    await expect(compile(entry)).rejects.toThrow("map async devuelve promesas");
+  }
+  const compiled = await compile(
+    await source(
+      "Page.tsx",
+      `export function Page({items}) { return <ul>{items.map(item=><li>{item}</li>)}</ul>; }`,
+    ),
+  );
+  expect(elements(compiled.components[0]!.body)[0]!.children[0]!.kind).toBe(
+    "each",
+  );
+});

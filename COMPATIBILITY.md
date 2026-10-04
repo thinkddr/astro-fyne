@@ -45,6 +45,10 @@ are rejected during Go generation until native submit and implicit submit behavi
 Named handlers used under a `map` that shadows a component or module binding are conservatively
 rejected until lexical captures are qualified. Inline handlers retain their list-local bindings;
 named handlers outside those shadows remain supported.
+Lexical bindings named `undefined` and asynchronous `map` callbacks are rejected explicitly.
+Ordinary components cannot receive nested child nodes without a native children/slot contract;
+scalar props named `children` retain their ordinary prop value, and explicit adapters keep
+their declared native child behavior.
 
 The programmatic compiler API supports explicit package adapters. The initial CLI
 configuration only exposes entries and measurement files. Adapters must preserve a component's
