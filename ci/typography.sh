@@ -32,17 +32,18 @@ for task_variant in upstream-v2.8.1 fork-v2.8.1-sytue.16; do
   fi
   go mod download -json "$task_module" > "$task_directory/fyne-module.json"
   task_module_directory="$(bun -e 'const m=await Bun.file(process.argv[1]).json(); if(m.Error || !m.Dir || !m.Sum || !m.GoModSum) throw new Error("Incomplete public Fyne module download"); console.log(m.Dir);' "$task_directory/fyne-module.json")"
-  GOMAXPROCS=2 go list -mod=mod -modfile="$task_modfile" -m -json all > "$task_directory/native-modules.jsonl"
   ASTRO_FYNE_TYPOGRAPHY_ARTIFACTS="$task_directory" ASTRO_FYNE_TEXT_VARIANT="$task_variant" ASTRO_FYNE_TEXT_ORIGIN="$task_origin" \
     GOMAXPROCS=2 go test -mod=mod -modfile="$task_modfile" -count=1 -p=1 -run '^TestTypographyProbeSoftwareCanvasEvidence$' ./generated
+  GOMAXPROCS=2 go list -mod=mod -modfile="$task_modfile" -m -json all > "$task_directory/native-modules.jsonl"
   cp "$task_modfile" "$task_directory/native.mod"
   cp "${task_modfile%.mod}.sum" "$task_directory/native.sum"
 
   task_checkout="$task_temporary/$task_variant"
   mkdir -p "$task_checkout"
   cp -R "$task_module_directory/." "$task_checkout/"
-  chmod u+w "$task_checkout" "$task_checkout/internal/painter"
+  chmod -R u+w "$task_checkout"
   cp "$task_checkout/internal/painter/software/draw.go" "$task_directory/software-painter.go.txt"
+  cp "$task_checkout/internal/scale/scale.go" "$task_directory/scale-helper.go.txt"
   cp "$task_checkout/internal/painter/font.go" "$task_directory/shaping-kernel.go.txt"
   cp "$task_root/ci/fyne-texttrace_test.go" "$task_checkout/internal/painter/astro_fyne_texttrace_test.go"
   cp "$task_modfile" "$task_checkout/probe.mod"
@@ -50,9 +51,9 @@ for task_variant in upstream-v2.8.1 fork-v2.8.1-sytue.16; do
   (
     cd "$task_checkout"
     go mod edit -modfile=probe.mod -module=fyne.io/fyne/v2 -droprequire=fyne.io/fyne/v2 -dropreplace=fyne.io/fyne/v2
-    GOMAXPROCS=2 go list -mod=mod -modfile=probe.mod -m -json all > "$task_directory/sidecar-modules.jsonl"
     ASTRO_FYNE_TEXTTRACE_INPUT="$task_directory/texttrace-input.json" ASTRO_FYNE_TEXTTRACE_OUTPUT="$task_directory/native-shaping.json" \
       GOMAXPROCS=2 go test -mod=mod -modfile=probe.mod -count=1 -p=1 -run '^TestAstroFyneTextTrace$' ./internal/painter
+    GOMAXPROCS=2 go list -mod=mod -modfile=probe.mod -m -json all > "$task_directory/sidecar-modules.jsonl"
     cp probe.mod "$task_directory/sidecar.mod"
     cp probe.sum "$task_directory/sidecar.sum"
   )
