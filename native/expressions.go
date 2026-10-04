@@ -43,17 +43,18 @@ func Get(value any, key any) any {
 	if value == nil || isUndefined(value) {
 		panic("webui: cannot read a property of null or undefined")
 	}
+	property := String(key)
 	switch v := value.(type) {
 	case Scope:
-		if result, ok := v[String(key)]; ok {
+		if result, ok := v[property]; ok {
 			return result
 		}
-		return Undefined
+		return missingProperty(reflect.Map, property)
 	case map[string]any:
-		if result, ok := v[String(key)]; ok {
+		if result, ok := v[property]; ok {
 			return result
 		}
-		return Undefined
+		return missingProperty(reflect.Map, property)
 	}
 	r := reflect.ValueOf(value)
 	if r.Kind() == reflect.Pointer {
@@ -64,17 +65,17 @@ func Get(value any, key any) any {
 	}
 	switch r.Kind() {
 	case reflect.Array, reflect.Slice, reflect.String:
-		if String(key) == "length" {
+		if property == "length" {
 			if r.Kind() == reflect.String {
 				return len(utf16.Encode([]rune(r.String())))
 			}
 			return r.Len()
 		}
-		n, canonical := index(key)
+		n, canonical := index(property)
 		if r.Kind() == reflect.String {
 			units := utf16.Encode([]rune(r.String()))
 			if !canonical || n >= len(units) {
-				return Undefined
+				return missingProperty(r.Kind(), property)
 			}
 			unit := units[n]
 			if unit >= 0xd800 && unit <= 0xdfff {
@@ -83,15 +84,15 @@ func Get(value any, key any) any {
 			return string(rune(unit))
 		}
 		if !canonical || n >= r.Len() {
-			return Undefined
+			return missingProperty(r.Kind(), property)
 		}
 		return r.Index(n).Interface()
 	case reflect.Struct:
-		f := r.FieldByName(String(key))
+		f := r.FieldByName(property)
 		if f.IsValid() && f.CanInterface() {
 			return f.Interface()
 		}
-		return Undefined
+		return missingProperty(r.Kind(), property)
 	case reflect.Map:
 		k := reflect.ValueOf(key)
 		if !k.IsValid() || !k.Type().AssignableTo(r.Type().Key()) {
@@ -100,10 +101,52 @@ func Get(value any, key any) any {
 		if f := r.MapIndex(k); f.IsValid() {
 			return f.Interface()
 		}
-		return Undefined
+		return missingProperty(r.Kind(), property)
 	default:
 		panic(fmt.Sprintf("webui: cannot access property %v of %T", key, value))
 	}
+}
+
+// Missing own data properties remain undefined, but inherited intrinsic methods
+// cannot become a fabricated undefined value. Exposing a JS callable/prototype
+// object requires a separate adapter; coercion models their effects internally.
+func missingProperty(kind reflect.Kind, property string) any {
+	inherited := false
+	switch property {
+	case "constructor", "toString", "toLocaleString", "valueOf", "hasOwnProperty",
+		"isPrototypeOf", "propertyIsEnumerable", "__proto__", "__defineGetter__",
+		"__defineSetter__", "__lookupGetter__", "__lookupSetter__":
+		inherited = true
+	}
+	if kind == reflect.Array || kind == reflect.Slice {
+		switch property {
+		case "at", "concat", "copyWithin", "entries", "every", "fill", "filter",
+			"find", "findIndex", "findLast", "findLastIndex", "flat", "flatMap",
+			"forEach", "includes", "indexOf", "join", "keys", "lastIndexOf", "map",
+			"pop", "push", "reduce", "reduceRight", "reverse", "shift", "slice",
+			"some", "sort", "splice", "toReversed", "toSorted", "toSpliced",
+			"unshift", "values", "with":
+			inherited = true
+		}
+	}
+	if kind == reflect.String {
+		switch property {
+		case "at", "charAt", "charCodeAt", "codePointAt", "concat", "endsWith",
+			"includes", "indexOf", "isWellFormed", "lastIndexOf", "localeCompare",
+			"match", "matchAll", "normalize", "padEnd", "padStart", "repeat",
+			"replace", "replaceAll", "search", "slice", "split", "startsWith",
+			"substring", "toLocaleLowerCase", "toLocaleUpperCase", "toLowerCase",
+			"toUpperCase", "toWellFormed", "trim", "trimEnd", "trimStart",
+			"trimLeft", "trimRight", "substr", "anchor", "big", "blink", "bold",
+			"fixed", "fontcolor", "fontsize", "italics", "link", "small", "strike",
+			"sub", "sup":
+			inherited = true
+		}
+	}
+	if inherited {
+		panic(fmt.Sprintf("webui: inherited property %q requires an explicit prototype adapter", property))
+	}
+	return Undefined
 }
 
 // JavaScript array properties are canonical decimal keys: "01", "1.0" and true
@@ -117,9 +160,13 @@ func index(key any) (int, bool) {
 	return int(n), true
 }
 
-// String implements scalar JavaScript string conversion. JSX omission belongs in
-// ChildText, so false in a template remains "false" rather than disappearing.
+// String follows ordinary JavaScript primitive/string conversion. JSX omission
+// belongs in ChildText, so false in a template remains "false" instead of vanishing.
 func String(value any) string {
+	return primitiveString(toPrimitive(value, "string"))
+}
+
+func primitiveString(value any) string {
 	if isUndefined(value) {
 		return "undefined"
 	}
@@ -131,8 +178,6 @@ func String(value any) string {
 		return v
 	case bool:
 		return strconv.FormatBool(v)
-	case fmt.Stringer:
-		return v.String()
 	}
 	if numeric(value) {
 		n := Number(value)
@@ -156,24 +201,108 @@ func String(value any) string {
 		}
 		return strconv.FormatFloat(n, 'f', -1, 64)
 	}
-	r := reflect.ValueOf(value)
-	if r.Kind() == reflect.Bool {
-		return strconv.FormatBool(r.Bool())
-	}
-	if r.Kind() == reflect.Slice || r.Kind() == reflect.Array {
-		items := make([]string, r.Len())
-		for i := range items {
-			v := r.Index(i).Interface()
-			if v != nil && !isUndefined(v) {
-				items[i] = String(v)
-			}
-		}
-		return strings.Join(items, ",")
-	}
-	if r.Kind() == reflect.Map || r.Kind() == reflect.Struct {
-		return "[object Object]"
-	}
 	panic(fmt.Sprintf("webui: unsupported string conversion of %T", value))
+}
+
+// toPrimitive supports ordinary data records with Object.prototype's standard
+// conversion methods, and dense arrays with Array.prototype's join conversion.
+// It does not implement arbitrary prototypes, Symbol.toPrimitive, boxed values,
+// Date, getters or JS methods supplied as Go functions. fmt.Stringer remains the
+// existing explicit host string adapter; record function properties never run.
+func toPrimitive(value any, hint string) any {
+	return (&primitiveConversion{active: make(map[arrayVisit]bool)}).convert(value, hint)
+}
+
+type arrayVisit struct {
+	pointer uintptr
+	length  int
+	typeOf  reflect.Type
+}
+
+type primitiveConversion struct {
+	active   map[arrayVisit]bool
+	depth    int
+	elements int
+}
+
+func (conversion *primitiveConversion) convert(value any, hint string) any {
+	if value == nil || isUndefined(value) {
+		return value
+	}
+	r := reflect.ValueOf(value)
+	switch r.Kind() {
+	case reflect.String:
+		return r.String()
+	case reflect.Bool:
+		return r.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return value
+	}
+	if adapter, ok := value.(fmt.Stringer); ok {
+		return adapter.String()
+	}
+	switch r.Kind() {
+	case reflect.Array, reflect.Slice:
+		return conversion.join(r)
+	case reflect.Map:
+		if r.Type().Key().Kind() != reflect.String {
+			panic("webui: object coercion requires a plain string-keyed data record or explicit adapter")
+		}
+		methods := [2]string{"valueOf", "toString"}
+		if hint == "string" {
+			methods = [2]string{"toString", "valueOf"}
+		}
+		for _, name := range methods {
+			key := reflect.ValueOf(name).Convert(r.Type().Key())
+			if own := r.MapIndex(key); own.IsValid() {
+				candidate := own.Interface()
+				if candidate != nil && reflect.ValueOf(candidate).Kind() == reflect.Func {
+					panic(fmt.Sprintf("webui: callable object property %q requires an explicit primitive adapter", name))
+				}
+				// A non-callable own property shadows the inherited method and
+				// is skipped, even if the property contains a scalar value.
+				continue
+			}
+			if name == "toString" {
+				return "[object Object]"
+			}
+			// The inherited Object.prototype.valueOf returns this record,
+			// which is still an object: try the next method in hint order.
+		}
+		panic("webui: TypeError: cannot convert object to a primitive value")
+	default:
+		panic(fmt.Sprintf("webui: primitive conversion of %T requires an explicit adapter", value))
+	}
+}
+
+func (conversion *primitiveConversion) join(array reflect.Value) string {
+	conversion.depth++
+	defer func() { conversion.depth-- }()
+	if conversion.depth > 128 || array.Len() > 100000-conversion.elements {
+		panic("webui: array coercion exceeds the supported depth or element limit")
+	}
+	conversion.elements += array.Len()
+	if array.Kind() == reflect.Slice && array.Len() != 0 {
+		visit := arrayVisit{pointer: array.Pointer(), length: array.Len(), typeOf: array.Type()}
+		if conversion.active[visit] {
+			panic("webui: cyclic array coercion requires an explicit adapter")
+		}
+		conversion.active[visit] = true
+		defer delete(conversion.active, visit)
+	}
+	var result strings.Builder
+	for i := range array.Len() {
+		if i != 0 {
+			result.WriteByte(',')
+		}
+		item := array.Index(i).Interface()
+		if item != nil && !isUndefined(item) {
+			result.WriteString(primitiveString(conversion.convert(item, "string")))
+		}
+	}
+	return result.String()
 }
 
 // ChildText is React/Preact's textual child projection: booleans, null and undefined
@@ -202,9 +331,10 @@ func ChildText(value any) string {
 	return String(value)
 }
 
-// Number implements numeric conversion for the deliberately small expression
-// subset. Objects cannot participate in arithmetic without an explicit adapter.
+// Number uses ECMAScript primitive conversion for supported scalars, dense arrays
+// and ordinary data records. Custom prototypes/methods require a host adapter.
 func Number(value any) float64 {
+	value = toPrimitive(value, "number")
 	if isUndefined(value) {
 		return math.NaN()
 	}
@@ -350,6 +480,8 @@ func Truth(value any) bool {
 	switch r.Kind() {
 	case reflect.Bool:
 		return r.Bool()
+	case reflect.String:
+		return r.String() != ""
 	case reflect.Float32, reflect.Float64:
 		return r.Float() != 0 && !math.IsNaN(r.Float())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -368,6 +500,7 @@ func Truth(value any) bool {
 func Binary(op string, a, b any) any {
 	switch op {
 	case "+":
+		a, b = toPrimitive(a, "number"), toPrimitive(b, "number")
 		if _, ok := a.(string); ok {
 			return String(a) + String(b)
 		}
@@ -390,6 +523,7 @@ func Binary(op string, a, b any) any {
 		}
 		return equal
 	case "<", "<=", ">", ">=":
+		a, b = toPrimitive(a, "number"), toPrimitive(b, "number")
 		if sa, ok := a.(string); ok {
 			if sb, isString := b.(string); isString {
 				order := compareUTF16(sa, sb)
