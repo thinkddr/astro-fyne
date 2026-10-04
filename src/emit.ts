@@ -925,7 +925,7 @@ export function emitGo(
         throw new Error(`${face.path}: bytes font y SHA-256 no coinciden.`);
       inspectFont(bytes, face);
       const encoded = bytes.toString("hex").replace(/../g, "\\x$&");
-      return `// Font SHA-256: ${face.hash}\nvar font${options.name}_${face.name} = fyne.NewStaticResource(${quote(face.path)}, []byte("${encoded}"))`;
+      return `// Font SHA-256: ${face.hash}\nvar font${options.name}_${face.name} = fyne.NewStaticResource(${quote(face.path + "#sha256=" + face.hash)}, []byte("${encoded}"))`;
     })
     .join("\n\n");
   const resourceBindings = new Map<string, string>(
