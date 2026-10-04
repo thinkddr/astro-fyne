@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emitGo, sourceHash } from "./emit.ts";
@@ -23,6 +23,262 @@ async function program(source: string) {
 }
 
 const options = { name: "Page", packageName: "generated" };
+
+const responsiveTextStyle =
+  "flexBasis:80,minWidth:0,minHeight:0,boxSizing:'border-box',height:32,margin:0,fontFamily:'AstroNoto',fontStyle:'normal',fontSize:14,lineHeight:'20px',fontWeight:400,textAlign:'left',whiteSpace:'nowrap',color:'#112233'";
+const responsiveControlReset =
+  ",appearance:'none',paddingTop:0,paddingRight:8,paddingBottom:0,paddingLeft:8,borderWidth:0,borderStyle:'solid',borderColor:'#112233',borderRadius:0,backgroundColor:'#ffffff'";
+const responsiveLeaf = (leaf: string) =>
+  `export function Page() { return <main id="root" style={{display:'flex',width:'100%',height:80,boxSizing:'border-box'}}>${leaf}</main>; }`;
+
+test("responsive text and native controls emit complete literal typography and resets", async () => {
+  const source = await program(`import {useState} from 'preact/hooks';
+    export function Page() { const [value,setValue]=useState('A');return <main id="root"
+      style={{display:'flex',width:'100%',height:80,boxSizing:'border-box'}}>
+      <span id="text" style={{${responsiveTextStyle}}}>{value}</span>
+      <input id="input" type="text" value={value} disabled={false}
+        onInput={event=>setValue(event.currentTarget.value)}
+        onChange={event=>setValue(event.currentTarget.value)}
+        style={{${responsiveTextStyle}${responsiveControlReset}}}/>
+      <button id="button" type="button" onClick={()=>setValue('B')}
+        style={{${responsiveTextStyle}${responsiveControlReset}}}>Change</button>
+    </main>; }`);
+  const go = emitGo(source, options);
+  for (const field of [
+    'FontFamily: "AstroNoto"',
+    'FontStyle: "normal"',
+    "FontSize: 14",
+    "LineHeight: 20",
+    "FontWeight: 400",
+    'TextAlign: "left"',
+    'WhiteSpace: "nowrap"',
+    "MarginSet: true",
+    'Appearance: "none"',
+    "PaddingTop: 0",
+    "PaddingRight: 8",
+    "BorderWidth: 0",
+    "Radius: 0",
+    "OnChange: func(value string)",
+    "OnCommit: func(value string)",
+    "OnTap: func()",
+    "Disabled: webui.Truth(false)",
+  ])
+    expect(go).toContain(field);
+  expect(go).toContain('Text: webui.ChildText(webui.Get(scope, "value"))');
+  expect(go).toContain(
+    'pending["value"] = webui.Get(webui.Get(webui.Get(eventScope, "event"), "currentTarget"), "value")',
+  );
+});
+
+test("numeric Preact line height is a multiplier of explicit pixel font size independent of declaration order", async () => {
+  for (const declarations of [
+    "lineHeight:1.5,fontSize:14",
+    "fontSize:'16px',lineHeight:1.5",
+  ]) {
+    const source = await program(
+      responsiveLeaf(
+        `<span id="text" style={{${responsiveTextStyle.replace(
+          "fontSize:14,lineHeight:'20px'",
+          declarations,
+        )}}}>Label</span>`,
+      ),
+    );
+    const go = emitGo(source, options);
+    expect(go).toContain(
+      `LineHeight: ${declarations.includes("16px") ? 24 : 21}`,
+    );
+    expect(go).not.toContain("LineHeight: 1.5");
+  }
+  const absolute = await program(
+    `export function Page() { return <span style={{fontSize:14,lineHeight:'20px'}}>Label</span>; }`,
+  );
+  expect(emitGo(absolute, options)).toContain("LineHeight: 20");
+  for (const declaration of [
+    "lineHeight:1.5",
+    "fontSize:'1rem',lineHeight:1.5",
+    "fontSize:0,lineHeight:1.5",
+  ]) {
+    const invalid = await program(
+      `export function Page() { return <span style={{${declaration}}}>Label</span>; }`,
+    );
+    expect(() => emitGo(invalid, options)).toThrow();
+  }
+});
+
+test("responsive typography rejects unresolved families and unsupported text formatting", async () => {
+  for (const [property, initial, replacements] of [
+    [
+      "fontFamily",
+      "'AstroNoto'",
+      [
+        "''",
+        "'AstroNoto,serif'",
+        "'var(--font)'",
+        "'inherit'",
+        "'serif'",
+        "42",
+      ],
+    ],
+    ["fontStyle", "'normal'", ["'oblique'", "1"]],
+    ["textAlign", "'left'", ["'justify'", "'start'", "1"]],
+    ["whiteSpace", "'nowrap'", ["'normal'", "'pre'", "1"]],
+    ["fontWeight", "400", ["'400px'", "'bold'", "0", "1001", "400.5"]],
+    ["fontSize", "14", ["0", "1e-100"]],
+    ["lineHeight", "'20px'", ["'0px'", "'1.5'", "0"]],
+  ] as const)
+    for (const replacement of replacements) {
+      const invalid = await program(
+        responsiveLeaf(
+          `<span id="text" style={{${responsiveTextStyle.replace(property + ":" + initial, property + ":" + replacement)}}}>Label</span>`,
+        ),
+      );
+      expect(() => emitGo(invalid, options)).toThrow("text:");
+    }
+  const quoted = await program(
+    responsiveLeaf(
+      `<span id="text" style={{${responsiveTextStyle
+        .replace("fontFamily:'AstroNoto'", `fontFamily:'"Astro Noto"'`)
+        .replace("fontStyle:'normal'", "fontStyle:'italic'")
+        .replace("textAlign:'left'", "textAlign:'right'")}}}>Label</span>`,
+    ),
+  );
+  const go = emitGo(quoted, options);
+  expect(go).toContain('FontFamily: "\\\"Astro Noto\\\""');
+  expect(go).toContain('FontStyle: "italic"');
+  expect(go).toContain('TextAlign: "right"');
+});
+
+test("responsive controls require declared resets and supported semantic control types", async () => {
+  for (const property of [
+    "fontFamily",
+    "fontStyle",
+    "fontSize",
+    "lineHeight",
+    "fontWeight",
+    "textAlign",
+    "whiteSpace",
+    "color",
+    "margin",
+    "appearance",
+    "paddingTop",
+    "paddingRight",
+    "paddingBottom",
+    "paddingLeft",
+    "borderWidth",
+    "borderStyle",
+    "borderColor",
+    "borderRadius",
+    "backgroundColor",
+  ]) {
+    const style = (responsiveTextStyle + responsiveControlReset)
+      .split(",")
+      .filter((declaration) => !declaration.startsWith(property + ":"))
+      .join(",");
+    const invalid = await program(
+      responsiveLeaf(`<input id="input" type="text" style={{${style}}}/>`),
+    );
+    expect(() => emitGo(invalid, options)).toThrow(property);
+  }
+  for (const type of ["", 'type="email"', 'type="search"']) {
+    const invalid = await program(
+      responsiveLeaf(
+        `<input id="input" ${type} style={{${responsiveTextStyle}${responsiveControlReset}}}/>`,
+      ),
+    );
+    expect(() => emitGo(invalid, options)).toThrow("type=text");
+  }
+  const button = await program(
+    responsiveLeaf(
+      `<button id="button" style={{${responsiveTextStyle}${responsiveControlReset}}}>Save</button>`,
+    ),
+  );
+  expect(() => emitGo(button, options)).toThrow("type=button");
+  for (const [property, before, after] of [
+    ["appearance", "'none'", "'auto'"],
+    ["margin", "0", "1"],
+    ["margin", "0", "'auto'"],
+  ]) {
+    const invalid = await program(
+      responsiveLeaf(
+        `<input id="input" type="text" style={{${(responsiveTextStyle + responsiveControlReset).replace(property + ":" + before, property + ":" + after)}}}/>`,
+      ),
+    );
+    expect(() => emitGo(invalid, options)).toThrow(property);
+  }
+});
+
+test("responsive padding shorthand resets all four sides and preserves explicit zero", async () => {
+  for (const padding of [0, 4]) {
+    const reset = responsiveControlReset.replace(
+      "paddingTop:0,paddingRight:8,paddingBottom:0,paddingLeft:8",
+      "padding:" + padding,
+    );
+    const source = await program(
+      responsiveLeaf(
+        `<button id="button" type="button" style={{${responsiveTextStyle}${reset}}}>Save</button>`,
+      ),
+    );
+    const go = emitGo(source, options);
+    for (const side of ["Top", "Right", "Bottom", "Left"])
+      expect(go).toContain("Padding" + side + ": " + padding);
+  }
+  const invalid = await program(
+    responsiveLeaf(
+      `<button id="button" type="button" style={{${responsiveTextStyle}${responsiveControlReset.replace(
+        "paddingTop:0,paddingRight:8,paddingBottom:0,paddingLeft:8",
+        "padding:'0 8px'",
+      )}}}>Save</button>`,
+    ),
+  );
+  expect(() => emitGo(invalid, options)).toThrow("padding");
+});
+
+test("responsive bitmap metadata uses declared dimensions without changing legacy sizing", async () => {
+  await writeFile(
+    join(directory, "bitmap.png"),
+    await readFile(
+      new URL("../example/public/images/local-image.png", import.meta.url),
+    ),
+  );
+  const imageStyle =
+    "flexBasis:16,minWidth:0,minHeight:0,boxSizing:'border-box',width:16,height:16,display:'block',margin:0,padding:0,borderWidth:0,borderRadius:0";
+  const source = await program(
+    responsiveLeaf(
+      `<img id="image" src="./bitmap.png" alt="" style={{${imageStyle}}}/>`,
+    ),
+  );
+  const go = emitGo(source, options);
+  expect(go).toContain('Kind: "image"');
+  expect(go).toContain("Basis: webui.FlexValue(16)");
+  expect(go).toContain("Width: 16");
+  expect(go).toContain("Height: 16");
+  expect(go).toContain("WidthSet: true");
+  expect(go).toContain("HeightSet: true");
+  for (const property of [
+    "display",
+    "margin",
+    "padding",
+    "borderWidth",
+    "borderRadius",
+    "width",
+    "height",
+  ]) {
+    const style = imageStyle
+      .split(",")
+      .filter((item) => !item.startsWith(property + ":"))
+      .join(",");
+    const invalid = await program(
+      responsiveLeaf(`<img id="image" src="./bitmap.png" style={{${style}}}/>`),
+    );
+    expect(() => emitGo(invalid, options)).toThrow("image:");
+  }
+  const legacy = await program(
+    `export function Page() { return <img id="image" src="./bitmap.png"/>; }`,
+  );
+  expect(emitGo(legacy, options)).toContain(
+    "Style: webui.Style{Width: 16, Height: 16}",
+  );
+});
 
 test("object initializer callbacks retain source order across integer-like keys", async () => {
   const source = await program(`export function Page({t}) {

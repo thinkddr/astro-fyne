@@ -227,6 +227,8 @@ function style(
     alignSelf: "AlignSelf",
     boxSizing: "BoxSizing",
     borderStyle: "BorderStyle",
+    appearance: "Appearance",
+    margin: "MarginSet",
   };
   if (bitmap) {
     for (const dimension of ["width", "height"] as const) {
@@ -256,10 +258,72 @@ function style(
           value.kind === "literal" &&
           value.value === "flex"),
     );
-  if (bitmap && responsive)
-    throw new Error(
-      `${node.id}: img requiere captura; el contrato flex responsive no admite dimensionado intrínseco de imágenes.`,
-    );
+  if (responsive && inline?.kind === "object") {
+    const text = textTags.has(node.tag);
+    const control = ["button", "input"].includes(node.tag);
+    const required =
+      text || control
+        ? [
+            "fontFamily",
+            "fontStyle",
+            "fontSize",
+            "lineHeight",
+            "fontWeight",
+            "textAlign",
+            "whiteSpace",
+            "color",
+            "margin",
+          ]
+        : [];
+    if (control)
+      required.push(
+        "appearance",
+        "borderWidth",
+        "borderStyle",
+        "borderColor",
+        "borderRadius",
+        "backgroundColor",
+      );
+    if (bitmap)
+      required.push("display", "margin", "borderWidth", "borderRadius");
+    if ((control || bitmap) && !Object.hasOwn(inline.entries, "padding"))
+      required.push(
+        "paddingTop",
+        "paddingRight",
+        "paddingBottom",
+        "paddingLeft",
+      );
+    for (const property of required)
+      if (!Object.hasOwn(inline.entries, property))
+        throw new Error(
+          `${node.id}: CSS ${property} explícito es obligatorio en la hoja responsive ${node.tag}.`,
+        );
+    if (control) {
+      const type = node.attrs.type;
+      if (
+        type?.kind !== "literal" ||
+        type.value !== (node.tag === "button" ? "button" : "text")
+      )
+        throw new Error(
+          `${node.id}: ${node.tag} responsive requiere type=${node.tag === "button" ? "button" : "text"} literal explícito.`,
+        );
+    }
+    if (bitmap) {
+      const display = inline.entries.display;
+      if (display?.kind !== "literal" || display.value !== "block")
+        throw new Error(
+          `${node.id}: img responsive requiere display:block explícito.`,
+        );
+      for (const dimension of ["width", "height"])
+        if (
+          !Object.hasOwn(inline.entries, dimension) &&
+          !Object.hasOwn(node.attrs, dimension)
+        )
+          throw new Error(
+            `${node.id}: img responsive requiere ${dimension} explícito; no se infiere su tamaño intrínseco.`,
+          );
+    }
+  }
   if (
     responsive &&
     inline?.kind === "object" &&
@@ -417,6 +481,10 @@ function style(
       fontSize: "FontSize",
       lineHeight: "LineHeight",
       fontWeight: "FontWeight",
+      fontFamily: "FontFamily",
+      fontStyle: "FontStyle",
+      textAlign: "TextAlign",
+      whiteSpace: "WhiteSpace",
       flexDirection: "Direction",
     };
     for (const [property, val] of Object.entries(node.attrs.style.entries)) {
@@ -428,6 +496,19 @@ function style(
           throw new Error(
             `${node.id}: img ${property} sin soporte nativo en stage 01.`,
           );
+        continue;
+      }
+      if (property === "padding" && responsive) {
+        if (
+          val.kind !== "literal" ||
+          (typeof val.value !== "number" && typeof val.value !== "string")
+        )
+          throw new Error(
+            `${node.id}: CSS padding requiere un único número o px literal.`,
+          );
+        const padding = pixels(val.value, "padding");
+        for (const side of ["Top", "Right", "Bottom", "Left"])
+          values["Padding" + side] = padding;
         continue;
       }
       if (property === "display") {
@@ -464,6 +545,7 @@ function style(
           AlignSelf: ["auto", "flex-start", "flex-end", "center", "stretch"],
           BoxSizing: ["border-box"],
           BorderStyle: ["solid"],
+          Appearance: ["none"],
         };
         if (choices[flexField]) {
           if (
@@ -486,12 +568,19 @@ function style(
             );
           flex[flexField] = result;
         } else {
+          if (flexField === "MarginSet" && val.value === "0") {
+            flex.MarginSet = true;
+            continue;
+          }
           const result = pixels(val.value, property);
-          if (["MinWidth", "MinHeight"].includes(flexField) && result !== 0)
+          if (
+            ["MinWidth", "MinHeight", "MarginSet"].includes(flexField) &&
+            result !== 0
+          )
             throw new Error(
               `${node.id}: CSS ${property} necesita cero explícito en el contrato flex responsive.`,
             );
-          flex[flexField] = result;
+          flex[flexField] = flexField === "MarginSet" ? true : result;
         }
         continue;
       }
@@ -506,15 +595,108 @@ function style(
         throw new Error(
           `${node.id}: CSS ${property} requiere captura del navegador.`,
         );
+      if (
+        ["FontFamily", "FontStyle", "TextAlign", "WhiteSpace"].includes(field)
+      ) {
+        if (typeof val.value !== "string")
+          throw new Error(
+            `${node.id}: CSS ${property} requiere una cadena literal.`,
+          );
+        if (field === "FontFamily") {
+          const raw = val.value.trim();
+          const quoted = /^(['"])([A-Za-z0-9_ -]+)\1$/.exec(raw);
+          const name = quoted?.[2] ?? raw;
+          if (
+            !name ||
+            !name.trim() ||
+            name.trim() !== name ||
+            name.length > 80 ||
+            !(
+              quoted ||
+              /^[A-Za-z_][A-Za-z0-9_-]*(?: +[A-Za-z_][A-Za-z0-9_-]*)*$/.test(
+                name,
+              )
+            ) ||
+            (!quoted &&
+              [
+                "inherit",
+                "initial",
+                "unset",
+                "revert",
+                "revert-layer",
+                "serif",
+                "sans-serif",
+                "monospace",
+                "cursive",
+                "fantasy",
+                "system-ui",
+                "ui-serif",
+                "ui-sans-serif",
+                "ui-monospace",
+                "ui-rounded",
+                "emoji",
+                "math",
+                "fangsong",
+              ].includes(name.toLowerCase()))
+          )
+            throw new Error(
+              `${node.id}: CSS fontFamily necesita una única familia literal con recurso explícito.`,
+            );
+          values[field] = raw;
+        } else {
+          const choices: Record<string, string[]> = {
+            FontStyle: ["normal", "italic"],
+            TextAlign: ["left", "center", "right"],
+            WhiteSpace: ["nowrap"],
+          };
+          if (!choices[field]!.includes(val.value))
+            throw new Error(
+              `${node.id}: CSS ${property} sin soporte en el contrato de texto responsive.`,
+            );
+          values[field] = val.value;
+        }
+        continue;
+      }
+      if (field === "FontWeight") {
+        if (
+          typeof val.value !== "number" ||
+          !Number.isInteger(val.value) ||
+          val.value < 1 ||
+          val.value > 1000
+        )
+          throw new Error(
+            `${node.id}: CSS fontWeight necesita un entero literal entre 1 y 1000.`,
+          );
+        values[field] = val.value;
+        continue;
+      }
+      if (field === "LineHeight" && typeof val.value === "number") {
+        const size = node.attrs.style.entries.fontSize;
+        if (
+          size?.kind !== "literal" ||
+          (typeof size.value !== "number" && typeof size.value !== "string")
+        )
+          throw new Error(
+            `${node.id}: CSS lineHeight numérico es un multiplicador y requiere fontSize explícito en px.`,
+          );
+        const fontSize = pixels(size.value, "fontSize");
+        const lineHeight = finite(val.value * fontSize, "lineHeight");
+        if (
+          val.value <= 0 ||
+          Math.fround(fontSize) <= 0 ||
+          Math.fround(lineHeight) <= 0
+        )
+          throw new Error(
+            `${node.id}: CSS lineHeight y fontSize necesitan valores positivos.`,
+          );
+        values[field] = lineHeight;
+        continue;
+      }
       const numeric = /^(\d+(?:\.\d+)?)(px|rem)$/.exec(String(val.value));
       if (["Width", "Height"].includes(field) && val.value === "100%") {
         if (!responsive)
           throw new Error(
             `${node.id}: ${property} 100% requiere metadata explícita del contrato flex responsive o captura.`,
-          );
-        if (bitmap)
-          throw new Error(
-            `${node.id}: dimensiones img en porcentaje requieren captura.`,
           );
         flex[field + "Percent"] = 100;
         flex[field + "Set"] = true;
@@ -530,7 +712,7 @@ function style(
           );
         values[field] = val.value;
       } else {
-        if (responsive && field !== "FontWeight") {
+        if (responsive) {
           values[field] = pixels(val.value, property);
           continue;
         }
@@ -547,6 +729,18 @@ function style(
       }
     }
   }
+  if (
+    responsive &&
+    (textTags.has(node.tag) || ["button", "input"].includes(node.tag))
+  )
+    for (const field of ["FontSize", "LineHeight"])
+      if (
+        !(Number(values[field]) > 0) ||
+        !(Math.fround(Number(values[field])) > 0)
+      )
+        throw new Error(
+          `${node.id}: ${field} necesita píxeles positivos representables en la hoja responsive.`,
+        );
   if (bitmap) {
     for (const field of [
       "Radius",
@@ -561,25 +755,30 @@ function style(
           `${node.id}: img ${field} requiere clipping o una caja nativa adicional.`,
         );
     }
-    if (values.Width === undefined && values.Height === undefined) {
+    if (
+      !responsive &&
+      values.Width === undefined &&
+      values.Height === undefined
+    ) {
       values.Width = bitmap.width;
       values.Height = bitmap.height;
-    } else if (values.Width === undefined) {
+    } else if (!responsive && values.Width === undefined) {
       values.Width = (Number(values.Height) * bitmap.width) / bitmap.height;
-    } else if (values.Height === undefined) {
+    } else if (!responsive && values.Height === undefined) {
       values.Height = (Number(values.Width) * bitmap.height) / bitmap.width;
     }
     if (
-      !Number.isFinite(Number(values.Width)) ||
-      !Number.isFinite(Number(values.Height)) ||
-      Number(values.Width) <= 0 ||
-      Number(values.Height) <= 0
+      !responsive &&
+      (!Number.isFinite(Number(values.Width)) ||
+        !Number.isFinite(Number(values.Height)) ||
+        Number(values.Width) <= 0 ||
+        Number(values.Height) <= 0)
     )
       throw new Error(
         `${node.id}: dimensiones img necesitan píxeles positivos o una captura.`,
       );
   }
-  if (!bitmap)
+  if (!bitmap || responsive)
     for (const field of ["Width", "Height"])
       if (Object.hasOwn(values, field)) flex[field + "Set"] = true;
   if (responsive || Object.keys(flex).length) {
