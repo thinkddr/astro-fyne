@@ -35,6 +35,183 @@ function finite(value: unknown, label: string): number {
   return value;
 }
 
+function integer(
+  value: unknown,
+  label: string,
+  min = -2147483648,
+  max = 2147483647,
+) {
+  const result = finite(value, label);
+  requireValue(
+    Number.isInteger(result) && result >= min && result <= max,
+    `${label} must be an integer in ${min}..${max}`,
+  );
+  return result;
+}
+
+function point(value: unknown, label: string, pixels = false) {
+  const item = record(value, label);
+  for (const key of ["x", "y"])
+    if (pixels) integer(item[key], `${label} ${key}`);
+    else finite(item[key], `${label} ${key}`);
+  return item;
+}
+
+function metrics(value: unknown, label: string) {
+  const item = record(value, label);
+  for (const key of ["width", "height", "baseline"])
+    finite(item[key], `${label} ${key}`);
+  requireValue(
+    item.width >= 0 && item.height >= 0,
+    `${label} dimensions must be nonnegative`,
+  );
+  return item;
+}
+
+function bounds(value: unknown, label: string) {
+  const item = record(value, label);
+  for (const key of ["ascent", "descent", "gap"])
+    integer(item[key], `${label} ${key}`);
+}
+
+function shapeCase(item: RecordValue, label: string) {
+  integer(item.requestedSize26_6, `${label} requestedSize26_6`, 1);
+  integer(item.effectiveShaperPixels, `${label} effectiveShaperPixels`, 1);
+  metrics(item.measured, `${label} measured`);
+  const input = record(item.input, `${label} input`);
+  metrics(input.expectedMetrics, `${label} expected metrics`);
+  same(
+    item.measured,
+    input.expectedMetrics,
+    `${label} captured kernel metrics`,
+  );
+  for (const key of [
+    "scaledAdvance",
+    "returnedLogicalHeight",
+    "returnedLogicalBaseline",
+  ])
+    finite(item[key], `${label} ${key}`);
+  if (input.purpose === "text")
+    point(input.physicalOrigin, `${label} physical origin`, true);
+  else
+    requireValue(
+      !Object.hasOwn(input, "physicalOrigin"),
+      `${label} metric-only case must not invent a painted origin`,
+    );
+  requireValue(
+    Array.isArray(item.runs) && item.runs.length > 0,
+    `${label} omitted actual shaped runs`,
+  );
+  for (const [index, value] of item.runs.entries()) {
+    const run = record(value, `${label} run ${index}`),
+      runLabel = `${label} run ${index}`;
+    integer(run.runeOffset, `${runLabel} runeOffset`, 0);
+    integer(run.runeCount, `${runLabel} runeCount`, 1);
+    integer(run.visualIndex, `${runLabel} visualIndex`, 0);
+    integer(run.direction, `${runLabel} direction`, 0, 255);
+    integer(run.size, `${runLabel} size`, 1);
+    integer(run.advance, `${runLabel} advance`);
+    integer(run.unitsPerEm, `${runLabel} unitsPerEm`, 1, 65535);
+    bounds(run.lineBounds, `${runLabel} lineBounds`);
+    bounds(run.glyphBounds, `${runLabel} glyphBounds`);
+    finite(run.runX, `${runLabel} runX`);
+    finite(run.sharedScaledAscent, `${runLabel} sharedScaledAscent`);
+    point(run.textureRunOrigin, `${runLabel} textureRunOrigin`, true);
+    if (input.purpose === "text")
+      point(run.viewportRunBaseline, `${runLabel} viewportRunBaseline`, true);
+    requireValue(
+      Array.isArray(run.glyphs) && run.glyphs.length > 0,
+      `${runLabel} omitted actual glyphs`,
+    );
+    for (const [glyphIndex, value] of run.glyphs.entries()) {
+      const glyph = record(value, `${runLabel} glyph ${glyphIndex}`),
+        glyphLabel = `${runLabel} glyph ${glyphIndex}`;
+      integer(glyph.id, `${glyphLabel} id`, 1, 4294967295);
+      for (const key of ["textIndex", "runesCount", "glyphsCount"])
+        integer(glyph[key], `${glyphLabel} ${key}`, 0);
+      integer(glyph.mask, `${glyphLabel} mask`, 0, 4294967295);
+      for (const key of [
+        "advance",
+        "xAdvance",
+        "yAdvance",
+        "xOffset",
+        "yOffset",
+        "xBearing",
+        "yBearing",
+        "width",
+        "height",
+      ])
+        integer(glyph[key], `${glyphLabel} ${key}`);
+    }
+  }
+}
+
+function rectangle(value: unknown, label: string) {
+  const item = point(value, label);
+  requireValue(
+    finite(item.width, `${label} width`) >= 0 &&
+      finite(item.height, `${label} height`) >= 0,
+    `${label} dimensions must be nonnegative`,
+  );
+  return item;
+}
+
+export function validateTypographyBrowserSample(value: unknown, label: string) {
+  const item = record(value, label),
+    dom = record(item.dom, `${label} DOM`),
+    baseline = record(item.baseline, `${label} baseline`),
+    canvas = record(item.canvas, `${label} Canvas`);
+  requireValue(
+    dom.available === true && dom.method === "dom-range",
+    `${label} must preserve actual DOM Range observations`,
+  );
+  requireValue(
+    baseline.method === "inline-marker",
+    `${label} must preserve the actual inline marker`,
+  );
+  rectangle(item.elementBox, `${label} element box`);
+  rectangle(item.contentBox, `${label} content box`);
+  finite(baseline.viewportY, `${label} baseline viewportY`);
+  finite(baseline.contentOffsetY, `${label} baseline contentOffsetY`);
+  rectangle(baseline.markerBox, `${label} baseline marker`);
+  const full = record(dom.full, `${label} full range`);
+  rectangle(full.bounds, `${label} full range bounds`);
+  requireValue(
+    Array.isArray(full.rects) && full.rects.length > 0,
+    `${label} omitted DOM rectangles`,
+  );
+  for (const rect of full.rects) rectangle(rect, `${label} DOM rectangle`);
+  requireValue(
+    canvas.method === "canvas-text-metrics",
+    `${label} omitted Canvas TextMetrics`,
+  );
+  const values = record(canvas.full, `${label} Canvas metrics`);
+  requireValue(
+    finite(values.width, `${label} Canvas width`) >= 0,
+    `${label} Canvas width must be nonnegative`,
+  );
+  for (const key of [
+    "actualBoundingBoxLeft",
+    "actualBoundingBoxRight",
+    "actualBoundingBoxAscent",
+    "actualBoundingBoxDescent",
+    "fontBoundingBoxAscent",
+    "fontBoundingBoxDescent",
+    "emHeightAscent",
+    "emHeightDescent",
+    "hangingBaseline",
+    "alphabeticBaseline",
+    "ideographicBaseline",
+  ]) {
+    requireValue(
+      Object.hasOwn(values, key),
+      `${label} Canvas ${key} must be explicitly present or null`,
+    );
+    if (values[key] !== null) finite(values[key], `${label} Canvas ${key}`);
+  }
+  return item;
+}
+
 function same(actual: unknown, expected: unknown, label: string) {
   requireValue(
     JSON.stringify(actual) === JSON.stringify(expected),
@@ -108,21 +285,7 @@ function cases(value: unknown, probe: TypographyProbe, label: string) {
     );
     const key = `${input.frameID}/${input.nodeID}/${input.purpose}`;
     requireValue(!result.has(key), `${label} contains duplicate cases`);
-    requireValue(
-      Array.isArray(item.runs) && item.runs.length > 0,
-      `${label} omitted actual shaped runs`,
-    );
-    for (const run of item.runs) {
-      requireValue(
-        Array.isArray(run.glyphs) && run.glyphs.length > 0,
-        `${label} omitted actual glyphs`,
-      );
-      for (const glyph of run.glyphs)
-        requireValue(
-          Number.isInteger(glyph.id) && glyph.id > 0,
-          `${label} produced a replacement glyph`,
-        );
-    }
+    shapeCase(item, `${label} ${key}`);
     result.set(key, item);
   }
   return result;
@@ -140,6 +303,19 @@ export function compareNativeShaping(
   same(right.variant, variants[1], "fork shaping variant");
   same(left.originQuantization, "ceil", "upstream origin policy");
   same(right.originQuantization, "nearest", "fork origin policy");
+  for (const [label, trace] of [
+    ["upstream", left],
+    ["fork", right],
+  ] as const) {
+    const extents = record(trace.fontExtents, `${label} font extents`);
+    integer(extents.unitsPerEm, `${label} font extents unitsPerEm`, 1, 65535);
+    requireValue(
+      typeof extents.available === "boolean",
+      `${label} font extents availability must be explicit`,
+    );
+    for (const key of ["ascender", "descender", "lineGap"])
+      finite(extents[key], `${label} font extents ${key}`);
+  }
   same(left.fontExtents, right.fontExtents, "font extents");
   const original = cases(left.cases, probe, "upstream"),
     changed = cases(right.cases, probe, "fork");
@@ -199,6 +375,120 @@ function moduleVersions(modules: RecordValue[]) {
       ]),
     )
     .sort();
+}
+
+export function compareSidecarModules(
+  native: RecordValue[],
+  sidecar: RecordValue[],
+  label = "sidecar",
+) {
+  const nativeVersions = new Map<string, string>();
+  for (const item of native.filter(
+    (item) => !item.Main && item.Path !== "fyne.io/fyne/v2",
+  )) {
+    requireValue(
+      typeof item.Path === "string" &&
+        item.Path &&
+        !nativeVersions.has(item.Path),
+      `${label} native dependency paths must be unique`,
+    );
+    nativeVersions.set(item.Path, moduleVersions([item])[0]!);
+  }
+  const dependencies = sidecar.filter((item) => !item.Main),
+    seen = new Set<string>();
+  requireValue(
+    dependencies.length > 0,
+    `${label} omitted all dependency modules`,
+  );
+  for (const item of dependencies) {
+    requireValue(
+      typeof item.Path === "string" && item.Path && !seen.has(item.Path),
+      `${label} dependency paths must be unique`,
+    );
+    seen.add(item.Path);
+    requireValue(
+      nativeVersions.has(item.Path),
+      `${label} introduced dependency ${item.Path}`,
+    );
+    same(
+      moduleVersions([item])[0],
+      nativeVersions.get(item.Path),
+      `${label} dependency ${item.Path}`,
+    );
+  }
+  return {
+    relation: "subset" as const,
+    nativeDependencies: nativeVersions.size,
+    sidecarDependencies: dependencies.length,
+  };
+}
+
+export function validateSoftwareOriginSource(
+  draw: string,
+  scale: string | undefined,
+  variant: (typeof variants)[number],
+) {
+  const text = draw.match(/func drawText\([^]*?\n\}/)?.[0];
+  requireValue(text, `${variant} omitted the retained software text painter`);
+  const helper =
+    variant === variants[0] ? "scale\\.ToScreenCoordinate" : "toScreenPos";
+  for (const axis of ["X", "Y"])
+    requireValue(
+      new RegExp(
+        `scaled${axis}\\s*:=\\s*${helper}\\(c,\\s*pos\\.${axis}\\s*\\+\\s*offset${axis}\\)`,
+      ).test(text),
+      `${variant} text origin does not use position plus alignment offset`,
+    );
+  if (variant === variants[0])
+    requireValue(
+      typeof scale === "string" &&
+        /func ToScreenCoordinate\(c fyne.Canvas, v float32\) int\s*\{\s*return int\(math.Ceil\(float64\(v \* c.Scale\(\)\)\)\)\s*\}/.test(
+          scale,
+        ),
+      "Upstream text origin must retain the ceiling scale helper",
+    );
+  else
+    requireValue(
+      /func toScreenPos\(c fyne.Canvas, v float32\) int\s*\{\s*return int\(math.Round\(float64\(v \* c.Scale\(\)\)\)\)\s*\}/.test(
+        draw,
+      ),
+      "Fork text origin must retain the nearest-pixel helper",
+    );
+}
+
+function nativeOrigin(
+  value: RecordValue,
+  scale: number,
+  variant: (typeof variants)[number],
+) {
+  const absolute = point(value.absolutePosition, "Actual native text position"),
+    scaled = point(value.scaledPosition, "Native scaled position");
+  const x = finite(Math.fround(absolute.x * scale), "Native scaled X"),
+    y = finite(Math.fround(absolute.y * scale), "Native scaled Y");
+  same(
+    [Math.fround(scaled.x), Math.fround(scaled.y)],
+    [x, y],
+    "Native position scale derivation",
+  );
+  point(value.ceilOrigin, "Native ceiling origin", true);
+  point(value.nearestOrigin, "Native nearest origin", true);
+  point(value.physicalOrigin, "Native physical origin", true);
+  const ceil = { x: Math.ceil(x), y: Math.ceil(y) },
+    round = (value: number) =>
+      value < 0 ? -Math.round(-value) : Math.round(value),
+    nearest = { x: round(x), y: round(y) };
+  same(value.ceilOrigin, ceil, "Native ceiling origin");
+  same(value.nearestOrigin, nearest, "Native nearest origin");
+  same(
+    value.physicalOrigin,
+    variant === variants[0] ? ceil : nearest,
+    "Native source-derived physical origin",
+  );
+  same(
+    value.originDerivation,
+    "verified software painter formula applied to actual canvas.Text position; not inferred from ink bounds",
+    "Native origin provenance",
+  );
 }
 
 async function json(path: string) {
@@ -267,6 +557,13 @@ export async function compareTypography(directory: string) {
             ],
         `${variant} immutable public module`,
       );
+      validateSoftwareOriginSource(
+        await readFile(resolve(directory, "software-painter.go.txt"), "utf8"),
+        variant === variants[0]
+          ? await readFile(resolve(directory, "scale-helper.go.txt"), "utf8")
+          : undefined,
+        variant,
+      );
       const nativeModules = moduleStream(
         await readFile(resolve(directory, "native-modules.jsonl"), "utf8"),
       );
@@ -282,14 +579,12 @@ export async function compareTypography(directory: string) {
         download.Sum,
         `${variant} resolved Fyne bytes`,
       );
-      same(
-        moduleVersions(
-          nativeModules.filter((item) => item.Path !== "fyne.io/fyne/v2"),
-        ),
-        moduleVersions(sidecarModules),
-        `${variant} native and sidecar dependencies`,
+      const sidecarDependencies = compareSidecarModules(
+        nativeModules,
+        sidecarModules,
+        `${variant} native and sidecar`,
       );
-      return { trace, nativeModules };
+      return { trace, nativeModules, sidecarDependencies };
     }),
   );
   same(
@@ -374,6 +669,11 @@ export async function compareTypography(directory: string) {
           browserText && nativeText && shaped,
           `${frameID}/${sample.id} missing evidence`,
         );
+        validateTypographyBrowserSample(
+          browserText,
+          `${frameID}/${sample.id} browser`,
+        );
+        nativeOrigin(nativeText, scale, variant);
         same(
           [browserText.text, nativeText.text],
           [sample.text, sample.text],
@@ -407,24 +707,31 @@ export async function compareTypography(directory: string) {
             ],
             "Physical baseline derivation",
           );
-          return (
+          return finite(
             finite(baseline.y, "Native physical baseline") -
-            browserText.baseline.viewportY * scale
+              browserText.baseline.viewportY * scale,
+            "Physical baseline delta",
           );
         });
         return {
           nodeID: sample.id,
           fontSize: sample.fontSize ?? probe.font.size,
           effectiveNativeShaperPixels: shaped.effectiveShaperPixels,
-          nativeDriverMinusDomRangeWidth:
+          nativeDriverMinusDomRangeWidth: finite(
             finite(nativeText.driverText.width, "Native width") -
-            browserText.dom.full.bounds.width,
-          nativeDriverMinusCanvasWidth:
+              browserText.dom.full.bounds.width,
+            "DOM width delta",
+          ),
+          nativeDriverMinusCanvasWidth: finite(
             nativeText.driverText.width -
-            finite(browserText.canvas.full.width, "Canvas width"),
-          logicalBaselineMinusInlineMarker:
+              finite(browserText.canvas.full.width, "Canvas width"),
+            "Canvas width delta",
+          ),
+          logicalBaselineMinusInlineMarker: finite(
             finite(nativeText.intendedLogicalBaseline, "Logical baseline") -
-            browserText.baseline.viewportY,
+              browserText.baseline.viewportY,
+            "Logical baseline delta",
+          ),
           physicalBaselineMinusBrowserMarkerTimesScale: runBaselines,
         };
       });
@@ -462,6 +769,10 @@ export async function compareTypography(directory: string) {
     ...expected,
     tolerance: { channel: 0, pixels: 0 },
     nativeShapingIdentical: true,
+    sidecarDependencyRelation: traces.map((trace, index) => ({
+      variant: variants[index],
+      ...trace.sidecarDependencies,
+    })),
     shapingCases: shaping.original.size,
     metricUnits:
       "logical CSS pixels; physical baseline deltas are device pixels",

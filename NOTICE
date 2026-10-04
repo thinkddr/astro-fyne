@@ -6,3 +6,7 @@ This project is licensed under the Apache License, Version 2.0.
 The optional Sytue adapter is maintained outside this distribution and is not
 part of the public compiler or native runtime. Astro, Preact, TypeScript and
 Fyne retain their respective upstream licenses.
+
+The isolated CI regression in ci/typesetting-fractional_test.go retains the
+go-text typesetting license (Unlicense OR BSD-3-Clause), reproduced in
+ci/typesetting-LICENSE.txt. Generated experiment artifacts retain that license.

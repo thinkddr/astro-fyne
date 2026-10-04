@@ -129,6 +129,17 @@ A valid diagnostic may contain a strict comparison with `accepted: false`; missi
 captures, inconsistent identities or invalid comparison results fail CI. All
 existing exact geometry and bitmap gates remain required independently.
 
+CI also runs an isolated fractional-size experiment against the public
+`go-text/typesetting` v0.3.4 module. It first requires a failing 14.5px advance
+regression in the unmodified module, then applies one recorded source change:
+pass the requested raw 26.6 size to HarfBuzz instead of rounding up to an integer
+pixel size. The candidate must pass the complete shaping package with the race
+detector, including direct HarfBuzz comparisons for fractional sizes, combining
+marks, RTL/context, font features, vertical text and font-cache transitions.
+Its source hashes, original failure and candidate results are retained under
+`artifacts/fractional-text`. The experiment leaves production dependencies unchanged
+and establishes no Chromium raster or hinted-width equivalence.
+
 Measured constructors declare the captured device scale. After assigning the widget to its
 canvas, hosts must call `view.BindCanvas(window.Canvas())` and check `view.ValidateCanvas()`
 before certifying or exporting it. A measured profile requires its exact logical viewport and

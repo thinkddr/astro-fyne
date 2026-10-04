@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-gofmt -w native/generated/typography_probe_test.go ci/fyne-texttrace_test.go
+test -z "$(gofmt -l native/generated/typography_probe_test.go ci/fyne-texttrace_test.go)"
 bun install --frozen-lockfile --ignore-scripts
 # Start with actual Fyne objects, then compile the exported scene into a web page.
 (cd native && GOMAXPROCS=2 go run -p=1 ./reverse/cmd/scene-fixture --out ../artifacts/reverse)
