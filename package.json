@@ -5,12 +5,22 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "generate": "bun src/cli.ts generate --config astro-fyne.json",
-    "check": "bun src/cli.ts check --config astro-fyne.json",
-    "watch": "bun src/cli.ts watch --config astro-fyne.json",
+    "generate": "bun src/cli.ts generate",
+    "check": "bun src/cli.ts check",
+    "watch": "bun src/cli.ts watch",
     "test": "bun test src",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write src example astro-fyne.json package.json tsconfig.json"
+    "format": "prettier --write src example astro-fyne.json package.json tsconfig.json",
+    "astro-fyne": "bun src/cli.ts",
+    "to-fyne": "bun src/cli.ts to-fyne",
+    "to-web": "bun src/cli.ts to-web",
+    "analyze": "bun src/cli.ts analyze",
+    "reverse": "bun src/cli.ts reverse",
+    "dev": "bun run prepare:web && bunx --no-install astro dev --root example",
+    "build:web": "bun run prepare:web && bunx --no-install astro build --root example",
+    "demo:native": "cd native/cmd/astro-fyne-demo && go run .",
+    "prepare:web": "bun src/cli.ts analyze --config conformance.json > artifacts-conformance-analysis.json && bun src/cli.ts analyze --config keyed-conformance.json > artifacts-keyed-analysis.json && bun src/cli.ts analyze --config primitive-conformance.json > artifacts-primitive-analysis.json",
+    "demo:scene": "cd native && go run ./reverse/cmd/scene-fixture --out ../artifacts/reverse"
   },
   "dependencies": {
     "@astrojs/compiler": "4.0.0",

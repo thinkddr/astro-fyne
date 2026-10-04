@@ -356,7 +356,7 @@ test("embedded bitmap bytes, digest, dimensions and output paths reuse shared va
       },
       { name: "Scene" },
     ),
-  ).toThrow("sin datos IDAT");
+  ).toThrow("has no IDAT data");
   for (const resource of [
     { ...scene.resources[0]!, hash: "0".repeat(64) },
     { ...scene.resources[0]!, path: "../escape.png" },

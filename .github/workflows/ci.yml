@@ -55,6 +55,13 @@ jobs:
           go test -tags ci -p=1 ./...
           mkdir -p ../../../artifacts
           go build -tags ci -p=1 -o ../../../artifacts/astro-fyne-demo-ci .
+      - name: Install Linux desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
+      - name: Build the desktop demo
+        working-directory: native/cmd/astro-fyne-demo
+        run: GOMAXPROCS=2 go build -p=1 -o ../../../artifacts/astro-fyne-demo .
       - name: Require committed desktop dependency lockfiles
         run: |
           git ls-files --error-unmatch native/cmd/astro-fyne-demo/go.sum
@@ -68,4 +75,5 @@ jobs:
             native/cmd/astro-fyne-demo/go.mod
             native/cmd/astro-fyne-demo/go.sum
             artifacts/astro-fyne-demo-ci
+            artifacts/astro-fyne-demo
           if-no-files-found: warn

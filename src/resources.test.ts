@@ -85,14 +85,14 @@ test("PNG rejects missing pixels, bad chunk checksums, truncation and invalid ch
   const badHeaderCRC = Buffer.from(header);
   badHeaderCRC[11]! ^= 1;
   for (const [bytes, diagnostic] of [
-    [png([header, end]), "sin datos IDAT"],
-    [png([header, data]), "sin cierre IEND"],
-    [corrupted, "CRC inválido en IEND"],
-    [png([header, badIDATCRC, end]), "CRC inválido en IDAT"],
-    [png([badHeaderCRC, data, end]), "CRC inválido en IHDR"],
-    [bitmap().subarray(0, bitmap().length - 1), "truncado"],
-    [png([header, header, data, end]), "IHDR duplicado"],
-    [png([data, header, end]), "cabecera PNG válida"],
+    [png([header, end]), "has no IDAT data"],
+    [png([header, data]), "has no IEND"],
+    [corrupted, "CRC in IEND"],
+    [png([header, badIDATCRC, end]), "CRC in IDAT"],
+    [png([badHeaderCRC, data, end]), "CRC in IHDR"],
+    [bitmap().subarray(0, bitmap().length - 1), "Truncated"],
+    [png([header, header, data, end]), "duplicate or misplaced IHDR"],
+    [png([data, header, end]), "valid PNG header"],
     [
       png([
         header,
@@ -101,27 +101,30 @@ test("PNG rejects missing pixels, bad chunk checksums, truncation and invalid ch
         chunk("IDAT", compressed.subarray(3)),
         end,
       ]),
-      "IDAT consecutivos",
+      "consecutive IDAT",
     ],
     [
       png([header, data, chunk("PLTE", Buffer.from([0, 0, 0])), end]),
-      "PLTE inválido",
+      "invalid or misplaced PLTE",
     ],
     [
       png([header, chunk("PLTE", Buffer.from([0])), data, end]),
-      "PLTE inválido",
+      "invalid or misplaced PLTE",
     ],
-    [png([header, chunk("tRNS", Buffer.alloc(6)), data, end]), "tRNS inválido"],
+    [
+      png([header, chunk("tRNS", Buffer.alloc(6)), data, end]),
+      "invalid or misplaced tRNS",
+    ],
     [
       png([header, chunk("ABCD", Buffer.alloc(0)), data, end]),
-      "crítico desconocido",
+      "unknown critical chunk",
     ],
     [
       png([header, chunk("abca", Buffer.alloc(0)), data, end]),
-      "tipo de bloque inválido",
+      "invalid chunk type",
     ],
-    [png([header, data, chunk("IEND", Buffer.from([0]))]), "datos adicionales"],
-    [Buffer.concat([bitmap(), Buffer.from([0])]), "datos adicionales"],
+    [png([header, data, chunk("IEND", Buffer.from([0]))]), "extra data"],
+    [Buffer.concat([bitmap(), Buffer.from([0])]), "extra data"],
   ] as [Buffer, string][])
     expect(() => inspectBitmap(bytes, "image/png")).toThrow(diagnostic);
 });
@@ -134,33 +137,27 @@ test("PNG inflates exactly the declared rows and rejects bombs, invalid filters 
   const badAdler = Buffer.from(compressed);
   badAdler[badAdler.length - 1]! ^= 1;
   for (const [bytes, diagnostic] of [
-    [raster(raw.subarray(0, 8)), "longitud exacta"],
-    [raster(Buffer.concat([raw, Buffer.from([0])])), "fuera del límite"],
-    [raster(Buffer.alloc(1024 * 1024), pngHeader(1, 1)), "fuera del límite"],
-    [
-      raster(Buffer.from([5, ...raw.subarray(1)])),
-      "filtro de scanline inválido",
-    ],
-    [
-      raster(Buffer.from([255, ...raw.subarray(1)])),
-      "filtro de scanline inválido",
-    ],
+    [raster(raw.subarray(0, 8)), "scanline length does not match"],
+    [raster(Buffer.concat([raw, Buffer.from([0])])), "exceeds the limit"],
+    [raster(Buffer.alloc(1024 * 1024), pngHeader(1, 1)), "exceeds the limit"],
+    [raster(Buffer.from([5, ...raw.subarray(1)])), "invalid scanline filter"],
+    [raster(Buffer.from([255, ...raw.subarray(1)])), "invalid scanline filter"],
     [
       png([
         header,
         chunk("IDAT", compressed.subarray(0, compressed.length - 1)),
         end,
       ]),
-      "IDAT inválidos",
+      "invalid IDAT data",
     ],
-    [png([header, chunk("IDAT", badAdler), end]), "IDAT inválidos"],
+    [png([header, chunk("IDAT", badAdler), end]), "invalid IDAT data"],
     [
       png([
         header,
         chunk("IDAT", Buffer.concat([compressed, Buffer.from([0, 1])])),
         end,
       ]),
-      "datos adicionales tras el stream zlib",
+      "extra data after the zlib stream",
     ],
     [
       png([
@@ -168,7 +165,7 @@ test("PNG inflates exactly the declared rows and rejects bombs, invalid filters 
         chunk("IDAT", Buffer.concat([compressed, compressed])),
         end,
       ]),
-      "datos adicionales tras el stream zlib",
+      "extra data after the zlib stream",
     ],
   ] as [Buffer, string][])
     expect(() => inspectBitmap(bytes, "image/png")).toThrow(diagnostic);
@@ -176,7 +173,7 @@ test("PNG inflates exactly the declared rows and rejects bombs, invalid filters 
     const ihdr = pngHeader();
     ihdr[index] = index === 12 ? 2 : 1;
     expect(() => inspectBitmap(raster(raw, ihdr), "image/png")).toThrow(
-      "método inválido",
+      "invalid compression",
     );
   }
 });
@@ -221,13 +218,13 @@ test("PNG accepts RGB/RGBA8 legal filters, split IDAT and nonempty Adam7 passes"
         raster(raw.subarray(0, raw.length - 1), pngHeader(width, height, 6, 1)),
         "image/png",
       ),
-    ).toThrow("longitud exacta");
+    ).toThrow("scanline length does not match");
   }
   const lastPassFilter = Buffer.alloc(42);
   lastPassFilter[29] = 255;
   expect(() =>
     inspectBitmap(raster(lastPassFilter, pngHeader(3, 3, 6, 1)), "image/png"),
-  ).toThrow("filtro de scanline inválido");
+  ).toThrow("invalid scanline filter");
   expect(
     inspectBitmap(raster(Buffer.alloc(8), pngHeader(2, 1, 2, 1)), "image/png"),
   ).toMatchObject({ width: 2, height: 1 });
@@ -266,7 +263,7 @@ test("RGB8 tRNS retains canonical boundary samples and rejects high bits in each
       const samples = [0, 0, 0];
       samples[channel] = sample;
       expect(() => inspectBitmap(image(samples), "image/png")).toThrow(
-        "tRNS RGB8 requiere muestras canónicas 0..255",
+        "tRNS RGB8 requires canonical samples in 0..255",
       );
     }
 });
@@ -398,18 +395,21 @@ test("missing bitmaps fail at the original JSX source location", async () => {
     `export function Page() {\n  return <img src="/missing.png" />;\n}`,
   );
   await expect(compile(entry)).rejects.toThrow(
-    "Page.tsx:2:10: Recurso bitmap ausente: /missing.png",
+    "Page.tsx:2:10: Missing bitmap resource: /missing.png",
   );
 });
 
 test("URL sources, unsupported formats, dynamic sources and srcset are rejected", async () => {
   for (const [markup, diagnostic] of [
-    ['<img src="https://example.com/logo.png" />', "ruta local literal"],
-    ['<img src="data:image/png;base64,AAAA" />', "ruta local literal"],
-    ['<img src="/logo.svg" />', "PNG y JPEG"],
-    ['<img src="/logo.png?cache=1" />', "sin URL, query"],
-    ["<img src={props.src} />", "ruta local literal"],
-    ['<img src="/logo.png" srcSet="/logo2.png 2x" />', "srcSet requiere"],
+    [
+      '<img src="https://example.com/logo.png" />',
+      "literal local PNG/JPEG path",
+    ],
+    ['<img src="data:image/png;base64,AAAA" />', "literal local PNG/JPEG path"],
+    ['<img src="/logo.svg" />', "PNG and JPEG"],
+    ['<img src="/logo.png?cache=1" />', "without a URL, query"],
+    ["<img src={props.src} />", "literal local PNG/JPEG path"],
+    ['<img src="/logo.png" srcSet="/logo2.png 2x" />', "srcSet requires"],
   ]) {
     const entry = await file(
       "Page.tsx",
@@ -426,9 +426,9 @@ test("public paths cannot traverse or follow a symlink outside public", async ()
   await symlink(outside, join(directory, "public", "linked.png"));
   await expect(
     loadBitmap("/../outside.png", source, directory),
-  ).rejects.toThrow("sale del directorio public");
+  ).rejects.toThrow("escapes the public directory");
   await expect(loadBitmap("/linked.png", source, directory)).rejects.toThrow(
-    "enlaza fuera del directorio public",
+    "symlink points outside the public directory",
   );
 });
 
@@ -436,19 +436,19 @@ test("bitmap extension mismatches and unsupported metadata are explicit diagnost
   const entry = await file("Page.tsx", "export const Page = () => <main />;");
   await file("public/logo.png", Buffer.from("not a png"));
   await expect(loadBitmap("/logo.png", entry, directory)).rejects.toThrow(
-    "cabecera PNG válida",
+    "valid PNG header",
   );
   await file("public/logo.png", bitmap(chunk("acTL", Buffer.alloc(8))));
   await expect(loadBitmap("/logo.png", entry, directory)).rejects.toThrow(
-    "PNG animado",
+    "Animated PNG",
   );
   await file("public/logo.png", bitmap(chunk("gAMA", Buffer.alloc(4))));
   await expect(loadBitmap("/logo.png", entry, directory)).rejects.toThrow(
-    "gestión de color",
+    "color management",
   );
   await file("public/logo.png", bitmap(chunk("eXIf", Buffer.alloc(4))));
   await expect(loadBitmap("/logo.png", entry, directory)).rejects.toThrow(
-    "orientación nativa",
+    "native orientation",
   );
 });
 
@@ -465,7 +465,7 @@ test("PNG accepts only 8-bit RGB/RGBA until native color conversions are certifi
     bytes[25] = format!;
     await file("public/logo.png", bytes);
     await expect(loadBitmap("/logo.png", entry, directory)).rejects.toThrow(
-      "8 bits y formato RGB o RGBA",
+      "8-bit RGB or RGBA",
     );
   }
 });
@@ -500,5 +500,5 @@ test("embedding rejects tampered resource content instead of a misleading source
   program.resources![0]!.content = Buffer.from("tampered").toString("base64");
   expect(() =>
     emitGo(program, { name: "Page", packageName: "generated" }),
-  ).toThrow("bytes bitmap y SHA-256 no coinciden");
+  ).toThrow("bitmap bytes do not match their SHA-256 digest");
 });

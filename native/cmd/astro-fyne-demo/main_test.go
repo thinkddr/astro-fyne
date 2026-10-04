@@ -70,7 +70,7 @@ func TestResponsiveDemoEmbedsFontsAndKeepsObjectsAcrossResize(t *testing.T) {
 		t.Fatal("demo did not mount its generated responsive source")
 	}
 	for _, width := range []float32{320, 640, 480} {
-		window.Resize(fyne.NewSize(width, 240))
+		window.Resize(fyne.NewSize(width, 320))
 		if v.Error() != nil || v.Object("responsive-controls") != root {
 			t.Fatalf("responsive demo failed at width %v: %v", width, v.Error())
 		}

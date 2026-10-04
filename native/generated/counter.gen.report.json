@@ -2,11 +2,11 @@
   "schema": 1,
   "generator": "astro-fyne",
   "name": "Counter",
-  "sourceHash": "b9c1219bb79e78455335a472f8231a4ae556d7e528c5cab83e1050260f39b2b9",
+  "sourceHash": "ccb64fa08e901768122f18b41d0059dddeb828db4acca77cadf9d6a9a0b96f05",
   "sources": [
     {
       "path": "example/src/components/Counter.tsx",
-      "hash": "7bb26d070f38750c36c859e709d7f98f2ba6fb2ecfa7ea475ddf5938b2ff7c3f"
+      "hash": "842c4468953f06880587c07bb89429ab0c6a6110df560aa09df0ee0bd1b5ba77"
     },
     {
       "path": "example/src/pages/index.astro",

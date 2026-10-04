@@ -93,8 +93,9 @@ JSX `&&` evaluates its left operand once. Boolean conditions leave an empty fals
 Boolean hook requires a Boolean initializer and Boolean results from every reachable setter.
 Unknown values keep JavaScript's falsy child value, such as the rendered number `0`.
 
-The programmatic compiler API supports explicit package adapters. The initial CLI
-configuration only exposes entries and measurement files. Adapters must preserve a component's
+The programmatic compiler API supports explicit package adapters. CLI entries expose source,
+output, named exports, public directories, fonts, measurements and visual profiles. Adapters
+must preserve a component's
 behavior and styling contract; recognizing a component name alone does not establish parity.
 
 ## Stage 01 visual contract

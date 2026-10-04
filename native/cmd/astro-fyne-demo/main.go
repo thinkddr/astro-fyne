@@ -83,7 +83,7 @@ func newDemoWindow(a fyne.App, example string) (*webui.View, fyne.Window, error)
 				view, content = widget.View, widget
 			}
 		}
-		size, title = fyne.NewSize(480, 240), "Astro Fyne — Responsive controls"
+		size, title = fyne.NewSize(480, 320), "Astro Fyne — Responsive controls"
 	default:
 		return nil, nil, fmt.Errorf("unknown example %q", example)
 	}

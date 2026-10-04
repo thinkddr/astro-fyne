@@ -270,7 +270,7 @@ class Compiler {
         this.sourcePath(path),
         1,
         1,
-        "La fuente debe ser Astro, TSX o JSX.",
+        "Source must be Astro, TSX or JSX.",
       );
     }
     const text = await readFile(path, "utf8");
