@@ -5,6 +5,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
   compareNativeShaping,
+  comparePainterPackages,
   compareSidecarModules,
   strictTypographyPixels,
   validateSoftwareOriginSource,
@@ -386,6 +387,122 @@ test("sidecar dependencies may omit unused modules but cannot add or change depe
   expect(() => compareSidecarModules(native, [])).toThrow(
     "omitted all dependency",
   );
+});
+
+function compiledPainterPair() {
+  const files = [{ name: "font.go", hash: "a".repeat(64) }],
+    shapingFiles = [{ name: "shaping.go", hash: "b".repeat(64) }];
+  const native = {
+    schema: 1,
+    diagnosticOnly: true,
+    pixelPerfectVerified: false,
+    fileSelection:
+      "Go list production compilation and embedding inputs; tests and unused module graph entries excluded",
+    packages: [
+      {
+        importPath: "fyne.io/fyne/v2/internal/painter",
+        module: {
+          path: "fyne.io/fyne/v2",
+          version: "v2.8.1" as string | null,
+          main: false,
+          replacement: null,
+        },
+        files,
+        sourceHash: typographyHash(JSON.stringify(files)),
+      },
+      {
+        importPath: "github.com/go-text/typesetting/shaping",
+        module: {
+          path: "github.com/go-text/typesetting",
+          version: "v0.3.4" as string | null,
+          main: false,
+          replacement: null,
+        },
+        files: shapingFiles,
+        sourceHash: typographyHash(JSON.stringify(shapingFiles)),
+      },
+    ],
+  };
+  const sidecar = structuredClone(native);
+  sidecar.packages[0]!.module.version = null;
+  sidecar.packages[0]!.module.main = true;
+  return { native, sidecar };
+}
+
+test("actual compiled packages permit only the source-verified Fyne main-module alias", () => {
+  const { native, sidecar } = compiledPainterPair();
+  const result = comparePainterPackages(native, sidecar);
+  expect(result.relation).toBe("exact-compiled-packages");
+  expect(result.packages).toBe(2);
+  expect(result.fynePackages).toBe(1);
+});
+
+test("changed compiled dependency identity, changed source or a missing package fails", () => {
+  const module = compiledPainterPair();
+  module.sidecar.packages[1]!.module.version = "v0.3.5";
+  expect(() => comparePainterPackages(module.native, module.sidecar)).toThrow(
+    "compiled module identity differs",
+  );
+  for (const index of [0, 1]) {
+    const source = compiledPainterPair(),
+      item = source.sidecar.packages[index]!;
+    item.files[0]!.hash = "e".repeat(64);
+    item.sourceHash = typographyHash(JSON.stringify(item.files));
+    expect(() => comparePainterPackages(source.native, source.sidecar)).toThrow(
+      "compiled source differs",
+    );
+  }
+  const missing = compiledPainterPair();
+  missing.sidecar.packages.pop();
+  expect(() => comparePainterPackages(missing.native, missing.sidecar)).toThrow(
+    "compiled import paths differs",
+  );
+});
+
+test("equal missing inventories, duplicate imports and stale file digests fail closed", () => {
+  const missing = compiledPainterPair();
+  missing.native.packages.shift();
+  missing.sidecar.packages.shift();
+  expect(() => comparePainterPackages(missing.native, missing.sidecar)).toThrow(
+    "actual Fyne painter",
+  );
+  const duplicate = compiledPainterPair();
+  duplicate.sidecar.packages[1] = structuredClone(
+    duplicate.sidecar.packages[0]!,
+  );
+  expect(() =>
+    comparePainterPackages(duplicate.native, duplicate.sidecar),
+  ).toThrow("unique");
+  const stale = compiledPainterPair();
+  stale.sidecar.packages[1]!.files[0]!.hash = "e".repeat(64);
+  expect(() => comparePainterPackages(stale.native, stale.sidecar)).toThrow(
+    "inventory hash differs",
+  );
+  const main = compiledPainterPair();
+  main.sidecar.packages[1]!.module.main = true;
+  expect(() => comparePainterPackages(main.native, main.sidecar)).toThrow(
+    "unexpected compiled module owner",
+  );
+});
+
+test("unused graph entries neither invalidate compiled identity nor substitute for it", () => {
+  const graph = [{ Path: "github.com/go-text/typesetting", Version: "v0.3.4" }],
+    eagerGraph = [
+      ...graph,
+      { Path: "github.com/hashicorp/consul/api", Version: "v1.0.0" },
+    ];
+  expect(() => compareSidecarModules(graph, eagerGraph)).toThrow(
+    "introduced dependency",
+  );
+  const compiled = compiledPainterPair();
+  expect(() =>
+    comparePainterPackages(compiled.native, compiled.sidecar),
+  ).not.toThrow();
+  expect(() => compareSidecarModules(graph, graph)).not.toThrow();
+  compiled.sidecar.packages[1]!.module.version = "v0.3.5";
+  expect(() =>
+    comparePainterPackages(compiled.native, compiled.sidecar),
+  ).toThrow("compiled module identity differs");
 });
 
 test("retained painter source must prove its position policy, not only image dimensions", () => {

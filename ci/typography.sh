@@ -35,6 +35,8 @@ for task_variant in upstream-v2.8.1 fork-v2.8.1-sytue.16; do
   ASTRO_FYNE_TYPOGRAPHY_ARTIFACTS="$task_directory" ASTRO_FYNE_TEXT_VARIANT="$task_variant" ASTRO_FYNE_TEXT_ORIGIN="$task_origin" \
     GOMAXPROCS=2 go test -mod=mod -modfile="$task_modfile" -count=1 -p=1 -run '^TestTypographyProbeSoftwareCanvasEvidence$' ./generated
   GOMAXPROCS=2 go list -mod=mod -modfile="$task_modfile" -m -json all > "$task_directory/native-modules.jsonl"
+  GOMAXPROCS=2 go list -mod=mod -modfile="$task_modfile" -deps -json fyne.io/fyne/v2/internal/painter > "$task_directory/native-painter-packages.jsonl"
+  bun "$task_root/capture/painter-package-inventory.ts" "$task_directory/native-painter-packages.jsonl" "$task_directory/native-painter-packages.json"
   cp "$task_modfile" "$task_directory/native.mod"
   cp "${task_modfile%.mod}.sum" "$task_directory/native.sum"
 
@@ -68,6 +70,8 @@ PY
     ASTRO_FYNE_TEXTTRACE_INPUT="$task_directory/texttrace-input.json" ASTRO_FYNE_TEXTTRACE_OUTPUT="$task_directory/native-shaping.json" \
       GOMAXPROCS=2 go test -mod=mod -modfile=probe.mod -count=1 -p=1 -run '^TestAstroFyneTextTrace$' ./internal/painter
     GOMAXPROCS=2 go list -mod=mod -modfile=probe.mod -m -json all > "$task_directory/sidecar-modules.jsonl"
+    GOMAXPROCS=2 go list -mod=mod -modfile=probe.mod -deps -json ./internal/painter > "$task_directory/sidecar-painter-packages.jsonl"
+    bun "$task_root/capture/painter-package-inventory.ts" "$task_directory/sidecar-painter-packages.jsonl" "$task_directory/sidecar-painter-packages.json"
     cp probe.mod "$task_directory/sidecar.mod"
     cp probe.sum "$task_directory/sidecar.sum"
   )

@@ -108,6 +108,7 @@ Evidence is retained in `artifacts/typography`:
 | `<variant>/scale-*/native-text.json`       | Actual native text positions, driver measurements, font digest and physical-origin derivation         |
 | `<variant>/native-shaping.json`            | Real painter glyph IDs, clusters, signed 26.6 advances, offsets and extents for 42 text/H/space cases |
 | `<variant>/fyne-module.json`               | Public dependency version and verified module checksums                                               |
+| `<variant>/*-painter-packages.json`        | Actual compiled painter packages, file hashes and dependency identities                               |
 | `<variant>/*-modules.jsonl`                | Resolved module versions for the native capture and painter trace                                     |
 | `<variant>/scale-*/pixels.json`            | Unchanged strict browser/native pixel comparison                                                      |
 | `upstream-versus-fork/scale-*/pixels.json` | Strict comparison of the two native captures                                                          |
@@ -115,8 +116,10 @@ Evidence is retained in `artifacts/typography`:
 
 The painter trace runs in a temporary copy of the exact downloaded Fyne module.
 A test sidecar calls its real shaping kernel; the production kernel is unchanged.
-The comparison requires the same non-Fyne dependencies and the same shaped glyph
-records in both native variants. Their physical paint origins may differ because
+The comparison requires identical compiled painter files and matching non-Fyne
+dependency versions, plus the same shaped glyph records in both native variants.
+Complete module graphs are retained separately: unused graph entries may differ
+when the sidecar becomes the main module; they cannot substitute for compiled identities. Their physical paint origins may differ because
 the fork uses nearest-pixel placement and upstream uses ceiling placement.
 
 DOM Range rectangles describe selection/advance boxes, not glyph ink. Measuring
