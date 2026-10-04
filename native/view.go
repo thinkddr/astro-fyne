@@ -24,6 +24,8 @@ import (
 // so changing state preserves the object which owns the keyboard focus and cursor.
 type Node struct {
 	ID, Kind, Text, Value, Placeholder, Href, Variant, Size string
+	// Identity distinguishes keyed source instances which share a DOM ID.
+	Identity                                                string
 	AccessibleLabel, LabelFor                               string
 	Disabled                                                bool
 	Style                                                   Style
@@ -329,7 +331,7 @@ func (v *View) reconcile() {
 		out := make([]*element, 0, len(nodes))
 		for _, n := range nodes {
 			e := v.elements[n.ID]
-			if e == nil || e.node.Kind != n.Kind {
+			if e == nil || e.node.Kind != n.Kind || e.node.Identity != n.Identity {
 				e = newElement(v, n)
 			}
 			e.node = n
