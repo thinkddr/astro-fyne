@@ -335,11 +335,163 @@ test("symbolic Tailwind colors require browser capture instead of invalid Go sty
 
 test("unsupported CSS numeric units never become a string in a Go numeric field", async () => {
   const source = await program(
-    `export function Page() { return <div style={{width:'100%'}} />; }`,
+    `export function Page() { return <div style={{width:'50%'}} />; }`,
   );
   expect(() => emitGo(source, options)).toThrow(
     "width necesita px/rem o captura",
   );
+});
+
+test("responsive flex emits explicit zero, unset defaults and percentage metadata", async () => {
+  const source = await program(`export function Page() { return <main id="root"
+    style={{display:'flex',width:'100%',height:120,boxSizing:'border-box',gap:'8px',
+      justifyContent:'space-evenly',alignItems:'stretch'}}>
+    <section id="item" style={{flexBasis:'40px',minWidth:0,minHeight:'0px',
+      boxSizing:'border-box',width:0,height:'100%',flexGrow:0.25,flexShrink:0,
+      alignSelf:'center',backgroundColor:'#123456'}} />
+  </main>; }`);
+  const go = emitGo(source, options);
+  for (const field of [
+    'Display: "flex"',
+    'Direction: "row"',
+    "Flex: &webui.FlexStyle{",
+    "WidthPercent: webui.FlexValue(100)",
+    "HeightPercent: webui.FlexValue(100)",
+    "WidthSet: true",
+    "HeightSet: true",
+    "Width: 0",
+    "Height: 120",
+    "Gap: 8",
+    'JustifyContent: "space-evenly"',
+    'AlignItems: "stretch"',
+    'AlignSelf: "center"',
+    'BoxSizing: "border-box"',
+    "Basis: webui.FlexValue(40)",
+    "MinWidth: webui.FlexValue(0)",
+    "MinHeight: webui.FlexValue(0)",
+    "Grow: webui.FlexValue(0.25)",
+    "Shrink: webui.FlexValue(0)",
+  ])
+    expect(go).toContain(field);
+  expect(go).not.toContain("Width: 100");
+  expect(go).not.toContain("Height: 100");
+  const defaults = await program(`export function Page() { return <div id="root"
+    style={{display:'flex',width:'100%',height:100,boxSizing:'border-box'}}>
+    <div style={{flexBasis:0,minWidth:0,minHeight:0,boxSizing:'border-box'}}/>
+  </div>; }`);
+  const defaultGo = emitGo(defaults, options);
+  expect(defaultGo).toContain("Basis: webui.FlexValue(0)");
+  expect(defaultGo).not.toContain("Grow:");
+  expect(defaultGo).not.toContain("Shrink:");
+  expect(defaultGo).not.toContain("Width: 0");
+});
+
+test("responsive flex keeps column direction and each supported alignment value", async () => {
+  for (const justify of [
+    "flex-start",
+    "flex-end",
+    "center",
+    "space-between",
+    "space-around",
+    "space-evenly",
+  ]) {
+    const source = await program(`export function Page() { return <div
+      style={{display:'flex',flexDirection:'column',justifyContent:'${justify}',
+        alignItems:'flex-end',alignSelf:'auto',boxSizing:'border-box'}}/>; }`);
+    const go = emitGo(source, options);
+    expect(go).toContain('Direction: "column"');
+    expect(go).toContain(`JustifyContent: "${justify}"`);
+    expect(go).toContain('AlignItems: "flex-end"');
+    expect(go).toContain('AlignSelf: "auto"');
+  }
+});
+
+test("responsive flex rejects unsupported units, intrinsic sizing and formatting modes", async () => {
+  for (const declaration of [
+    "flexBasis:'auto'",
+    "flexBasis:'50%'",
+    "flexBasis:'1rem'",
+    "flexGrow:'1'",
+    "flexShrink:-1",
+    "flexShrink:1e100",
+    "minWidth:1",
+    "minHeight:'auto'",
+    "boxSizing:'content-box'",
+    "width:'50%'",
+    "height:'100vh'",
+    "width:'1rem'",
+    "gap:'1rem'",
+    "paddingLeft:'1rem'",
+    "borderWidth:'1rem'",
+    "flexWrap:'nowrap'",
+    "flexDirection:'row-reverse'",
+    "flex:1",
+    "order:1",
+    "justifyContent:'start'",
+    "alignItems:'baseline'",
+    "alignSelf:'baseline'",
+    "toString:'ignored'",
+  ]) {
+    const source =
+      await program(`export function Page() { return <main id="root"
+      style={{display:'flex',${declaration}}}/>; }`);
+    expect(() => emitGo(source, options)).toThrow("root:");
+  }
+  const missingContext =
+    await program(`export function Page() { return <div id="orphan"
+    style={{width:'100%'}}/>; }`);
+  expect(() => emitGo(missingContext, options)).toThrow("metadata explícita");
+  const classes = await program(`export function Page() { return <main id="root"
+    className="p-2" style={{display:'flex'}}/>; }`);
+  expect(() => emitGo(classes, options)).toThrow("estilos inline sin clases");
+});
+
+test("responsive item metadata is emitted before dynamic parents are validated natively", async () => {
+  const source = await program(`function Item() { return <section id="item"
+    style={{flexBasis:40,flexGrow:1,minWidth:0,minHeight:0,boxSizing:'border-box'}}/>; }
+    export function Page({enabled}) { return <main id="root"
+      style={{display:'flex',width:'100%',height:100,boxSizing:'border-box'}}>
+      {enabled ? <Item/> : <section id="empty"/>}
+    </main>; }`);
+  const go = emitGo(source, options);
+  expect(go).toContain("Basis: webui.FlexValue(40)");
+  expect(go).toContain(
+    "if err := view.Error(); err != nil { return nil, err }",
+  );
+});
+
+test("responsive flex validates non-finite public IR values before emitting Go", async () => {
+  const source = await program(`export function Page() { return <main id="root"
+    style={{display:'flex',flexGrow:1,width:120}}/>; }`);
+  const root = source.components.find((item) => item.name === source.entry)!
+    .body[0]!;
+  if (root.kind !== "element" || root.attrs.style?.kind !== "object")
+    throw new Error("missing literal style");
+  for (const property of ["flexGrow", "width"])
+    for (const value of [NaN, Infinity, -Infinity, 1e100]) {
+      root.attrs.style.entries[property] = { kind: "literal", value };
+      expect(() => emitGo(source, options)).toThrow("finito");
+      root.attrs.style.entries[property] = { kind: "literal", value: 1 };
+    }
+});
+
+test("measured flex remains frozen geometry and retains its source CSS signature", async () => {
+  const source = await program(`export function Page() { return <main id="root"
+    className="p-2" style={{display:'flex',flexBasis:'auto',flexWrap:'wrap',gap:'1rem'}}/>; }`);
+  const go = emitGo(source, {
+    ...options,
+    measurements: {
+      schema: 1,
+      sourceHash: sourceHash(source),
+      state: "default",
+      viewport: { width: 100, height: 30, scale: 1 },
+      nodes: { root: { measured: true, width: 100, height: 30, opacity: 1 } },
+    },
+  });
+  expect(go).not.toContain("Flex: &webui.FlexStyle{");
+  expect(go).toContain("Style: webui.Style{}");
+  expect(go).toContain('"flexBasis": "auto"');
+  expect(go).toContain('"flexWrap": "wrap"');
 });
 
 test("entry constructors namespace shared component helpers", async () => {
