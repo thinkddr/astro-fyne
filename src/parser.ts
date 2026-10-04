@@ -1203,6 +1203,22 @@ class Compiler {
     return false;
   }
 
+  private alwaysBoolean(value: Expr): boolean {
+    return (
+      (value.kind === "literal" && typeof value.value === "boolean") ||
+      (value.kind === "unary" && value.op === "!") ||
+      (value.kind === "binary" &&
+        (["===", "!==", "<", "<=", ">", ">="].includes(value.op) ||
+          (["&&", "||", "??"].includes(value.op) &&
+            this.alwaysBoolean(value.left) &&
+            this.alwaysBoolean(value.right)))) ||
+      (value.kind === "call" && value.name === "Boolean") ||
+      (value.kind === "conditional" &&
+        this.alwaysBoolean(value.yes) &&
+        this.alwaysBoolean(value.no))
+    );
+  }
+
   private async render(
     expression: ts.Expression,
     scope: Scope,
@@ -1247,11 +1263,13 @@ class Compiler {
       ts.isBinaryExpression(node) &&
       node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
     ) {
+      const test = this.expr(node.left, scope);
       const result: Node = {
         kind: "conditional",
-        test: this.expr(node.left, scope),
+        test,
+        shortCircuit: true,
         yes: await this.render(node.right, scope),
-        no: [{ kind: "text", value: this.expr(node.left, scope) }],
+        no: this.alwaysBoolean(test) ? [] : [{ kind: "text", value: test }],
       };
       this.reconciliationSources.set(result, node);
       return [result];
@@ -1409,6 +1427,13 @@ class Compiler {
       }
       const id = `${scope.component.name}_each${++this.nextID}`;
       const rendered = await this.render(body, childScope);
+      if (!key && this.virtualTypes(rendered).size > 1)
+        this.fail(
+          scope.source,
+          body,
+          "Un map sin key que cambia el tipo de sus filas necesita reconciliación virtual entre hermanos de la lista.",
+          scope,
+        );
       if (key && !this.hasSinglePhysicalRoot(rendered))
         this.fail(
           scope.source,

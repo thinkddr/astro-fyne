@@ -40,7 +40,14 @@ export type Node =
       imageResource?: string;
     }
   | { kind: "text"; value: Expr; identity?: string }
-  | { kind: "conditional"; test: Expr; yes: Node[]; no: Node[] }
+  | {
+      kind: "conditional";
+      test: Expr;
+      yes: Node[];
+      no: Node[];
+      /** JSX && retains its falsy value and evaluates its left operand once. */
+      shortCircuit?: boolean;
+    }
   | {
       kind: "each";
       /** Stable source site separates sibling/nested list namespaces. */
