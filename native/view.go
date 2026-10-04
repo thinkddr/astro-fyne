@@ -25,7 +25,10 @@ import (
 type Node struct {
 	ID, Kind, Text, Value, Placeholder, Href, Variant, Size string
 	// Identity distinguishes keyed source instances which share a DOM ID.
-	Identity                  string
+	Identity string
+	// CaptureSignature records evaluated source attributes that affect browser
+	// paint even when native geometry and colors come from a captured profile.
+	CaptureSignature          string
 	AccessibleLabel, LabelFor string
 	Disabled                  bool
 	Style                     Style
@@ -584,6 +587,7 @@ func finite(v float32) bool { return !math.IsNaN(float64(v)) && !math.IsInf(floa
 func visualState(nodes []Node) string {
 	type stateNode struct {
 		ID, Kind, Text, Value, Placeholder, Href, Variant, Size string
+		CaptureSignature                                        string
 		ImageHash                                               string
 		Disabled                                                bool
 		Style                                                   Style
@@ -599,7 +603,8 @@ func visualState(nodes []Node) string {
 			}
 			out[i] = stateNode{ID: n.ID, Kind: n.Kind, Text: n.Text, Value: n.Value,
 				Placeholder: n.Placeholder, Href: n.Href, Variant: n.Variant, Size: n.Size,
-				ImageHash: imageHash, Disabled: n.Disabled, Style: n.Style, Children: state(n.Children)}
+				CaptureSignature: n.CaptureSignature,
+				ImageHash:        imageHash, Disabled: n.Disabled, Style: n.Style, Children: state(n.Children)}
 		}
 		return out
 	}
