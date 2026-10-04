@@ -80,7 +80,24 @@ func wrapText(text string, style Style, width float32, backend Backend) []string
 }
 
 func (w *actionWidget) Tapped(*fyne.PointEvent) {
-	if !w.disabled && w.onTap != nil {
+	if w.disabled {
+		return
+	}
+	if w.element.view.responsive {
+		target := w.element.view.boundCanvas
+		if target == nil && fyne.CurrentApp() != nil && fyne.CurrentApp().Driver() != nil {
+			target = fyne.CurrentApp().Driver().CanvasForObject(w)
+		}
+		if target != nil {
+			target.Focus(w)
+		}
+		// Focus commits the preceding editor. Its callback may disable or
+		// unmount this button before pointer activation reaches the tap handler.
+		if w.disabled || w.element.node.Disabled || w.element.view.elements[w.element.node.ID] != w.element {
+			return
+		}
+	}
+	if w.onTap != nil {
 		w.onTap()
 	}
 }
@@ -375,14 +392,25 @@ func (r *editorRenderer) Layout(size fyne.Size) {
 		prefix = prefix[i+1:]
 	}
 	x := e.backend.Measure(prefix, s).Width
+	alignOffset := float32(0)
+	if s.Flex != nil && s.Flex.BoxSizing == "border-box" {
+		width := e.backend.Measure(e.text, s).Width
+		switch s.TextAlign {
+		case "center":
+			alignOffset = (size.Width - width) / 2
+		case "right":
+			alignOffset = size.Width - width
+		}
+	}
+	x += alignOffset
 	r.cursor.Move(fyne.NewPos(x, y+float32(row)*s.LineHeight))
 	r.cursor.Resize(fyne.NewSize(1, s.LineHeight))
 	r.cursor.FillColor = parseColor(s.Color)
 	r.cursor.Show()
 	lo, hi := e.selected()
 	if lo != hi && !strings.ContainsRune(string(runes[lo:hi]), '\n') {
-		start := e.backend.Measure(string(runes[:lo]), s).Width
-		end := e.backend.Measure(string(runes[:hi]), s).Width
+		start := e.backend.Measure(string(runes[:lo]), s).Width + alignOffset
+		end := e.backend.Measure(string(runes[:hi]), s).Width + alignOffset
 		r.selection.Move(fyne.NewPos(start, y))
 		r.selection.Resize(fyne.NewSize(end-start, s.LineHeight))
 		r.selection.Show()

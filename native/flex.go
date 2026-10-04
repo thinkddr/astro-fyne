@@ -15,10 +15,11 @@ import (
 // whereas an explicit zero is significant. Dimensions and basis use border-box
 // CSS pixels; WidthSet/HeightSet distinguish an explicit 0px from auto.
 //
-// The supported tree has one width:100% root with a definite pixel height, empty
-// container boxes, one flex line, definite pixel bases, and explicit item minima
-// of zero. Intrinsic sizing, wrapping, order/reverse, margins, percentage bases,
-// nonzero minima and maximum constraints require a larger layout contract.
+// The supported tree has one width:100% root with a definite pixel height,
+// containers and explicitly styled text/button/input/bitmap leaves, one flex
+// line, definite pixel bases, and explicit item minima of zero. Intrinsic sizing,
+// wrapping, order/reverse, nonzero margins, percentage bases, nonzero minima and
+// maximum constraints require a larger layout contract.
 type FlexStyle struct {
 	Grow           *float32 `json:"grow,omitempty"`
 	Shrink         *float32 `json:"shrink,omitempty"`
@@ -34,6 +35,8 @@ type FlexStyle struct {
 	AlignSelf      string   `json:"alignSelf,omitempty"`
 	BoxSizing      string   `json:"boxSizing,omitempty"`
 	BorderStyle    string   `json:"borderStyle,omitempty"`
+	Appearance     string   `json:"appearance,omitempty"`
+	MarginSet      bool     `json:"marginSet,omitempty"`
 }
 
 // FlexValue preserves presence for numeric CSS declarations, including zero.
@@ -96,7 +99,7 @@ func validateFlexTree(nodes []Node) error {
 				f := node.Style.Flex
 				if f != nil && (f.Grow != nil || f.Shrink != nil || f.Basis != nil || f.MinWidth != nil || f.MinHeight != nil ||
 					f.WidthPercent != nil || f.HeightPercent != nil || f.JustifyContent != "" || f.AlignItems != "" ||
-					f.AlignSelf != "" || f.BoxSizing != "" || f.BorderStyle != "") {
+					f.AlignSelf != "" || f.BoxSizing != "" || f.BorderStyle != "" || f.Appearance != "" || f.MarginSet) {
 					return fmt.Errorf("webui: flex declarations on %q require a supported responsive flex root", node.ID)
 				}
 				if err := checkLegacy(node.Children); err != nil {
@@ -114,12 +117,52 @@ func validateFlexTree(nodes []Node) error {
 	check = func(node Node, parent *Style) error {
 		s, f := node.Style, node.Style.Flex
 		fail := func(reason string) error { return fmt.Errorf("webui: responsive flex node %q: %s", node.ID, reason) }
-		if node.Kind != "container" || node.Text != "" || node.Value != "" || node.Placeholder != "" || node.Href != "" || node.ImageResource != nil ||
-			node.OnTap != nil || node.OnChange != nil || node.OnCommit != nil {
-			return fail("only empty container boxes are supported")
-		}
 		if f == nil || f.BoxSizing != "border-box" {
 			return fail("explicit flex metadata and box-sizing:border-box are required")
+		}
+		if parent == nil && node.Kind != "container" {
+			return fail("root must be a container")
+		}
+		if node.Kind != "container" && (len(node.Children) > 0 || !f.MarginSet) {
+			return fail("leaves require margin:0 and cannot contain children")
+		}
+		switch node.Kind {
+		case "container":
+			if node.Text != "" || node.Value != "" || node.Placeholder != "" || node.Href != "" || node.ImageResource != nil || node.OnTap != nil || node.OnChange != nil || node.OnCommit != nil {
+				return fail("containers cannot carry text, editor data, images or callbacks")
+			}
+		case "text", "button":
+			if node.Value != "" || node.Placeholder != "" || node.Href != "" || node.ImageResource != nil || node.OnChange != nil || node.OnCommit != nil || node.Kind == "text" && node.OnTap != nil {
+				return fail("unsupported text/button fields or callbacks")
+			}
+		case "input":
+			if node.Text != "" || node.Href != "" || node.ImageResource != nil || node.OnTap != nil {
+				return fail("unsupported single-line input fields or callbacks")
+			}
+			if invalidSingleLineInput(node.Value) || invalidSingleLineInput(node.Placeholder) {
+				return fail("single-line input value and placeholder cannot contain control characters")
+			}
+		case "image":
+			if node.Text != "" || node.Value != "" || node.Placeholder != "" || node.Href != "" || node.OnTap != nil || node.OnChange != nil || node.OnCommit != nil || node.ImageResource == nil {
+				return fail("image requires a bitmap resource without text or callbacks")
+			}
+			if s.Display != "block" || !f.WidthSet || !f.HeightSet || s.Width <= 0 || s.Height <= 0 || f.WidthPercent != nil || f.HeightPercent != nil {
+				return fail("image requires display:block and explicit positive pixel dimensions")
+			}
+		default:
+			return fail("supported leaves are text, button, single-line input and bitmap image")
+		}
+		if node.Kind == "text" || node.Kind == "button" || node.Kind == "input" {
+			if err := validateResponsiveTextStyle(s); err != nil {
+				return fail(err.Error())
+			}
+		}
+		if node.Kind == "button" || node.Kind == "input" {
+			if f.Appearance != "none" || f.BorderStyle != "solid" || s.Background == "" {
+				return fail("controls require appearance:none, explicit background and a solid border style (zero width allowed)")
+			}
+		} else if f.Appearance != "" {
+			return fail("appearance is supported only on button and input leaves")
 		}
 		if s.Display != "" && s.Display != "block" && s.Display != "flex" {
 			return fail("display must be block or flex; hidden layout is unsupported")
@@ -174,8 +217,8 @@ func validateFlexTree(nodes []Node) error {
 			if !row {
 				crossSet = f.WidthSet
 			}
-			if len(node.Children) > 0 && !crossSet && itemAlignment(*parent, s) != "stretch" {
-				return fail("nested containers require a definite cross size or stretch; intrinsic sizing is unsupported")
+			if (len(node.Children) > 0 || node.Kind != "container") && !crossSet && itemAlignment(*parent, s) != "stretch" {
+				return fail("nonempty items require a definite cross size or stretch; intrinsic sizing is unsupported")
 			}
 		}
 		for _, child := range node.Children {

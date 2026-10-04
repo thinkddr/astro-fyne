@@ -255,7 +255,7 @@ func (v *View) Error() error {
 	if len(v.measurements) != 0 {
 		editingErr = v.uncommittedInputError()
 	}
-	return errors.Join(v.err, v.canvasErr, v.navigationErr, editingErr)
+	return errors.Join(v.err, v.canvasErr, v.navigationErr, editingErr, v.responsiveFrameError())
 }
 
 func (v *View) uncommittedInputError() error {
@@ -433,6 +433,18 @@ func (v *View) reconcile() {
 		v.err = err
 		return
 	}
+	responsive := len(nodes) == 1 && nodes[0].Style.Display == "flex"
+	backend := v.backend
+	if responsive {
+		backend, err = freezeResponsiveFonts(backend)
+		if err == nil {
+			err = validateResponsiveBackend(nodes, backend)
+		}
+		if err != nil {
+			v.err = err
+			return
+		}
+	}
 	nodes, err = v.freezeImages(nodes)
 	if err != nil {
 		v.err = err
@@ -457,7 +469,8 @@ func (v *View) reconcile() {
 	}
 	v.err = profileError
 	v.nodes = nodes
-	v.responsive = len(nodes) == 1 && nodes[0].Style.Display == "flex"
+	v.responsive = responsive
+	v.backend = backend
 	// Reused elements are updated in place below. Freeze their previous sibling
 	// lists first so source reordering can distinguish a moved DOM subtree from
 	// an anchor whose index changed only because another sibling moved.
@@ -935,6 +948,13 @@ func (e *element) textLines(width float32) []string {
 		return nil
 	}
 	if e.style.WhiteSpace == "nowrap" {
+		if e.view.responsive {
+			text := sourceNowrap(e.node.Text)
+			if text == "" {
+				return nil
+			}
+			return []string{text}
+		}
 		return []string{e.node.Text}
 	}
 	return wrapText(e.node.Text, e.style, width, e.view.backend)
