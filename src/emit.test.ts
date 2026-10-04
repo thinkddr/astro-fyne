@@ -206,18 +206,28 @@ test("the generated constructor reports invalid native trees before returning a 
     `export function Page() { return <p>Hola</p>; }`,
   );
   const go = emitGo(source, options);
-  const construction = go.indexOf("view = webui.NewView(");
+  const construction = go.indexOf("view = webui.NewViewForWidget(");
   const errorCheck = go.indexOf(
     "if err := view.Error(); err != nil { return nil, err }",
     construction,
   );
-  const success = go.indexOf(
-    "return &PageWidget{View:view}, nil",
-    construction,
-  );
+  const success = go.indexOf("return generated, nil", construction);
   expect(construction).toBeGreaterThan(-1);
   expect(errorCheck).toBeGreaterThan(construction);
   expect(success).toBeGreaterThan(errorCheck);
+});
+
+test("the generated wrapper owns Fyne's renderer before the initial render", async () => {
+  const source = await program(
+    `export function Page() { return <input id="field" />; }`,
+  );
+  const go = emitGo(source, options);
+  expect(go).toContain("var generated *PageWidget");
+  expect(go).toContain(
+    "webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &PageWidget{View:v}; return generated }, func() []webui.Node",
+  );
+  expect(go).toContain("return generated, nil");
+  expect(go).not.toContain("return &PageWidget{View:view}, nil");
 });
 
 test("display flex defaults to row without overriding an explicit column", async () => {
