@@ -97,6 +97,34 @@ test("invalid capture metadata or wrong style types never produce invalid Go", a
     ).toThrow();
 });
 
+test("measured CSS attributes stay state-bound instead of disappearing into a stale profile", async () => {
+  const source = await program(`export function Page({active}) {
+    return <main id="root"><div id="panel" className={active ? "red" : "blue"}
+      style={{backgroundColor: active ? "#ff0000" : "#0000ff"}} aria-label={active}/></main>;
+  }`);
+  const go = emitGo(source, {
+    ...options,
+    measurements: {
+      schema: 1,
+      sourceHash: sourceHash(source),
+      state: "default",
+      viewport: { width: 100, height: 30, scale: 1 },
+      nodes: {
+        root: { measured: true, width: 100, height: 30, opacity: 1 },
+        panel: { measured: true, width: 100, height: 30, opacity: 1 },
+      },
+    },
+  });
+  expect(go).toContain(
+    'CaptureSignature: webui.SnapshotAttributes("div", webui.Scope{',
+  );
+  expect(go).toContain(
+    '"className": func() any { if webui.Truth(webui.Get(scope, "active"))',
+  );
+  expect(go).toContain('"style": webui.Scope{"backgroundColor": func() any');
+  expect(go).toContain('"aria-label": webui.Get(scope, "active")');
+});
+
 test("missing scalar props keep undefined semantics in emitted Go", async () => {
   const source = await program(`export function Page({ missing }) {
     return <p>{String(missing)}{missing === null}{missing === undefined}</p>;

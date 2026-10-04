@@ -550,6 +550,18 @@ function nodeCode(
     `Kind: ${quote(kind)}`,
     `Style: ${style(node, measured, bitmap)}`,
   ];
+  if (measured) {
+    // The captured CSS can depend on every ordinary source attribute, not only
+    // the fields implemented by the native widget. Preserve those evaluated
+    // values so a class/style/selector change invalidates the frozen profile.
+    const attributes = Object.entries(node.attrs)
+      .filter(([key]) => key !== "key" && !key.startsWith("client:"))
+      .map(([key, value]) => `${quote(key)}: ${expression(value)}`)
+      .join(", ");
+    fields.push(
+      `CaptureSignature: webui.SnapshotAttributes(${quote(tag)}, webui.Scope{${attributes}})`,
+    );
+  }
   if (bitmap) fields.push(`ImageResource: image${context.name}_${bitmap.name}`);
   for (const [key, value] of Object.entries(node.attrs)) {
     if (ignoredAttrs.has(key)) continue;
