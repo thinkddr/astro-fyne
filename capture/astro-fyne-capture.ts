@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Sytue. Licensed under Apache-2.0.
 
-// Ejecutar en CI o en el efímero de Scaleway: captura el diseño YA renderizado.
+// Capture the rendered page and its validated geometry.
 import { chromium, type Response } from "playwright";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -30,37 +30,38 @@ function argumentsFrom(argv: string[]) {
       !value ||
       value.startsWith("--")
     ) {
-      throw new Error(`Argumento inválido: ${flag ?? "(vacío)"}`);
+      throw new Error(`Invalid argument: ${flag ?? "(empty)"}`);
     }
     const key = flag.slice(2);
-    if (values.has(key)) throw new Error(`Argumento duplicado: ${flag}`);
+    if (values.has(key)) throw new Error(`Duplicate argument: ${flag}`);
     values.set(key, value);
   }
   function required(key: string) {
     const value = values.get(key);
-    if (!value) throw new Error(`Falta --${key}`);
+    if (!value) throw new Error(`Missing --${key}`);
     return value;
   }
   function dimension(key: string, fallback: number) {
     const raw = values.get(key) ?? String(fallback);
-    if (!/^\d+$/.test(raw)) throw new Error(`--${key} debe ser un entero`);
+    if (!/^\d+$/.test(raw)) throw new Error(`--${key} must be an integer`);
     const value = Number(raw);
     if (!Number.isSafeInteger(value) || value < 1 || value > 16_384) {
-      throw new Error(`--${key} debe estar entre 1 y 16384`);
+      throw new Error(`--${key} must be between 1 and 16384`);
     }
     return value;
   }
   const url = new URL(required("url"));
   if (!["http:", "https:"].includes(url.protocol))
-    throw new Error("--url debe usar HTTP o HTTPS");
+    throw new Error("--url must use HTTP or HTTPS");
   const sourceHash = required("source-hash");
   if (!/^[a-f0-9]{64}$/.test(sourceHash))
-    throw new Error("--source-hash debe ser el SHA-256 del manifiesto");
+    throw new Error("--source-hash must be the manifest SHA-256");
   const state = values.get("state") ?? "default";
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(state))
-    throw new Error("--state debe ser un nombre de estado");
+    throw new Error("--state must be a state name");
   const scale = dimension("scale", 1);
-  if (scale !== 1 && scale !== 2) throw new Error("--scale solo admite 1 o 2");
+  if (scale !== 1 && scale !== 2)
+    throw new Error("--scale supports only 1 or 2");
   return {
     url: url.href,
     out: resolve(required("out")),
@@ -96,15 +97,13 @@ async function bitmapResources(
     program?: { resources?: unknown };
   };
   if (analysis.sourceHash !== sourceHash)
-    throw new Error(
-      "--analysis y --source-hash pertenecen a fuentes distintas",
-    );
+    throw new Error("--analysis and --source-hash refer to different sources");
   const resources = analysis.program?.resources ?? [];
   if (!Array.isArray(resources))
-    throw new Error("El análisis debe contener program.resources como lista");
+    throw new Error("Analysis must contain program.resources as an array");
   return resources.map((resource: unknown) => {
     if (!resource || typeof resource !== "object")
-      throw new Error("Recurso de análisis inválido");
+      throw new Error("Invalid analysis resource");
     const value = resource as Record<string, unknown>;
     if (
       typeof value.name !== "string" ||
@@ -126,7 +125,7 @@ async function bitmapResources(
       value.srcs.some((src: unknown) => typeof src !== "string" || !src)
     ) {
       throw new Error(
-        "El análisis contiene un recurso bitmap sin tipo, hash, dimensión o src válido",
+        "Analysis contains a bitmap resource with an invalid type, hash, dimensions or src",
       );
     }
     return value as unknown as BitmapResource;
@@ -159,12 +158,10 @@ async function capture() {
       waitUntil: "domcontentloaded",
     });
     if (!response?.ok())
-      throw new Error(
-        `La página responde ${response?.status() ?? "sin respuesta"}`,
-      );
+      throw new Error(`Page response: ${response?.status() ?? "no response"}`);
     await page.locator(args.selector).waitFor({ state: "visible" });
     if ((await page.locator(args.selector).count()) !== 1)
-      throw new Error("--selector debe señalar una sola raíz");
+      throw new Error("--selector must match exactly one root");
     if (args.readySelector)
       await page.locator(args.readySelector).waitFor({ state: "visible" });
     await page.evaluate(async () => {
@@ -172,7 +169,7 @@ async function capture() {
         document.fonts.ready,
         new Promise<never>((_, reject) =>
           setTimeout(
-            () => reject(new Error("Las fuentes no terminan de cargar")),
+            () => reject(new Error("Fonts did not finish loading")),
             15_000,
           ),
         ),
@@ -181,7 +178,7 @@ async function capture() {
         if (!image.complete) await image.decode();
         if (image.naturalWidth === 0)
           throw new Error(
-            `Imagen sin cargar: ${image.currentSrc || image.src}`,
+            `Image did not load: ${image.currentSrc || image.src}`,
           );
       }
       await new Promise<void>((done) =>
@@ -222,25 +219,23 @@ async function capture() {
     > = Object.create(null);
     for (const image of images) {
       if (!args.analysis)
-        throw new Error(
-          "Las imágenes requieren --analysis con el manifiesto del compilador",
-        );
+        throw new Error("Images require --analysis with the compiler manifest");
       if (!image.id || Object.hasOwn(verifiedImages, image.id))
-        throw new Error("Una imagen necesita id explícito y único");
+        throw new Error("Each image needs an explicit, unique id");
       if (image.responsive)
         throw new Error(
-          `${image.id}: srcset, sizes y picture requieren un adaptador de recursos responsive`,
+          `${image.id}: srcset, sizes and picture require a responsive resource adapter`,
         );
       if (!image.src || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(image.src))
         throw new Error(
-          `${image.id}: solo se admiten imágenes locales del compilador`,
+          `${image.id}: only local compiler images are supported`,
         );
       const matches = resources.filter((resource) =>
         resource.srcs.includes(image.src),
       );
       if (matches.length !== 1)
         throw new Error(
-          `${image.id}: el src no corresponde a un único recurso compilado`,
+          `${image.id}: src does not match exactly one compiled resource`,
         );
       const resource = matches[0]!;
       const expectedURL = new URL(image.src, args.url);
@@ -249,23 +244,23 @@ async function capture() {
         image.currentSrc !== expectedURL.href
       )
         throw new Error(
-          `${image.id}: el navegador seleccionó otra URL de imagen`,
+          `${image.id}: the browser selected a different image URL`,
         );
       if (image.width !== resource.width || image.height !== resource.height)
         throw new Error(
-          `${image.id}: las dimensiones naturales no coinciden con el recurso compilado`,
+          `${image.id}: natural dimensions do not match the compiled resource`,
         );
       const responses = imageResponses.get(image.currentSrc) ?? [];
       if (responses.length !== 1)
         throw new Error(
-          `${image.id}: la captura requiere una única respuesta verificable de imagen`,
+          `${image.id}: capture requires exactly one verifiable image response`,
         );
       const imageResponse = responses[0]!;
       if (imageResponse.request().redirectedFrom())
-        throw new Error(`${image.id}: no se admiten redirecciones de imagen`);
+        throw new Error(`${image.id}: image redirects are unsupported`);
       if (!imageResponse.ok())
         throw new Error(
-          `${image.id}: el recurso responde ${imageResponse.status()}`,
+          `${image.id}: resource response: ${imageResponse.status()}`,
         );
       const mediaType = imageResponse
         .headers()
@@ -273,14 +268,14 @@ async function capture() {
         ?.trim();
       if (mediaType !== resource.mediaType)
         throw new Error(
-          `${image.id}: el tipo MIME no coincide con el recurso compilado`,
+          `${image.id}: MIME type does not match the compiled resource`,
         );
       const bytes = await imageResponse.body();
       if (bytes.length > 20 * 1024 * 1024)
-        throw new Error(`${image.id}: el recurso supera 20 MiB`);
+        throw new Error(`${image.id}: resource exceeds 20 MiB`);
       if (createHash("sha256").update(bytes).digest("hex") !== resource.hash)
         throw new Error(
-          `${image.id}: el hash de la imagen cargada no coincide con el compilador`,
+          `${image.id}: loaded image hash does not match the compiler`,
         );
       verifiedImages[image.id] = {
         name: resource.name,
@@ -297,17 +292,17 @@ async function capture() {
         ({ selector, sourceHash, state, verifiedImages }) => {
           const root = document.querySelector(selector);
           if (!(root instanceof HTMLElement))
-            throw new Error("La raíz debe ser un elemento HTML");
+            throw new Error("Root must be an HTML element");
           if (
             root.dataset.fyneSourceHash &&
             root.dataset.fyneSourceHash !== sourceHash
           ) {
             throw new Error(
-              "La página y el manifiesto tienen distinto sourceHash",
+              "Page and manifest have different sourceHash values",
             );
           }
           if (root.dataset.fyneState && root.dataset.fyneState !== state) {
-            throw new Error("La página y la captura tienen distinto estado");
+            throw new Error("Page and capture have different states");
           }
           if (
             root
@@ -315,7 +310,7 @@ async function capture() {
               .some((animation) => animation.playState === "running")
           ) {
             throw new Error(
-              "La captura requiere un estado estable sin animaciones en curso",
+              "Capture requires a stable state without running animations",
             );
           }
           const elements = [root, ...root.querySelectorAll("*")];
@@ -342,7 +337,7 @@ async function capture() {
             if (allowNormal && value === "normal") return 0;
             if (!/^-?(?:\d+(?:\.\d+)?|\.\d+)px$/.test(value)) {
               throw new Error(
-                `${description}: se requiere una medida en px, recibido ${value}`,
+                `${description}: expected a measurement in px, received ${value}`,
               );
             }
             return Number.parseFloat(value);
@@ -351,17 +346,17 @@ async function capture() {
           for (const element of elements) {
             if (!(element instanceof HTMLElement))
               throw new Error(
-                "SVG, canvas y elementos no HTML requieren un adaptador nativo",
+                "SVG, canvas and non-HTML elements require a native adapter",
               );
             const id = element.id;
             if (!id)
               throw new Error(
-                `Falta id explícito en <${element.tagName.toLowerCase()}>`,
+                `Missing explicit id on <${element.tagName.toLowerCase()}>`,
               );
-            if (allIDs.get(id) !== 1) throw new Error(`id duplicado: ${id}`);
+            if (allIDs.get(id) !== 1) throw new Error(`Duplicate id: ${id}`);
             const css = getComputedStyle(element);
             const fail = (property: string, value: string) => {
-              throw new Error(`${id}: CSS no soportado: ${property}: ${value}`);
+              throw new Error(`${id}: Unsupported CSS: ${property}: ${value}`);
             };
             const forbidden: [string, string, string[]][] = [
               ["transform", css.transform, ["none"]],
@@ -397,24 +392,20 @@ async function capture() {
               if (content !== "none" && content !== "normal")
                 fail(`${pseudo} content`, content);
             }
-            if (element.shadowRoot)
-              fail("shadow-root", "requiere un adaptador");
+            if (element.shadowRoot) fail("shadow-root", "requires an adapter");
             if (
               ["CANVAS", "VIDEO", "IFRAME", "AUDIO", "PICTURE"].includes(
                 element.tagName,
               )
             )
-              fail("elemento", element.tagName);
+              fail("element", element.tagName);
             if (element.getClientRects().length > 1)
-              fail(
-                "fragmentación en varias líneas",
-                "requiere un nodo por fragmento",
-              );
+              fail("multiple line fragments", "requires a node per fragment");
             if (
               element.scrollWidth > element.clientWidth + 1 ||
               element.scrollHeight > element.clientHeight + 1
             ) {
-              fail("overflow", "contenido fuera del rectángulo medido");
+              fail("overflow", "content outside the measured rectangle");
             }
             const borders = [
               css.borderTopWidth,
@@ -440,7 +431,7 @@ async function capture() {
                 (new Set(borderColors).size !== 1 ||
                   borderStyles.some((style) => style !== "solid")))
             ) {
-              fail("border", "se requiere un borde sólido uniforme");
+              fail("border", "requires a uniform solid border");
             }
             const radii = [
               css.borderTopLeftRadius,
@@ -449,7 +440,7 @@ async function capture() {
               css.borderBottomLeftRadius,
             ];
             if (new Set(radii).size !== 1)
-              fail("border-radius", "se requiere un radio uniforme");
+              fail("border-radius", "requires a uniform radius");
             if (element instanceof HTMLImageElement) {
               const verified = verifiedImages[id];
               if (
@@ -459,10 +450,7 @@ async function capture() {
                 element.naturalWidth !== verified.width ||
                 element.naturalHeight !== verified.height
               ) {
-                fail(
-                  "img src",
-                  "la imagen cambió respecto al recurso verificado",
-                );
+                fail("img src", "image changed from the verified resource");
               }
               if (css.objectFit !== "fill") fail("object-fit", css.objectFit);
               if (css.objectPosition !== "50% 50%")
@@ -479,7 +467,7 @@ async function capture() {
               ) {
                 fail(
                   "img box",
-                  "bordes, radios y padding necesitan un adaptador de contenido y recorte",
+                  "borders, radii and padding need a content and clipping adapter",
                 );
               }
             }
@@ -533,7 +521,7 @@ async function capture() {
               if (!faceLoaded)
                 fail(
                   "font-face",
-                  `${fontFamily} ${fontWeight} ${fontStyle} no tiene una cara web cargada`,
+                  `${fontFamily} ${fontWeight} ${fontStyle} has no loaded web font face`,
                 );
               if (!zero(css.letterSpacing))
                 fail("letter-spacing", css.letterSpacing);
@@ -625,13 +613,13 @@ async function capture() {
     });
     const after = await measure();
     if (JSON.stringify(before) !== JSON.stringify(after))
-      throw new Error("La página cambió durante la captura");
+      throw new Error("Page changed during capture");
     for (const image of Object.values(verifiedImages)) {
       if (imageResponses.get(image.currentSrc)?.length !== 1)
-        throw new Error("Una imagen se volvió a cargar durante la captura");
+        throw new Error("An image reloaded during capture");
     }
     if (pageErrors.length)
-      throw new Error(`Errores de JavaScript: ${pageErrors.join("; ")}`);
+      throw new Error(`JavaScript errors: ${pageErrors.join("; ")}`);
     await mkdir(args.out, { recursive: true });
     await writeFile(resolve(args.out, "web.png"), screenshot);
     await writeFile(

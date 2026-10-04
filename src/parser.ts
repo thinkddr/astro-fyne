@@ -149,7 +149,7 @@ export class ConversionError extends Error {
   }
 }
 
-/** Compile a default (or explicitly named) Astro/Preact entry without executing its code. */
+/** Parse an Astro/Preact entry without executing its code. */
 export async function compile(
   path: string,
   exported?: string,
@@ -198,7 +198,7 @@ class Compiler {
       this.fail(
         source,
         source.ts,
-        "Elige un componente exportado; la entrada es ambigua.",
+        "Choose an exported component; the entry is ambiguous.",
       );
     const entry = await this.component(source, choice);
     const fonts = await loadFonts(this.options.fonts, this.root);
@@ -270,7 +270,7 @@ class Compiler {
         this.sourcePath(path),
         1,
         1,
-        "La fuente debe ser Astro, TSX o JSX.",
+        "Source must be Astro, TSX or JSX.",
       );
     }
     const text = await readFile(path, "utf8");
@@ -330,7 +330,7 @@ class Compiler {
     for (const statement of ast.statements) {
       if (ts.isImportDeclaration(statement)) {
         if (!ts.isStringLiteral(statement.moduleSpecifier))
-          this.fail(source, statement, "Import inválido.");
+          this.fail(source, statement, "Invalid import.");
         const from = statement.moduleSpecifier.text;
         const clause = statement.importClause;
         if (from.endsWith(".css") && from.startsWith(".")) {
@@ -338,7 +338,7 @@ class Compiler {
             this.fail(
               source,
               statement,
-              "CSS Modules requieren un adaptador; importa CSS estático sin bindings.",
+              "CSS Modules require an adapter; import static CSS without bindings.",
             );
           await this.stylesheet(resolve(dirname(source.path), from));
           continue;
@@ -347,7 +347,7 @@ class Compiler {
           this.fail(
             source,
             statement,
-            `Import con efectos laterales no soportado: ${from}.`,
+            `Unsupported side-effect import: ${from}.`,
           );
         if (clause.isTypeOnly) continue;
         if (clause.name)
@@ -357,7 +357,7 @@ class Compiler {
             this.fail(
               source,
               statement,
-              "Usa imports nombrados; los namespaces no son convertibles.",
+              "Use named imports; namespace imports cannot be converted.",
             );
           }
           for (const specifier of clause.namedBindings.elements) {
@@ -381,7 +381,7 @@ class Compiler {
           this.fail(
             source,
             statement,
-            "Solo se admiten constantes y useState; let/var exige lógica nativa.",
+            "Only constants and useState are supported; let/var require native logic.",
           );
         }
         for (const declaration of statement.declarationList.declarations) {
@@ -418,7 +418,7 @@ class Compiler {
           this.fail(
             source,
             statement,
-            "El export default debe ser un componente.",
+            "The default export must be a component.",
           );
       } else if (ts.isExportDeclaration(statement)) {
         if (statement.isTypeOnly) continue;
@@ -430,7 +430,7 @@ class Compiler {
           this.fail(
             source,
             statement,
-            "Reexportar componentes requiere importar su fuente explícitamente.",
+            "Re-exported components require an explicit import of their source.",
           );
         }
         for (const item of statement.exportClause.elements) {
@@ -447,7 +447,7 @@ class Compiler {
         this.fail(
           source,
           statement,
-          "Código imperativo o SSR no soportado: separa datos, autenticación y efectos en el host nativo.",
+          "Imperative code and SSR are unsupported; provide data, authentication, and effects through the native host.",
         );
       }
     }
@@ -465,8 +465,7 @@ class Compiler {
     const text = await readFile(path, "utf8");
     this.styles.set(path, text);
     this.hasStyles = true;
-    // Preserve local stylesheet dependency hashes. This is dependency discovery,
-    // not a CSS interpreter: rendering remains the browser's responsibility.
+    // Track local stylesheet hashes; the browser computes their rendering.
     for (const match of text.matchAll(
       /@import\s+(?:url\(\s*)?['"]([^'"]+)['"]/g,
     )) {
@@ -487,13 +486,13 @@ class Compiler {
       ? this.fileName(source.path)
       : source.exports.get(exported);
     if (!local)
-      this.fail(source, source.ts, `El componente ${exported} no se exporta.`);
+      this.fail(source, source.ts, `Component ${exported} is not exported.`);
     const name = `${local}_${hash(this.sourcePath(source.path)).slice(0, 8)}`;
     if (this.active.has(name))
       this.fail(
         source,
         source.ts,
-        `Import circular o componente recursivo: ${local}.`,
+        `Circular import or recursive component: ${local}.`,
       );
     if (this.components.has(name)) return name;
     const component: Component = {
@@ -522,8 +521,7 @@ class Compiler {
     this.active.add(name);
     this.ids.set(name, new Set());
     if (source.astro) {
-      // Astro.props is the only ambient Astro object permitted in a declarative
-      // page. Astro.url, request, locals and SSR calls are intentionally rejected.
+      // Only Astro.props is ambient; URL, request, locals, and SSR need host bindings.
       for (const declaration of source.globals)
         this.declare(declaration, scope, true);
       for (const statement of source.ts.statements) {
@@ -531,7 +529,7 @@ class Compiler {
           this.fail(
             source,
             statement,
-            "Las funciones del frontmatter requieren un binding nativo.",
+            "Frontmatter functions require a native binding.",
           );
         }
       }
@@ -545,20 +543,20 @@ class Compiler {
         this.fail(
           source,
           source.ts,
-          `${local} no es una función o arrow component.`,
+          `${local} is not a function or arrow component.`,
         );
       if (this.hasModifier(definition.node, ts.SyntaxKind.AsyncKeyword)) {
         this.fail(
           source,
           definition.node,
-          "Los componentes async/SSR requieren datos del host nativo.",
+          "Async/SSR components require data from the native host.",
         );
       }
       for (const declaration of source.globals)
         this.declare(declaration, scope, true);
       this.props(definition.node.parameters, scope);
       const body = definition.node.body;
-      if (!body) this.fail(source, definition.node, "Componente sin cuerpo.");
+      if (!body) this.fail(source, definition.node, "Component has no body.");
       if (ts.isBlock(body)) {
         for (const statement of body.statements)
           if (ts.isVariableStatement(statement))
@@ -568,17 +566,13 @@ class Compiler {
         let returned = false;
         for (const statement of body.statements) {
           if (returned)
-            this.fail(
-              source,
-              statement,
-              "Código después de return no soportado.",
-            );
+            this.fail(source, statement, "Code after return is unsupported.");
           if (ts.isVariableStatement(statement)) {
             if (!(statement.declarationList.flags & ts.NodeFlags.Const)) {
               this.fail(
                 source,
                 statement,
-                "Usa const o useState; las mutaciones imperativas no son convertibles.",
+                "Use const or useState; imperative mutations cannot be converted.",
               );
             }
             for (const declaration of statement.declarationList.declarations) {
@@ -591,12 +585,12 @@ class Compiler {
             this.fail(
               source,
               statement,
-              "El cuerpo admite constantes, useState y return JSX; otros efectos requieren bindings nativos.",
+              "Component bodies support constants, useState, and JSX returns; other effects require native bindings.",
             );
           }
         }
         if (!returned)
-          this.fail(source, body, "Componente sin return declarativo.");
+          this.fail(source, body, "Component has no declarative return.");
       } else component.body = await this.render(body, scope);
     }
     this.normalizeBooleanSlots(component);
@@ -611,18 +605,14 @@ class Compiler {
     scope: Scope,
   ): void {
     if (parameters.length > 1)
-      this.fail(
-        scope.source,
-        parameters[1]!,
-        "Un componente solo recibe props.",
-      );
+      this.fail(scope.source, parameters[1]!, "Components accept only props.");
     const parameter = parameters[0];
     if (!parameter) return;
     if (parameter.dotDotDotToken || parameter.initializer) {
       this.fail(
         scope.source,
         parameter,
-        "Parámetro rest o props con valor por defecto no soportado.",
+        "Rest parameters and default props values are unsupported.",
       );
     }
     if (ts.isIdentifier(parameter.name)) {
@@ -634,7 +624,7 @@ class Compiler {
       this.fail(
         scope.source,
         parameter,
-        "Las props deben ser un objeto o un destructuring de objeto.",
+        "Props must be an object or object destructuring pattern.",
       );
     }
     for (const binding of parameter.name.elements) {
@@ -647,7 +637,7 @@ class Compiler {
         this.fail(
           scope.source,
           binding,
-          "Props renombradas, rest o defaults requieren un binding explícito.",
+          "Renamed, rest, and default props require an explicit binding.",
         );
       }
       scope.component.props.push(binding.name.text);
@@ -669,7 +659,7 @@ class Compiler {
     global = false,
   ): void {
     if (!declaration.initializer)
-      this.fail(scope.source, declaration, "Constante sin valor.", scope);
+      this.fail(scope.source, declaration, "Constant has no value.", scope);
     const expression = this.unwrap(declaration.initializer);
     if (ts.isArrayBindingPattern(declaration.name)) {
       const elements = declaration.name.elements;
@@ -689,7 +679,7 @@ class Compiler {
         this.fail(
           scope.source,
           declaration,
-          "Solo se admite el tuple [estado, setter] de useState.",
+          "useState supports only the [state, setter] tuple.",
           scope,
         );
       }
@@ -706,7 +696,7 @@ class Compiler {
         this.fail(
           scope.source,
           declaration,
-          "Estado no soportado: usa useState con un valor declarativo.",
+          "Unsupported state declaration; use useState with a declarative value.",
           scope,
         );
       }
@@ -744,7 +734,7 @@ class Compiler {
       this.fail(
         scope.source,
         declaration,
-        "Destructuring no soportado fuera de props y useState.",
+        "Destructuring is unsupported outside props and useState.",
         scope,
       );
     }
@@ -754,7 +744,7 @@ class Compiler {
         this.fail(
           scope.source,
           declaration,
-          "Una función global requiere un binding nativo.",
+          "Global functions require a native binding.",
           scope,
         );
       scope.handlers.set(name, expression);
@@ -780,7 +770,7 @@ class Compiler {
       this.fail(
         scope.source,
         declaration,
-        "Una constante de módulo con llamadas al host requiere un ciclo de vida de inicialización nativo; no se reejecuta al renderizar en stage 01.",
+        "Module constants that call the host require a native initialization lifecycle; stage 01 does not rerun them during rendering.",
         scope,
       );
     scope.component.constants.push({ name, value });
@@ -860,7 +850,7 @@ class Compiler {
       this.fail(
         scope.source,
         node,
-        "undefined sombreado por un binding léxico; renómbralo o proporciona un adaptador nativo explícito.",
+        "A lexical binding shadows undefined; rename it or provide an explicit native adapter.",
         scope,
       );
     return true;
@@ -876,7 +866,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          "Un literal numérico debe ser finito; Infinity no es convertible a Go.",
+          "Numeric literals must be finite; Infinity cannot be converted to Go.",
           scope,
         );
       return literal(value);
@@ -892,7 +882,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          `Binding desconocido: ${node.text}. Decláralo en props o en const.`,
+          `Unknown binding: ${node.text}. Declare it in props or const.`,
           scope,
         );
       }
@@ -903,7 +893,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          "El acceso opcional requiere un binding explícito en stage 01.",
+          "Optional access requires an explicit binding in stage 01.",
           scope,
         );
       if (
@@ -914,7 +904,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          `Astro.${node.name.text} depende de SSR; proporciona datos por props.`,
+          `Astro.${node.name.text} depends on SSR; provide its data through props.`,
           scope,
         );
       }
@@ -938,7 +928,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          "El acceso opcional requiere un binding explícito en stage 01.",
+          "Optional access requires an explicit binding in stage 01.",
           scope,
         );
       return {
@@ -950,7 +940,7 @@ class Compiler {
     if (ts.isBinaryExpression(node)) {
       const op = node.operatorToken.getText();
       if (!BINARY.has(op))
-        this.fail(scope.source, node, `Operador no soportado: ${op}.`, scope);
+        this.fail(scope.source, node, `Unsupported operator: ${op}.`, scope);
       return {
         kind: "binary",
         op,
@@ -964,7 +954,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          "Mutación u operador unario no soportado.",
+          "Unsupported mutation or unary operator.",
           scope,
         );
       return { kind: "unary", op, value: this.expr(node.operand, scope) };
@@ -986,7 +976,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          "Arrays dispersos o con spread no soportados.",
+          "Sparse arrays and array spreads are unsupported.",
           scope,
         );
       }
@@ -1018,7 +1008,7 @@ class Compiler {
           this.fail(
             scope.source,
             property,
-            "Propiedad dinámica, método o spread no soportado.",
+            "Dynamic properties, methods, and spreads are unsupported.",
             scope,
           );
         }
@@ -1026,7 +1016,7 @@ class Compiler {
           this.fail(
             scope.source,
             property.name,
-            "La propiedad __proto__ en literales de objeto está fuera del contrato de stage 01; usa una prop o un adaptador nativo explícito.",
+            "Object literal __proto__ properties are unsupported in stage 01; use a prop or explicit native adapter.",
             scope,
           );
         }
@@ -1034,7 +1024,7 @@ class Compiler {
           this.fail(
             scope.source,
             property.name,
-            `La propiedad duplicada ${JSON.stringify(key)} requiere conservar la evaluación de todos sus valores; los literales con claves repetidas están fuera del contrato de stage 01.`,
+            `Duplicate object key ${JSON.stringify(key)} requires ordered evaluation of all its values; repeated keys are unsupported in stage 01.`,
             scope,
           );
         }
@@ -1070,7 +1060,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          `Builtin ${name} sombreado por un binding de la fuente; su llamada requiere un adaptador nativo explícito.`,
+          `A source binding shadows builtin ${name}; calling it requires an explicit native adapter.`,
           scope,
         );
       if (
@@ -1085,14 +1075,14 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          "t sombreado por un binding local; la traducción requiere el binding host explícito.",
+          "A local binding shadows t; translation requires the explicit host binding.",
           scope,
         );
       if (node.questionDotToken || node.arguments.some(ts.isSpreadElement)) {
         this.fail(
           scope.source,
           node,
-          "Llamadas opcionales o con spread no soportadas.",
+          "Optional calls and spread arguments are unsupported.",
           scope,
         );
       }
@@ -1100,7 +1090,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          `${node.expression.text} necesita exactamente un argumento.`,
+          `${node.expression.text} requires exactly one argument.`,
           scope,
         );
       }
@@ -1114,7 +1104,7 @@ class Compiler {
     this.fail(
       scope.source,
       node,
-      `Expresión ${ts.SyntaxKind[node.kind]} no convertible; usa un binding nativo para hooks, DOM, red o funciones.`,
+      `Expression ${ts.SyntaxKind[node.kind]} cannot be converted; use native bindings for hooks, DOM, network, or functions.`,
       scope,
     );
   }
@@ -1130,7 +1120,7 @@ class Compiler {
       this.fail(
         scope.source,
         source,
-        "Ramas condicionales compatibles necesitan posiciones virtuales estables; map, fragmentos y estructuras distintas requieren un contrato de reconciliación adicional.",
+        "Compatible conditional branches need stable virtual positions; maps, fragments, and differing structures require an additional reconciliation contract.",
         scope,
       );
     if (yes.length !== 1 || no.length !== 1) unsupported();
@@ -1147,9 +1137,8 @@ class Compiler {
     if (left.kind === "conditional" || right.kind === "conditional")
       unsupported();
     if (left.kind === "each" && right.kind === "each") unsupported();
-    // A different type may search other unkeyed siblings for an old instance.
-    // validateSiblingIdentity rejects those ambiguous matches until the IR
-    // carries a full virtual child list, rather than assigning state by source.
+    // Preact can reuse other unkeyed siblings after a type change. Reject those
+    // matches until the IR carries a virtual child list.
     if (!sameType(left, right)) return;
     const share = (left: Node, right: Node): void => {
       if (!sameType(left, right)) unsupported();
@@ -1213,7 +1202,7 @@ class Compiler {
         this.fail(
           scope.source,
           this.reconciliationSources.get(node) ?? scope.source.ts,
-          "Una rama que cambia de tipo puede reutilizar otro hermano sin key en Preact; requiere reconciliación virtual de hermanos explícita.",
+          "A type-changing branch can reuse another unkeyed sibling in Preact; explicit virtual sibling reconciliation is required.",
           scope,
         );
     }
@@ -1290,9 +1279,8 @@ class Compiler {
             writes.set(step.name, values);
           }
     });
-    // State is Boolean only when its initializer and every reachable setter
-    // produce an intrinsic Boolean result. A TypeScript annotation is not proof
-    // of the runtime values, and list parameters can shadow the state binding.
+    // Prove Boolean state from its initializer and every reachable setter. Type
+    // annotations are not proof, and list parameters may shadow the binding.
     const names = new Set(
       component.states
         .filter(
@@ -1331,21 +1319,21 @@ class Compiler {
           this.fail(
             scope.source,
             this.reconciliationSources.get(node) ?? scope.source.ts,
-            "Listas anidadas sin un elemento contenedor necesitan grupos virtuales jerárquicos explícitos.",
+            "Nested lists without a containing element require explicit hierarchical virtual groups.",
             scope,
           );
         if (!node.key && this.virtualTypes(node.children).size > 1)
           this.fail(
             scope.source,
             this.reconciliationSources.get(node) ?? scope.source.ts,
-            "Un map sin key que cambia el tipo de sus filas necesita reconciliación virtual entre hermanos de la lista.",
+            "An unkeyed map that changes its row type requires virtual reconciliation between list siblings.",
             scope,
           );
         if (node.key && !this.hasSinglePhysicalRoot(node.children))
           this.fail(
             scope.source,
             this.reconciliationSources.get(node) ?? scope.source.ts,
-            "El componente keyed debe producir una raíz física única en cada rama; fragmentos, listas y raíces vacías requieren grupos virtuales explícitos.",
+            "Keyed components must produce one physical root in every branch; fragments, lists, and empty roots require explicit virtual groups.",
             scope,
           );
         this.validateReconciliation(node.children, scope);
@@ -1378,7 +1366,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          "Fragmentos en ramas condicionales requieren un contrato de grupo virtual explícito.",
+          "Fragments in conditional branches require an explicit virtual group contract.",
           scope,
         );
       const yes = await this.render(node.whenTrue, scope);
@@ -1422,7 +1410,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          "map solo admite un callback arrow declarativo.",
+          "map supports only a declarative arrow callback.",
           scope,
         );
       }
@@ -1431,7 +1419,7 @@ class Compiler {
         this.fail(
           scope.source,
           callback,
-          "map async devuelve promesas; requiere un ciclo de vida asíncrono nativo explícito.",
+          "Async map returns promises; an explicit native asynchronous lifecycle is required.",
           scope,
         );
       if (
@@ -1444,7 +1432,7 @@ class Compiler {
         this.fail(
           scope.source,
           callback,
-          "map necesita item y opcionalmente index, sin destructuring.",
+          "map requires an item and optional index parameter without destructuring.",
           scope,
         );
       }
@@ -1483,7 +1471,7 @@ class Compiler {
           this.fail(
             scope.source,
             callback,
-            "El callback de map solo puede devolver JSX.",
+            "map callbacks can return only JSX.",
             scope,
           );
         }
@@ -1494,7 +1482,7 @@ class Compiler {
         this.fail(
           scope.source,
           body,
-          "Fragmentos en map requieren un contrato de grupo keyed explícito; devuelve un único elemento o componente.",
+          "Fragments in map require an explicit keyed group contract; return one element or component.",
           childScope,
         );
       const opening = ts.isJsxElement(body)
@@ -1514,7 +1502,7 @@ class Compiler {
           this.fail(
             scope.source,
             opening,
-            "Fragmentos en map requieren un contrato de grupo keyed explícito; devuelve un único elemento o componente.",
+            "Fragments in map require an explicit keyed group contract; return one element or component.",
             childScope,
           );
         childScope.keyRoot = opening;
@@ -1528,7 +1516,7 @@ class Compiler {
             this.fail(
               scope.source,
               attribute,
-              "Atributo duplicado: key.",
+              "Duplicate attribute: key.",
               childScope,
             );
           if (
@@ -1539,7 +1527,7 @@ class Compiler {
             this.fail(
               scope.source,
               attribute,
-              "key en map necesita key={item} o key={item.id}.",
+              "map keys require key={item} or key={item.id}.",
               childScope,
             );
           key = this.expr(attribute.initializer.expression, childScope);
@@ -1556,7 +1544,7 @@ class Compiler {
             this.fail(
               scope.source,
               attribute,
-              "key en map solo admite el item primitivo o item.id; claves calculadas/index requieren un contrato adicional.",
+              "map keys support only the primitive item or item.id; computed and index keys require an additional contract.",
               childScope,
             );
         }
@@ -1592,7 +1580,7 @@ class Compiler {
           this.fail(
             scope.source,
             child,
-            "Spread de hijos no soportado.",
+            "Child spreads are unsupported.",
             scope,
           );
         if (child.expression)
@@ -1603,8 +1591,8 @@ class Compiler {
   }
 
   private jsxText(text: string): string {
-    // JSX trims indentation and blank lines, but preserves meaningful spaces on
-    // a line. Do not trim each token: <span>Hello </span>{name} needs that space.
+    // Trim JSX indentation and blank lines, but preserve inline spaces such as
+    // <span>Hello </span>{name}.
     const lines = text.replaceAll("\r", "").split("\n");
     return lines
       .map((line, index) => {
@@ -1618,11 +1606,9 @@ class Compiler {
   }
 
   private decodeJSX(text: string, scope: Scope, node: ts.Node): string {
-    // JSX follows its HTML4 reference table and numeric rules, not HTML5's
-    // replacement-character/Windows-1252 recovery. Reuse our existing public
-    // TypeScript dependency as the oracle; the emitted JavaScript is only parsed.
-    // This also preserves unknown and semicolonless references without a copied
-    // entity table or evaluating any JavaScript from the user's source.
+    // JSX uses HTML4 references, without HTML5 replacement-character or Windows-1252
+    // recovery. Parse TypeScript's output to preserve unknown/semicolonless references;
+    // never execute user code or maintain a duplicate entity table.
     return text.replace(
       /&(?:#[xX][\da-fA-F]+|#\d+|[A-Za-z]\w*);/g,
       (reference) => {
@@ -1653,7 +1639,7 @@ class Compiler {
           this.fail(
             scope.source,
             node,
-            `No se puede decodificar la referencia JSX ${reference}.`,
+            `Cannot decode JSX reference ${reference}.`,
             scope,
           );
         const decoded = value.arguments[2];
@@ -1661,7 +1647,7 @@ class Compiler {
           this.fail(
             scope.source,
             node,
-            `TypeScript no produjo una cadena para ${reference}.`,
+            `TypeScript did not produce a string for ${reference}.`,
             scope,
           );
         this.jsxReferences.set(reference, decoded.text);
@@ -1683,7 +1669,7 @@ class Compiler {
         this.fail(
           scope.source,
           attribute,
-          "Spread de atributos no soportado.",
+          "Attribute spreads are unsupported.",
           scope,
         );
       const name = attribute.name.getText();
@@ -1692,7 +1678,7 @@ class Compiler {
         this.fail(
           scope.source,
           attribute,
-          "key solo se admite en la raíz única de un callback map; las claves de fragmentos, ramas o hermanos requieren un contrato adicional.",
+          "key is supported only on the single root of a map callback; fragment, branch, and sibling keys require an additional contract.",
           scope,
         );
       }
@@ -1700,7 +1686,7 @@ class Compiler {
         this.fail(
           scope.source,
           attribute,
-          `Atributo duplicado: ${name}.`,
+          `Duplicate attribute: ${name}.`,
           scope,
         );
       }
@@ -1713,7 +1699,7 @@ class Compiler {
           this.fail(
             scope.source,
             attribute,
-            "Un evento necesita un handler declarativo.",
+            "Events require a declarative handler.",
             scope,
           );
         }
@@ -1722,7 +1708,7 @@ class Compiler {
         this.fail(
           scope.source,
           attribute,
-          "Usa eventos Preact (onClick, onInput); scripts HTML no son convertibles.",
+          "Use Preact events (onClick, onInput); HTML event scripts cannot be converted.",
           scope,
         );
       } else {
@@ -1730,7 +1716,7 @@ class Compiler {
           this.fail(
             scope.source,
             attribute,
-            `${name} depende del DOM y requiere un widget nativo.`,
+            `${name} depends on the DOM and requires a native widget.`,
             scope,
           );
         }
@@ -1745,7 +1731,12 @@ class Compiler {
         ) {
           attrs[name] = this.expr(attribute.initializer.expression, scope);
         } else
-          this.fail(scope.source, attribute, `Atributo vacío: ${name}.`, scope);
+          this.fail(
+            scope.source,
+            attribute,
+            `Empty attribute: ${name}.`,
+            scope,
+          );
       }
     }
     return this.element(
@@ -1775,12 +1766,12 @@ class Compiler {
           this.fail(
             scope.source,
             node,
-            "Un id explícito no puede estar vacío.",
+            "An explicit ID cannot be empty.",
             scope,
           );
         const used = this.ids.get(scope.component.name)!;
         if (used.has(id))
-          this.fail(scope.source, node, `Id duplicado: ${id}.`, scope);
+          this.fail(scope.source, node, `Duplicate ID: ${id}.`, scope);
         used.add(id);
       } else id = `${scope.component.name}_n${++this.nextID}`;
       let imageResource: string | undefined;
@@ -1790,14 +1781,14 @@ class Compiler {
           this.fail(
             scope.source,
             node,
-            "img src necesita una ruta local literal PNG/JPEG.",
+            "img src requires a literal local PNG/JPEG path.",
             scope,
           );
         if (children.length || Object.keys(events).length)
           this.fail(
             scope.source,
             node,
-            "img no admite hijos ni eventos en stage 01.",
+            "img children and events are unsupported in stage 01.",
             scope,
           );
         for (const attribute of [
@@ -1821,7 +1812,7 @@ class Compiler {
             this.fail(
               scope.source,
               node,
-              `img ${attribute} requiere un contrato nativo explícito.`,
+              `img ${attribute} requires an explicit native contract.`,
               scope,
             );
         }
@@ -1839,7 +1830,7 @@ class Compiler {
           if (previous) {
             if (previous.hash !== bitmap.hash)
               throw new Error(
-                `El recurso bitmap cambió durante la conversión: ${bitmap.path}`,
+                `Bitmap resource changed during conversion: ${bitmap.path}`,
               );
             if (!previous.srcs.includes(src.value))
               previous.srcs.push(src.value);
@@ -1872,8 +1863,8 @@ class Compiler {
     const adapted =
       imported && this.options.adapters?.[imported.from]?.[imported.exported];
     if (adapted && BUILTINS.has(adapted)) {
-      // Keep builtins as component nodes; event handlers remain on an equivalent
-      // semantic element so the IR never needs to encode functions as props.
+      // Keep builtins as component nodes and handlers on semantic elements;
+      // function props are not represented.
       const nativeTag =
         adapted === "Button"
           ? "button"
@@ -1902,7 +1893,7 @@ class Compiler {
       this.fail(
         scope.source,
         node,
-        `Componente externo sin adaptador: ${imported.from}/${imported.exported}.`,
+        `External component has no adapter: ${imported.from}/${imported.exported}.`,
         scope,
       );
     }
@@ -1910,7 +1901,7 @@ class Compiler {
       this.fail(
         scope.source,
         node,
-        "Pasar callbacks a componentes requiere un binding nativo explícito.",
+        "Passing callbacks to components requires an explicit native binding.",
         scope,
       );
     }
@@ -1918,7 +1909,7 @@ class Compiler {
       this.fail(
         scope.source,
         node,
-        `Elemento o componente no soportado: ${tag}.`,
+        `Unsupported element or component: ${tag}.`,
         scope,
       );
     }
@@ -1928,16 +1919,14 @@ class Compiler {
       source = await this.relativeSource(imported.from, scope);
       exported = imported.exported;
     } else if (source.definitions.has(tag)) {
-      // A local component does not have to be exported; temporarily resolve its
-      // lexical name without changing the source or rewriting imports.
+      // Resolve local components by lexical name without changing source or imports.
       source.exports.set(tag, tag);
-    } else
-      this.fail(scope.source, node, `Componente desconocido: ${tag}.`, scope);
+    } else this.fail(scope.source, node, `Unknown component: ${tag}.`, scope);
     if (children.length)
       this.fail(
         scope.source,
         node,
-        "Hijos de componentes requieren un contrato nativo explícito; no se omiten durante la conversión.",
+        "Component children require an explicit native contract; conversion cannot omit them.",
         scope,
       );
     const id = `${scope.component.name}_c${++this.nextID}`;
@@ -1986,7 +1975,7 @@ class Compiler {
     this.fail(
       scope.source,
       scope.source.ts,
-      `No se encuentra la fuente del import ${specifier}.`,
+      `Cannot find source for import ${specifier}.`,
       scope,
     );
   }
@@ -2000,7 +1989,7 @@ class Compiler {
           this.fail(
             scope.source,
             node,
-            `El handler nombrado ${node.text} se usa bajo map con bindings externos sombreados (${[...scope.listShadows].sort().join(", ")}); requiere capturas lexicales cualificadas.`,
+            `Named handler ${node.text} is used under a map that shadows enclosing bindings (${[...scope.listShadows].sort().join(", ")}); qualified lexical captures are required.`,
             scope,
           );
         node = known;
@@ -2008,7 +1997,7 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          "Envuelve el setter en e => setter(e.currentTarget.value).",
+          "Wrap the setter in e => setter(e.currentTarget.value).",
           scope,
         );
       } else if (this.isHostAction(node.text, scope)) {
@@ -2018,22 +2007,17 @@ class Compiler {
         this.fail(
           scope.source,
           node,
-          `Handler ${node.text} no declarado en props; estados, constantes y bindings locales no autorizan acciones host.`,
+          `Handler ${node.text} is not declared in props; state, constants, and local bindings do not authorize host actions.`,
           scope,
         );
       } else
-        this.fail(
-          scope.source,
-          node,
-          `Handler desconocido: ${node.text}.`,
-          scope,
-        );
+        this.fail(scope.source, node, `Unknown handler: ${node.text}.`, scope);
     }
     if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) {
       this.fail(
         scope.source,
         node,
-        "El handler debe ser una arrow o callback declarado.",
+        "Handlers must be arrows or declared callbacks.",
         scope,
       );
     }
@@ -2047,7 +2031,7 @@ class Compiler {
       this.fail(
         scope.source,
         node,
-        "Handler async o con parámetros complejos no soportado.",
+        "Async handlers and complex parameters are unsupported.",
         scope,
       );
     }
@@ -2057,7 +2041,7 @@ class Compiler {
       this.fail(
         scope.source,
         node,
-        `El parámetro de evento ${parameter} sombrea un setter; requiere un binding nativo explícito.`,
+        `Event parameter ${parameter} shadows a setter; an explicit native binding is required.`,
         scope,
       );
     const eventScope = {
@@ -2075,7 +2059,7 @@ class Compiler {
           this.fail(
             scope.source,
             statement,
-            "Código después de return en un handler no soportado.",
+            "Code after return in a handler is unsupported.",
             scope,
           );
         if (ts.isExpressionStatement(statement))
@@ -2087,7 +2071,7 @@ class Compiler {
           this.fail(
             scope.source,
             statement,
-            "El handler solo puede llamar a acciones o setters.",
+            "Handlers can call only actions or setters.",
             scope,
           );
       }
@@ -2104,7 +2088,7 @@ class Compiler {
         this.fail(
           scope.source,
           call,
-          "El handler solo puede llamar a acciones o setters nombrados.",
+          "Handlers can call only named actions or setters.",
           scope,
         );
       }
@@ -2112,7 +2096,7 @@ class Compiler {
       const state = scope.setters.get(name);
       if (state) {
         if (call.arguments.length !== 1)
-          this.fail(scope.source, call, "Un setter necesita un valor.", scope);
+          this.fail(scope.source, call, "Setters require a value.", scope);
         let value = this.unwrap(call.arguments[0]!);
         let setterScope = eventScope;
         let updater: true | undefined;
@@ -2128,7 +2112,7 @@ class Compiler {
             this.fail(
               scope.source,
               value,
-              "El updater del setter debe ser valor => expresión.",
+              "Setter updaters must have the form value => expression.",
               scope,
             );
           }
@@ -2156,7 +2140,7 @@ class Compiler {
           this.fail(
             scope.source,
             call,
-            `Acción ${name} no declarada en props.`,
+            `Action ${name} is not declared in props.`,
             scope,
           );
         }
@@ -2200,7 +2184,7 @@ class Compiler {
       this.fail(
         scope.source,
         scope.source.ts,
-        "Expresión Astro inválida.",
+        "Invalid Astro expression.",
         scope,
       );
     }
@@ -2250,7 +2234,7 @@ class Compiler {
             this.fail(
               scope.source,
               scope.source.ts,
-              "key requiere identidad y ciclo de vida de componentes; no se aproxima en stage 01.",
+              "key requires component identity and lifecycle; stage 01 cannot approximate them.",
               located,
             );
           if (name.startsWith("client:")) {
@@ -2266,7 +2250,7 @@ class Compiler {
               this.fail(
                 scope.source,
                 scope.source.ts,
-                `Directiva de hidratación desconocida: ${name}.`,
+                `Unknown hydration directive: ${name}.`,
                 located,
               );
             }
@@ -2276,7 +2260,7 @@ class Compiler {
             this.fail(
               scope.source,
               scope.source.ts,
-              `Atributo duplicado: ${name}.`,
+              `Duplicate attribute: ${name}.`,
               located,
             );
           }
@@ -2288,7 +2272,7 @@ class Compiler {
             this.fail(
               scope.source,
               scope.source.ts,
-              `Directiva Astro no soportada: ${name}.`,
+              `Unsupported Astro directive: ${name}.`,
               located,
             );
           }
@@ -2296,7 +2280,7 @@ class Compiler {
             this.fail(
               scope.source,
               scope.source.ts,
-              "Scripts de eventos HTML no son convertibles; usa un componente Preact.",
+              "HTML event scripts cannot be converted; use a Preact component.",
               located,
             );
           if (/^on[A-Z]/.test(name)) {
@@ -2304,7 +2288,7 @@ class Compiler {
               this.fail(
                 scope.source,
                 scope.source.ts,
-                "Un evento necesita un handler declarativo.",
+                "Events require a declarative handler.",
                 located,
               );
             events[name] = this.handler(
@@ -2326,7 +2310,7 @@ class Compiler {
             this.fail(
               scope.source,
               scope.source.ts,
-              `Atributo Astro ${attribute.kind} no soportado; elimina spread o template-literal.`,
+              `Unsupported Astro attribute ${attribute.kind}; remove its spread or template literal.`,
               located,
             );
         }
@@ -2344,7 +2328,7 @@ class Compiler {
         this.fail(
           scope.source,
           scope.source.ts,
-          `Nodo Astro no soportado: ${child.type}.`,
+          `Unsupported Astro node: ${child.type}.`,
           located,
         );
     }

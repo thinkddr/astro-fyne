@@ -17,9 +17,8 @@ import (
 	"github.com/go-text/typesetting/font"
 )
 
-// Backend supplies font shaping, boxes and editing to the generated native tree.
-// The public default only depends on Fyne. A host with a measured font renderer may
-// inject it without copying its design system into generated pages.
+// Backend supplies text, boxes and editing. Hosts can replace the public Fyne
+// backend without copying their design system into generated code.
 type Backend interface {
 	Defaults(Node) Style
 	Validate(Style, bool) error
@@ -52,18 +51,15 @@ type Editor interface {
 	TypedShortcut(fyne.Shortcut)
 }
 
-// Font selects a bundled font file. Measured text must have an explicit resource;
-// substituting an operating system font would make a visual guarantee meaningless.
+// Font selects a bundled face. Measured text requires an explicit resource.
 type Font struct {
 	Weight int
 	Italic bool
 }
 
-// FyneBackend is the independent public backend. Fonts belong to the host, which
-// must supply licensed resources matching its browser font files. The default theme
-// font is used for legacy unmeasured prototypes only. Responsive source text
-// requires a real matching resource and glyph validation. Upstream Fyne's painter
-// is not assumed to match Chromium; the visual gate decides whether a state passes.
+// FyneBackend uses public Fyne primitives. Hosts supply licensed browser-matching
+// fonts; only legacy prototypes may use the theme font. Responsive text requires
+// real faces and glyphs. Raster parity is decided by the visual comparison.
 type FyneBackend struct {
 	Fonts       map[string]map[Font]fyne.Resource
 	fontsFrozen bool
@@ -144,9 +140,7 @@ func (b FyneBackend) Text(text string, s Style) *canvas.Text {
 func (b FyneBackend) PlaceText(t *canvas.Text, s Style, x, y float32) {
 	t.FontSource, t.TextStyle = b.font(s), b.textStyle(s)
 	font, baseline := fyne.CurrentApp().Driver().RenderedTextSize("H", s.FontSize, t.TextStyle, t.FontSource)
-	// Blink's rounded ascent/descent and integer half-leading. The independent
-	// painter may still quantize glyph origins differently; only a pixel diff proves
-	// equivalence at the requested device scale.
+	// Match Blink's rounded metrics. The pixel gate still checks painter quantization.
 	a := float32(math.Round(float64(baseline)))
 	d := float32(math.Round(float64(font.Height - baseline)))
 	lineBaseline := float32(math.Floor(float64(s.LineHeight-a-d)/2)) + a
@@ -166,9 +160,8 @@ func rounded(c color.NRGBA, radius float32) *canvas.Rectangle {
 	return r
 }
 
-// The border is its own transparent raster with a hole. A centered stroke changes
-// coverage, while a filled outer rectangle leaks through translucent interiors.
-// Background and border therefore remain separate native canvas primitives.
+// A hollow border raster preserves coverage and transparent interiors;
+// centered strokes and filled outer rectangles would change both.
 type primitiveBox struct {
 	fill          *canvas.Rectangle
 	border        *canvas.Raster
@@ -223,8 +216,7 @@ func roundDistance(x, y, w, h, r float64) float64 {
 }
 func coverage(distance, scale float64) float64 { return math.Max(0, math.Min(1, 0.5-distance*scale)) }
 
-// ParseColor understands the solid color serializations accepted by capture. The
-// independent runtime has no token sheet or private design-system dependency.
+// ParseColor parses solid colors accepted by browser capture.
 func ParseColor(value string) (color.NRGBA, error) {
 	s := strings.ToLower(strings.TrimSpace(value))
 	switch s {

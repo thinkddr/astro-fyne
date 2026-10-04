@@ -13,15 +13,10 @@ import (
 	"unicode/utf8"
 )
 
-// SnapshotAttributes freezes the source element tag and evaluated ordinary
-// attributes into canonical typed JSON. The emitter excludes events and key;
-// they have different lifecycle contracts. Attribute names cannot collide with
-// the tag because it is a separate field. Undefined, null and omitted properties
-// differ, as do strings, numbers, booleans, arrays and objects.
-//
-// Unsupported values panic inside the generated builder's recoverable boundary.
-// No methods, Stringer implementations, getters or callbacks are invoked. The
-// caller owns the UI goroutine and must not mutate attributes during this read.
+// SnapshotAttributes encodes the tag and ordinary attributes as typed canonical
+// JSON. The emitter excludes events/key; undefined, null and absence stay distinct.
+// Unsupported values panic within builder recovery. No methods/getters/callbacks
+// run. Call on the UI goroutine without concurrent attribute mutation.
 func SnapshotAttributes(tag string, attrs Scope) string {
 	if !validCaptureTag(tag) {
 		panic(fmt.Errorf("webui: capture attributes require a fixed lowercase source HTML tag, got %q", tag))

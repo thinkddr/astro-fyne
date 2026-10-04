@@ -5,16 +5,10 @@ package webui
 
 import "container/list"
 
-// movedSiblings follows Preact's skew and insertion-cursor decisions for direct
-// DOM siblings, each represented by one native element. Merely changing a
-// sibling's index does not imply insertBefore: for [A,B] -> [B,A], A moves while
-// B remains attached. Moving a DOM ancestor removes its descendant's focus in
-// Chromium, even though the keyed object and component state survive.
-//
-// This contract covers one direct-child array/Fragment of the compiler's
-// single-root keyed elements/components. Nested virtual groups with multiple
-// roots, suspended children and hydration comment anchors need more VNode
-// metadata and are outside this model.
+// movedSiblings mirrors Preact's skew/cursor for single-root direct children.
+// In [A,B] -> [B,A], A moves and B stays attached. Moving a focused ancestor blurs
+// in Chromium while keyed objects/state survive. Multi-root virtual groups,
+// suspended children and hydration anchors are unsupported.
 func movedSiblings(previous, current []*element) []*element {
 	previousIndex := make(map[*element]int, len(previous))
 	for i, e := range previous {

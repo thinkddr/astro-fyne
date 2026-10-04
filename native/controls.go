@@ -14,8 +14,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// The small source-layout mode is deterministic. It intentionally does not attempt
-// CSS flex/grid inference: capture provides every child's actual border-box bounds.
+// Prototype flow uses native minima; measured and responsive layouts use other paths.
 func flowMin(objects []fyne.CanvasObject, row bool, gap float32) fyne.Size {
 	var primary, cross float32
 	count := 0
@@ -124,10 +123,8 @@ func (w *actionWidget) AccessibilityLabel() string {
 	return w.element.node.Text
 }
 
-// primitiveEditor is an independently authored native editing engine for the
-// initial compatibility subset. It handles Unicode runes, cursor motion, selection
-// and clipboard shortcuts. IME composition, rich text, undo and platform spellcheck
-// need a host editor adapter and are not claimed by this initial backend.
+// primitiveEditor supports rune editing, selection and clipboard shortcuts.
+// IME, rich text, undo and spellcheck require a host editor adapter.
 type primitiveEditor struct {
 	canvas                      *editorCanvas
 	backend                     Backend
@@ -143,10 +140,9 @@ func (b FyneBackend) Editor(multiline bool, style Style, onChange func(string)) 
 	return NewEditor(b, multiline, style, onChange)
 }
 
-// NewEditor reuses the public editing engine with the host's text measurement and
-// placement. Its canvas owns drawing only: View owns focus, keyboard events and
-// HTML commit callbacks. This factory never calls Backend.Editor, so a backend's
-// Editor implementation may safely delegate here without recursive construction.
+// NewEditor uses the host's text engine. View owns focus and input/commit events;
+// the editor canvas only draws. This factory never calls Backend.Editor, so an
+// adapter's Editor method can delegate here without recursion.
 func NewEditor(backend Backend, multiline bool, style Style, onChange func(string)) Editor {
 	if backend == nil {
 		backend = FyneBackend{}
