@@ -220,6 +220,7 @@ function style(
     alignItems: "AlignItems",
     alignSelf: "AlignSelf",
     boxSizing: "BoxSizing",
+    borderStyle: "BorderStyle",
   };
   if (bitmap) {
     for (const dimension of ["width", "height"] as const) {
@@ -441,6 +442,7 @@ function style(
           AlignItems: ["flex-start", "flex-end", "center", "stretch"],
           AlignSelf: ["auto", "flex-start", "flex-end", "center", "stretch"],
           BoxSizing: ["border-box"],
+          BorderStyle: ["solid"],
         };
         if (choices[flexField]) {
           if (

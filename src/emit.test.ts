@@ -406,6 +406,32 @@ test("responsive flex keeps column direction and each supported alignment value"
   }
 });
 
+test("responsive flex serializes explicit solid borders and rejects other border styles", async () => {
+  const source = await program(`export function Page() { return <main id="root"
+    style={{display:'flex',width:'100%',height:100,boxSizing:'border-box',
+      borderStyle:'solid',borderWidth:2,borderColor:'#123456'}}/>; }`);
+  const go = emitGo(source, options);
+  expect(go).toContain('BorderStyle: "solid"');
+  expect(go).toContain("BorderWidth: 2");
+  expect(go).toContain('BorderColor: "#123456"');
+  for (const borderStyle of ["none", "dashed"]) {
+    const invalid =
+      await program(`export function Page() { return <main id="root"
+      style={{display:'flex',borderStyle:'${borderStyle}',borderWidth:2}}/>; }`);
+    expect(() => emitGo(invalid, options)).toThrow(
+      "CSS borderStyle sin soporte",
+    );
+  }
+  const missing = await program(`export function Page() { return <main id="root"
+    style={{display:'flex',width:'100%',height:100,boxSizing:'border-box',borderWidth:2}}/>; }`);
+  const missingGo = emitGo(missing, options);
+  expect(missingGo).not.toContain("BorderStyle:");
+  expect(missingGo).not.toContain("BorderColor:");
+  expect(missingGo).toContain(
+    "if err := view.Error(); err != nil { return nil, err }",
+  );
+});
+
 test("responsive flex rejects unsupported units, intrinsic sizing and formatting modes", async () => {
   for (const declaration of [
     "flexBasis:'auto'",
