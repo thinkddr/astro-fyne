@@ -1,0 +1,21 @@
+{
+  "ids": [
+    "a-value",
+    "b-value",
+    "a-text",
+    "b-text",
+    "x-primitive",
+    "y-primitive"
+  ],
+  "actions": [
+    "edit-a",
+    "a-increment",
+    "reorder",
+    "a-increment",
+    "toggle-a",
+    "toggle-a",
+    "a-increment",
+    "change-key",
+    "swap-primitives"
+  ]
+}

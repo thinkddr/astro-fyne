@@ -348,13 +348,59 @@ export function Overflow() { return <p>{value}</p>; }`,
   ).rejects.toThrow("debe ser finito");
 });
 
-test("keyed component identity is rejected instead of degrading to index identity", async () => {
+test("map key is consumed as reconciliation metadata and never a component prop", async () => {
   const entry = await source(
     "Page.tsx",
     `function Counter() { return <span>0</span>; }
 export function Page({ items }) { return <main>{items.map(item => <Counter key={item.id} />)}</main>; }`,
   );
-  await expect(compile(entry)).rejects.toThrow("key requiere identidad");
+  const program = await compile(entry);
+  const page = program.components.find(
+    (component) => component.name === program.entry,
+  )!;
+  const root = page.body[0]!;
+  expect(root.kind).toBe("element");
+  if (root.kind !== "element") throw new Error("missing root");
+  const list = root.children[0]!;
+  expect(list.kind).toBe("each");
+  if (list.kind !== "each") throw new Error("missing list");
+  expect(list.key).toEqual({
+    kind: "get",
+    object: { kind: "name", name: "item" },
+    key: { kind: "literal", value: "id" },
+  });
+  const child = list.children[0]!;
+  if (child.kind !== "component") throw new Error("missing mapped component");
+  expect(Object.hasOwn(child.props, "key")).toBe(false);
+});
+
+test("keys without a single stable map root fail explicitly", async () => {
+  for (const body of [
+    `<p key={items} />`,
+    `<main>{items.map(item => <><p key={item}/><p/></>)}</main>`,
+    `<main>{items.map(item => <section><p key={item}/></section>)}</main>`,
+    `<main>{items.map((item,index) => <p key={index}/>)}</main>`,
+    `<main>{items.map(item => <p key={item.id + "suffix"}/>)}</main>`,
+    `<main>{items.map(item => <p key={item.id} key={item.id}/>)}</main>`,
+    `<main>{items.map(item => item.active ? <p key={item.id}/> : null)}</main>`,
+  ])
+    await expect(
+      compile(
+        await source(
+          "InvalidKeys.tsx",
+          `export function InvalidKeys({items}) { return ${body}; }`,
+        ),
+      ),
+    ).rejects.toThrow();
+  await expect(
+    compile(
+      await source(
+        "FragmentKeys.tsx",
+        `import { Fragment as Group } from "preact";
+export function FragmentKeys({items}) { return <main>{items.map(item => <Group key={item.id}><p/><p/></Group>)}</main>; }`,
+      ),
+    ),
+  ).rejects.toThrow("contrato de grupo keyed");
 });
 
 test("loose equality requires a native adapter instead of an unsupported runtime operator", async () => {
