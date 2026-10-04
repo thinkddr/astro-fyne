@@ -112,7 +112,6 @@ func TestGeneratedResponsiveBitmapResizesWithoutMeasurements(t *testing.T) {
 			size := fyne.NewSize(float32(item.Width), float32(item.Height))
 			target.Resize(size)
 			view.Resize(size)
-			view.Refresh()
 			capture := target.Capture()
 			if capture.Bounds() != image.Rect(0, 0, item.Width, item.Height) {
 				t.Fatalf("bitmap native physical size: %v", capture.Bounds())

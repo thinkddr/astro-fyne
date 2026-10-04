@@ -300,7 +300,6 @@ func TestGeneratedResponsiveFlexResizesOneSourceTreeWithoutMeasurements(t *testi
 			size := fyne.NewSize(float32(item.Width), float32(item.Height))
 			target.Resize(size)
 			view.Resize(size)
-			view.Refresh()
 			capture := target.Capture()
 			if capture.Bounds() != image.Rect(0, 0, item.Width*item.Scale, item.Height*item.Scale) {
 				t.Fatalf("native flex PNG has incorrect physical dimensions: %v", capture.Bounds())

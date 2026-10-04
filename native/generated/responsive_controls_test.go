@@ -274,7 +274,6 @@ func TestGeneratedResponsiveControlsPointerTypingResizeAndCommit(t *testing.T) {
 			size := fyne.NewSize(float32(width), 320)
 			target.Resize(size)
 			view.Resize(size)
-			view.Refresh()
 		} else if strings.HasPrefix(action, "type-") || action == "press-enter" {
 			input, ok := view.Object("controls-input").(fyne.Focusable)
 			if !ok || target.Focused() != input {
