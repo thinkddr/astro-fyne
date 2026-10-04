@@ -448,19 +448,36 @@ interface EmitContext {
   textCounter: number;
   resources: Map<string, BitmapResource>;
 }
+function textNodeCode(
+  node: Extract<Node, { kind: "text" }>,
+  value: string,
+  context: EmitContext,
+): string {
+  const sourceID = quote("/text_" + context.textCounter++);
+  const identity = node.identity ? quote("/" + node.identity) : sourceID;
+  return `func() []webui.Node { text := webui.ChildText(${value}); if text == "" { return nil }; return []webui.Node{{ID: prefix + ${sourceID}, Identity: prefix + ${identity},Kind:"text", Text:text}} }()`;
+}
 function nodeCode(
   node: Node,
   component: Component,
   context: EmitContext,
 ): string {
   const measured = context.measured;
-  if (node.kind === "text") {
-    const sourceID = quote("/text_" + context.textCounter++);
-    const identity = node.identity ? quote("/" + node.identity) : sourceID;
-    return `func() []webui.Node { text := webui.ChildText(${expression(node.value)}); if text == "" { return nil }; return []webui.Node{{ID: prefix + ${sourceID}, Identity: prefix + ${identity},Kind:"text", Text:text}} }()`;
-  }
-  if (node.kind === "conditional")
+  if (node.kind === "text")
+    return textNodeCode(node, expression(node.value), context);
+  if (node.kind === "conditional") {
+    if (node.shortCircuit) {
+      const yes = nodesCode(node.yes, component, context);
+      let no = "nil";
+      if (node.no.length) {
+        if (node.no.length !== 1 || node.no[0]!.kind !== "text")
+          throw new Error("JSX && necesita una rama falsa de texto o vacía.");
+        no = textNodeCode(node.no[0]!, "left", context);
+      }
+      return `func() []webui.Node { left := ${expression(node.test)}; if webui.Truth(left) { return ${yes} }; return ${no} }()`;
+    }
     return `func() []webui.Node { if webui.Truth(${expression(node.test)}) { return ${nodesCode(node.yes, component, context)} }; return ${nodesCode(node.no, component, context)} }()`;
+  }
   if (node.kind === "each") {
     const bindings = `scope := cloneScope(scope); scope[${quote(node.item)}] = item; ${node.index ? `scope[${quote(node.index)}] = float64(index);` : ""}`;
     const validateKeys = node.key
