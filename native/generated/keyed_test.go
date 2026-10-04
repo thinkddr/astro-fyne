@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -159,13 +160,25 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 		if b != nil && b == originalB {
 			sameB = 1
 		}
-		order := 2
-		if a != nil {
-			if view.Object("a-row").Position().Y < view.Object("b-row").Position().Y {
-				order = 12
-			} else {
-				order = 21
+		// Observe actual row positions, including newly mounted C. Assuming that
+		// C is prepended would conceal an erroneous native append operation.
+		type row struct {
+			digit int
+			y     float32
+		}
+		rows := []row{}
+		for index, id := range []string{"a-row", "b-row", "c-row"} {
+			if object := view.Object(id); object != nil {
+				rows = append(rows, row{digit: index + 1, y: object.Position().Y})
 			}
+		}
+		sort.Slice(rows, func(i, j int) bool { return rows[i].y < rows[j].y })
+		order := 0
+		for index, item := range rows {
+			if index > 0 && rows[index-1].y == item.y {
+				t.Fatalf("keyed native rows overlap at y=%v after %q", item.y, action)
+			}
+			order = order*10 + item.digit
 		}
 		primitiveOrder := 12
 		if view.Object("y-primitive").Position().Y < view.Object("x-primitive").Position().Y {
@@ -181,10 +194,14 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 	}
 	snapshot("initial")
 	for _, action := range scenario.Actions {
-		if action == "edit-a" || action == "edit-branch-a" {
+		if action == "edit-a" || action == "edit-branch-a" || action == "edit-b" {
 			id := "a-input"
 			if action == "edit-branch-a" {
 				id = "a-branch-input"
+			} else if action == "edit-b" {
+				id = "b-input"
+			} else if view.Object("a-renamed-input") != nil {
+				id = "a-renamed-input"
 			}
 			typeKeyed(t, view, window, id)
 		} else {

@@ -88,7 +88,13 @@ try {
               ? 21
               : order === "b-row"
                 ? 2
-                : -1;
+                : order === "c-row,a-row,b-row"
+                  ? 312
+                  : order === "c-row,b-row,a-row"
+                    ? 321
+                    : order === "c-row,b-row"
+                      ? 32
+                      : -1;
         const primitiveCode =
           primitiveOrder === "x-primitive,y-primitive"
             ? 12
@@ -131,15 +137,23 @@ try {
   }
   await snapshot("initial");
   for (const action of scenario.actions) {
-    if (action === "edit-a" || action === "edit-branch-a") {
+    if (
+      action === "edit-a" ||
+      action === "edit-branch-a" ||
+      action === "edit-b"
+    ) {
       const input = page.locator(
-        action === "edit-a" ? "#a-input" : "#a-branch-input",
+        action === "edit-a"
+          ? "#a-input, #a-renamed-input"
+          : action === "edit-b"
+            ? "#b-input"
+            : "#a-branch-input",
       );
       await input.focus();
       await input.press("End");
       await input.pressSequentially("!");
     } else {
-      // Programmatic click preserves input focus, like native test.Tap. Pointer
+      // Programmatic click preserves input focus, like native Tappable.Tapped.
       // focus transfer is a different event scenario and is not silently mixed in.
       await page
         .locator(`[id="${action}"]`)
