@@ -15,7 +15,8 @@
     "short-or",
     "short-nullish",
     "selected-null",
-    "selected-missing"
+    "selected-missing",
+    "entity-conformance"
   ],
   "actions": [
     "left-increment",

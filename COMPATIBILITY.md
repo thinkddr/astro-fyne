@@ -27,15 +27,21 @@ original JavaScript or execute a general ECMAScript runtime.
 | State | Supported `useState` declarations; direct and declarative updater setters in event handlers | Other hooks, arbitrary custom hooks and general effect lifecycles |
 | Expressions | Literals, supported property/index access, arrays, objects, templates, conditionals and listed operators | Arbitrary function calls, spread, optional chaining and unsupported JavaScript constructs |
 | Branches and lists | Supported JSX conditionals and declarative `map` callbacks | General iteration, arbitrary callback bodies and full keyed Preact reconciliation guarantees |
-| Events | Button/link `onClick`; input/textarea `onInput` and `onChange`; declared Go host actions | Full DOM event propagation, arbitrary event payloads, browser effects and implicit platform adapters |
-| HTML nodes | Supported container, plain text, button, link, input, textarea and local bitmap image tags | Rich text nesting, specialized form controls and unsupported tags |
-| Application effects | Explicit named native actions supplied by the Go host | Automatic translation of browser APIs, networking, SSR, storage or navigation implementations |
+| Events | Button/link `onClick`; input/textarea `onInput` and `onChange`; Go host callbacks declared explicitly in props and the host translator `t` | Full DOM event propagation, arbitrary event payloads, browser effects and implicit platform adapters |
+| HTML nodes | Supported container, plain text, button, link, input, textarea and local bitmap image tags | Rich text nesting, forms, specialized form controls and unsupported tags |
+| Application effects | Explicit named native actions supplied by the Go host | Host calls during module initialization; automatic translation of browser APIs, networking, SSR, storage or navigation implementations |
 
 The accepted operators and calls are defined in `src/parser.ts`; their native implementations
 live in `native/expressions.go`. This is a portable expression contract rather than proof of
 complete ECMAScript equivalence. Expanding it requires browser/native differential tests for
 value coercion, Unicode strings, missing values, short-circuit evaluation and event ordering.
 Compilation must reject a construction when its semantics cannot be preserved.
+
+Callback names bound to state, constants or shadowing list/event/updater parameters do not
+authorize host actions. Calls to shadowed `String`, `Number` or `Boolean` require an explicit
+native adapter. A component-local constant may call the host translator `t`; a module-level
+constant may not, because its initialization lifecycle is not implemented. HTML `form` nodes
+are rejected during Go generation until native submit and implicit submit behavior are defined.
 
 The programmatic compiler API supports explicit package adapters. The initial CLI
 configuration only exposes entries and measurement files. Adapters must preserve a component's
@@ -71,8 +77,9 @@ viewport stretching and changes to a measured visual tree. The state label is sc
 metadata; it does not establish that the correct application state was reached. Scenario
 assertions and the final image comparison establish that correspondence.
 
-`sourceHash` covers the compiler's recorded source dependency list. It is not a signature of a
-running server, a resource inventory or proof that an arbitrary URL serves those sources.
+`sourceHash` covers the compiler's recorded source dependency list, including embedded asset
+digests. It is not a signature of a running server or proof that an arbitrary URL serves
+those sources and asset bytes.
 CI must build the selected revision, serve that build, prepare deterministic state and keep
 the resulting capture evidence. If a page declares `data-fyne-source-hash` or
 `data-fyne-state`, capture also checks those values against its arguments.
@@ -85,6 +92,8 @@ scenario, viewport, scale, color scheme and font files. It also retains `measure
 zero differences in all four color channels; no implicit antialiasing tolerance is applied.
 The comparison contract uses up to 8-bit channels and rejects 16-bit PNG input, including
 changes that would disappear if their channels were reduced to 8 bits.
+The PNG CLI also rejects animation, color profiles and unrecognized interpretation chunks;
+it validates the entire chunk stream, including CRCs and trailing bytes.
 
 The initial examples exercise state/input behavior and solid geometry at 320 × 240 pixels,
 scale 1. A behavioral corpus drives the same click sequence in Preact/Chromium and generated Go.

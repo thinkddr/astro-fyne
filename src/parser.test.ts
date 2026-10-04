@@ -499,3 +499,170 @@ test("styles and attributes reach the emitter instead of being discarded", async
     value: { kind: "literal", value: "Hola " },
   });
 });
+
+test("JSX decodes semicolon-terminated HTML references without decoding JavaScript strings", async () => {
+  const entry = await source(
+    "Page.tsx",
+    `export function Page() {
+    return <p id="entity&amp;node" aria-label="&quot;A&quot; &#x1F642; &copy;">A &amp; B &#169; &#x1F642; &NotEqualTilde; &#128; &amp withoutsemicolon {"&amp; &#169;"}</p>;
+  }`,
+  );
+  const compiled = await compile(entry);
+  const paragraph = elements(compiled.components[0]!.body)[0]!;
+  expect(paragraph.id).toBe("entity&node");
+  expect(paragraph.attrs["aria-label"]).toEqual({
+    kind: "literal",
+    value: '"A" 🙂 ©',
+  });
+  expect(paragraph.children).toEqual([
+    {
+      kind: "text",
+      value: {
+        kind: "literal",
+        value: "A & B © 🙂 &NotEqualTilde; \u0080 &amp withoutsemicolon ",
+      },
+    },
+    { kind: "text", value: { kind: "literal", value: "&amp; &#169;" } },
+  ]);
+});
+
+test("Astro applies HTML text and attribute rules but preserves expression strings", async () => {
+  const entry = await source(
+    "Page.astro",
+    `<p id="entity&amp;node" aria-label="&quot;A&quot; &copy &#x1F642;">A &amp; B &copy withoutsemicolon &#169; &#x1F642; &NotEqualTilde; &#128; {"&amp; &#169;"}</p>`,
+  );
+  const compiled = await compile(entry);
+  const paragraph = elements(compiled.components[0]!.body)[0]!;
+  expect(paragraph.id).toBe("entity&node");
+  expect(paragraph.attrs["aria-label"]).toEqual({
+    kind: "literal",
+    value: '"A" © 🙂',
+  });
+  expect(paragraph.children).toEqual([
+    {
+      kind: "text",
+      value: { kind: "literal", value: "A & B © withoutsemicolon © 🙂 ≂̸ € " },
+    },
+    { kind: "text", value: { kind: "literal", value: "&amp; &#169;" } },
+  ]);
+});
+
+test("Astro attributes preserve ambiguous semicolonless references unlike text", async () => {
+  const entry = await source(
+    "Page.astro",
+    `<p aria-label="&copycat &amp=tag &copy" />`,
+  );
+  const compiled = await compile(entry);
+  expect(
+    elements(compiled.components[0]!.body)[0]!.attrs["aria-label"],
+  ).toEqual({ kind: "literal", value: "&copycat &amp=tag ©" });
+});
+
+test("JSX expression attributes keep literal references exactly as JavaScript supplied them", async () => {
+  const entry = await source(
+    "Page.tsx",
+    `export function Page() { return <p aria-label={"&amp;"}>&amp;amp; &unknown;</p>; }`,
+  );
+  const compiled = await compile(entry);
+  const paragraph = elements(compiled.components[0]!.body)[0]!;
+  expect(paragraph.attrs["aria-label"]).toEqual({
+    kind: "literal",
+    value: "&amp;",
+  });
+  expect(paragraph.children).toEqual([
+    { kind: "text", value: { kind: "literal", value: "&amp; &unknown;" } },
+  ]);
+});
+
+test("shadowed conversion builtins fail instead of using the global builtin", async () => {
+  for (const name of ["String", "Number", "Boolean"]) {
+    for (const input of [
+      `export function Page({${name}}) { return <p>{${name}(1)}</p>; }`,
+      `export function Page() { const ${name} = 1; return <p>{${name}(1)}</p>; }`,
+      `export function Page() { const ${name} = () => 'local'; return <p>{${name}(1)}</p>; }`,
+      `const title = ${name}(1); const ${name} = 'later'; export function Page() { return <p>{title}</p>; }`,
+      `export function Page() { const title = ${name}(1); const ${name} = 'later'; return <p>{title}</p>; }`,
+      `function ${name}(value) { return <p>{value}</p>; } export function Page() { return <p>{${name}(1)}</p>; }`,
+      `import {${name}} from './host'; export function Page() { return <p>{${name}(1)}</p>; }`,
+      `export function Page({items}) { return <main>{items.map(${name} => <p>{${name}(1)}</p>)}</main>; }`,
+    ]) {
+      const entry = await source("Page.tsx", input);
+      await expect(compile(entry)).rejects.toThrow(`Builtin ${name} sombreado`);
+    }
+  }
+});
+
+test("only declared callback props authorize host action calls", async () => {
+  for (const input of [
+    `export function Page() { const save = 'not a callback'; return <button onClick={() => save()} />; }`,
+    `export function Page() { const save = 'not a callback'; return <button onClick={save} />; }`,
+    `import {useState} from 'preact/hooks'; export function Page() { const [save,setSave] = useState(0); return <button onClick={() => save()} />; }`,
+    `export function Page({save,items}) { return <main>{items.map(save => <button onClick={() => save()} />)}</main>; }`,
+    `export function Page({save}) { return <input onInput={save => save()} />; }`,
+    `import {useState} from 'preact/hooks'; export function Page({items}) { const [count,setCount]=useState(0); return <main>{items.map(setCount=><button onClick={()=>setCount(1)} />)}</main>; }`,
+    `export function Page({items,save}) { const handle=()=>save(); return <main>{items.map(handle=><button onClick={handle} />)}</main>; }`,
+  ]) {
+    await expect(compile(await source("Page.tsx", input))).rejects.toThrow(
+      "no declarad",
+    );
+  }
+});
+
+test("an event parameter cannot silently turn into a state setter", async () => {
+  const entry = await source(
+    "Page.tsx",
+    `import {useState} from 'preact/hooks'; export function Page() { const [count,setCount]=useState(0); return <input onInput={setCount=>setCount(1)} />; }`,
+  );
+  await expect(compile(entry)).rejects.toThrow("sombrea un setter");
+});
+
+test("module calls to translation require a native initialization lifecycle", async () => {
+  for (const input of [
+    `const title = t('module'); export function Page() { return <p>{title}</p>; }`,
+    `const data = {title:t('module')}; export function Page() { return <p>{data.title}</p>; }`,
+    `const title = String(t('module')); export function Page() { return <p>{title}</p>; }`,
+    `const title = false && t('module'); export function Page() { return <p>{title}</p>; }`,
+  ]) {
+    await expect(compile(await source("Page.tsx", input))).rejects.toThrow(
+      "constante de módulo con llamadas al host",
+    );
+  }
+});
+
+test("module constants cannot read a component parameter as an ambient module binding", async () => {
+  const entry = await source(
+    "Page.tsx",
+    `const title = label; export function Page({label}) { return <p>{title}</p>; }`,
+  );
+  await expect(compile(entry)).rejects.toThrow("Binding desconocido: label");
+});
+
+test("component translation cannot be shadowed by constants, hooks or updater parameters", async () => {
+  for (const input of [
+    `export function Page() { const t = 'local'; return <p>{t('key')}</p>; }`,
+    `export function Page() { const t = () => 'local'; return <p>{t('key')}</p>; }`,
+    `export function Page() { const title = t('key'); const t = 'later'; return <p>{title}</p>; }`,
+    `import {useState} from 'preact/hooks'; export function Page() { const [count,setCount]=useState(0); return <button onClick={()=>setCount(t=>t('key'))} />; }`,
+    `export function Page({t,items}) { return <main>{items.map(t=><p>{t('key')}</p>)}</main>; }`,
+  ]) {
+    await expect(compile(await source("Page.tsx", input))).rejects.toThrow(
+      "t sombreado",
+    );
+  }
+});
+
+test("global pure builtins, declared callbacks and component-local translated constants remain supported", async () => {
+  const entry = await source(
+    "Page.tsx",
+    `const suffix=String(Number('2'));
+export function Page({save,t}) { const title=t('title'); const visible=Boolean(1); return <main><p>{title}{suffix}{String(visible)}</p><button onClick={()=>save(title)} /><button onClick={save} /><button onClick={()=>t('clicked')} /></main>; }`,
+  );
+  const compiled = await compile(entry);
+  expect(compiled.actions).toEqual(["save", "t"]);
+  const buttons = elements(compiled.components[0]!.body).filter(
+    (node) => node.tag === "button",
+  );
+  expect(buttons[0]!.events.onClick!.steps[0]!.name).toBe("save");
+  expect(buttons[1]!.events.onClick!.steps[0]!.name).toBe("save");
+  expect(buttons[2]!.events.onClick!.steps[0]!.name).toBe("t");
+});
