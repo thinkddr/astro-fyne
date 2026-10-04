@@ -25,13 +25,13 @@ import (
 type Node struct {
 	ID, Kind, Text, Value, Placeholder, Href, Variant, Size string
 	// Identity distinguishes keyed source instances which share a DOM ID.
-	Identity                                                string
-	AccessibleLabel, LabelFor                               string
-	Disabled                                                bool
-	Style                                                   Style
-	Children                                                []Node
-	OnTap                                                   func()
-	OnChange                                                func(string)
+	Identity                  string
+	AccessibleLabel, LabelFor string
+	Disabled                  bool
+	Style                     Style
+	Children                  []Node
+	OnTap                     func()
+	OnChange                  func(string)
 	// OnCommit represents HTML change; OnChange represents immediate input.
 	OnCommit      func(string)
 	ImageResource fyne.Resource
@@ -111,6 +111,72 @@ func (v *View) Object(id string) fyne.CanvasObject {
 		return e.object
 	}
 	return nil
+}
+
+// SnapshotNode is a copy of a rendered element, with resolved styles and its real
+// native object for explicit export bindings. Node.Children is empty; Children
+// contains the frozen hierarchy. Callback references are retained only so an
+// exporter can require named bindings, never to execute or serialize functions.
+type SnapshotNode struct {
+	Node             Node
+	Object           fyne.CanvasObject
+	Children         []SnapshotNode
+	PlaceholderColor string
+}
+
+// ViewSnapshot describes the existing frame. Size and CaptureScale let exporters
+// reject a measured profile at a different viewport or device scale.
+type ViewSnapshot struct {
+	Roots        []SnapshotNode
+	Size         fyne.Size
+	CaptureScale float32
+	Measured     bool
+}
+
+// Snapshot reads the current reconciled tree on Fyne's event goroutine. It does
+// not invoke the builder, create renderers, relayout, refresh or call callbacks.
+// An invalid or stale measured tree cannot become a valid export by freezing it.
+func (v *View) Snapshot() (ViewSnapshot, error) {
+	if err := errors.Join(v.Error(), v.ValidateCanvas()); err != nil {
+		return ViewSnapshot{}, err
+	}
+	var freeze func([]*element) []SnapshotNode
+	freeze = func(elements []*element) []SnapshotNode {
+		out := make([]SnapshotNode, len(elements))
+		for i, e := range elements {
+			n := e.node
+			n.Children = nil
+			n.Style = e.style
+			position, size := e.object.Position(), e.object.Size()
+			n.Style.X, n.Style.Y = position.X, position.Y
+			n.Style.Width, n.Style.Height = size.Width, size.Height
+			n.Style.Measured = true
+			if !e.object.Visible() {
+				n.Style.Display = "none"
+			}
+			n.AccessibleLabel = e.label
+			if e.input != nil {
+				n.Value = e.input.Text()
+			}
+			if e.node.Kind == "image" {
+				asset := v.bitmaps[e.imageHash]
+				if asset.resource != nil {
+					n.ImageResource = fyne.NewStaticResource(asset.resource.Name(), append([]byte(nil), asset.resource.Content()...))
+				}
+			}
+			placeholderColor := ""
+			if n.Placeholder != "" {
+				if _, supported := e.input.(*primitiveEditor); supported {
+					c := cssColor(e.style.Color)
+					c.A = uint8(float64(c.A) * 0.5)
+					placeholderColor = colorCSS(c)
+				}
+			}
+			out[i] = SnapshotNode{Node: n, Object: e.object, Children: freeze(e.children), PlaceholderColor: placeholderColor}
+		}
+		return out
+	}
+	return ViewSnapshot{Roots: freeze(v.roots), Size: v.Size(), CaptureScale: v.captureScale, Measured: len(v.measurements) != 0}, nil
 }
 
 // SetAutoRefreshEvents selects who reevaluates the source tree after callbacks.
@@ -349,6 +415,13 @@ func (v *View) reconcile() {
 		return out
 	}
 	v.roots = build(nodes, Style{})
+	for id, previous := range v.elements {
+		replacement := current[id]
+		if replacement == previous && !replacement.node.Disabled && replacement.style.Display != "none" {
+			continue
+		}
+		v.clearDetachedFocus(previous)
+	}
 	v.elements = current
 	for _, e := range current {
 		if e.node.LabelFor != "" {
@@ -357,6 +430,26 @@ func (v *View) reconcile() {
 			}
 		}
 	}
+}
+
+func (v *View) clearDetachedFocus(e *element) {
+	focusable, ok := e.object.(fyne.Focusable)
+	if !ok {
+		return
+	}
+	target := v.boundCanvas
+	if target == nil && fyne.CurrentApp() != nil && fyne.CurrentApp().Driver() != nil {
+		target = fyne.CurrentApp().Driver().CanvasForObject(e.object)
+	}
+	if target == nil || target.Focused() != focusable {
+		return
+	}
+	// Removing a DOM input does not commit its abandoned value. Suppress that
+	// callback while still letting the editor release its caret and selection.
+	if input, ok := e.object.(*inputWidget); ok {
+		input.dirty = false
+	}
+	target.Unfocus()
 }
 
 // Only generated expression evaluation is a recoverable boundary. Panics in
