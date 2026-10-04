@@ -123,6 +123,35 @@ test("intrinsically Boolean JSX conditions leave an empty virtual slot", async (
   expect(conditional.shortCircuit).toBe(true);
 });
 
+test("Boolean hook slots require a Boolean initializer and every setter", async () => {
+  const shared = `import { useState } from 'preact/hooks';
+    function Row() { return <section>Row</section>; }`;
+  const entry = await source(
+    "BooleanHook.tsx",
+    `${shared} export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main><Row/>{visible && <Row/>}<button onClick={() => setVisible(previous => !previous)}>Toggle</button></main>;
+    }`,
+  );
+  await expect(compile(entry)).resolves.toBeDefined();
+  const changedType = await source(
+    "ChangedHook.tsx",
+    `${shared} export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main><Row/>{visible && <Row/>}<button onClick={() => setVisible(0)}>Change type</button></main>;
+    }`,
+  );
+  await expect(compile(changedType)).rejects.toThrow(/otro hermano sin key/);
+  const shadowed = await source(
+    "ShadowedHook.tsx",
+    `${shared} export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main>{[false, 0].map(visible => visible && <Row/>)}</main>;
+    }`,
+  );
+  await expect(compile(shadowed)).rejects.toThrow(/map sin key.*tipo/);
+});
+
 test("Astro imports a Preact component, preserving props, state, events and list branches", async () => {
   const entry = await source(
     "Page.astro",

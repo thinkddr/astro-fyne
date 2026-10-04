@@ -171,6 +171,7 @@ class Compiler {
   private resources = new Map<string, BitmapResource>();
   private jsxReferences = new Map<string, string>();
   private reconciliationSources = new WeakMap<Node, ts.Node>();
+  private conditionalScopes = new WeakMap<Node, Scope>();
 
   constructor(private readonly options: CompileOptions) {}
 
@@ -594,7 +595,8 @@ class Compiler {
           this.fail(source, body, "Componente sin return declarativo.");
       } else component.body = await this.render(body, scope);
     }
-    this.validateSiblingIdentity(component.body, scope);
+    this.normalizeBooleanSlots(component);
+    this.validateReconciliation(component.body, scope);
     this.components.set(name, component);
     this.active.delete(name);
     return name;
@@ -1220,6 +1222,85 @@ class Compiler {
     );
   }
 
+  private normalizeBooleanSlots(component: Component): void {
+    const writes = new Map<string, Expr[]>();
+    const walk = (nodes: Node[], visit: (node: Node) => void): void => {
+      for (const node of nodes) {
+        visit(node);
+        if (node.kind === "element" || node.kind === "each")
+          walk(node.children, visit);
+        else if (node.kind === "conditional") {
+          walk(node.yes, visit);
+          walk(node.no, visit);
+        }
+      }
+    };
+    walk(component.body, (node) => {
+      if (node.kind !== "element") return;
+      for (const handler of Object.values(node.events))
+        for (const step of handler.steps)
+          if (step.kind === "set") {
+            const values = writes.get(step.name) ?? [];
+            values.push(...step.args);
+            writes.set(step.name, values);
+          }
+    });
+    // State is Boolean only when its initializer and every reachable setter
+    // produce an intrinsic Boolean result. A TypeScript annotation is not proof
+    // of the runtime values, and list parameters can shadow the state binding.
+    const names = new Set(
+      component.states
+        .filter(
+          (state) =>
+            this.alwaysBoolean(state.initial) &&
+            (writes.get(state.name) ?? []).every((value) =>
+              this.alwaysBoolean(value),
+            ),
+        )
+        .map((state) => state.name),
+    );
+    for (const constant of component.constants)
+      if (this.alwaysBoolean(constant.value)) names.add(constant.name);
+    walk(component.body, (node) => {
+      if (
+        node.kind === "conditional" &&
+        node.shortCircuit &&
+        node.test.kind === "name" &&
+        names.has(node.test.name) &&
+        !this.conditionalScopes.get(node)?.listShadows.has(node.test.name)
+      )
+        node.no = [];
+    });
+  }
+
+  private validateReconciliation(nodes: Node[], scope: Scope): void {
+    this.validateSiblingIdentity(nodes, scope);
+    for (const node of nodes) {
+      if (node.kind === "element")
+        this.validateReconciliation(node.children, scope);
+      else if (node.kind === "conditional") {
+        this.validateReconciliation(node.yes, scope);
+        this.validateReconciliation(node.no, scope);
+      } else if (node.kind === "each") {
+        if (!node.key && this.virtualTypes(node.children).size > 1)
+          this.fail(
+            scope.source,
+            this.reconciliationSources.get(node) ?? scope.source.ts,
+            "Un map sin key que cambia el tipo de sus filas necesita reconciliación virtual entre hermanos de la lista.",
+            scope,
+          );
+        if (node.key && !this.hasSinglePhysicalRoot(node.children))
+          this.fail(
+            scope.source,
+            this.reconciliationSources.get(node) ?? scope.source.ts,
+            "El componente keyed debe producir una raíz física única en cada rama; fragmentos, listas y raíces vacías requieren grupos virtuales explícitos.",
+            scope,
+          );
+        this.validateReconciliation(node.children, scope);
+      }
+    }
+  }
+
   private async render(
     expression: ts.Expression,
     scope: Scope,
@@ -1258,6 +1339,7 @@ class Compiler {
         no,
       };
       this.reconciliationSources.set(result, node);
+      this.conditionalScopes.set(result, scope);
       return [result];
     }
     if (
@@ -1273,6 +1355,7 @@ class Compiler {
         no: this.alwaysBoolean(test) ? [] : [{ kind: "text", value: test }],
       };
       this.reconciliationSources.set(result, node);
+      this.conditionalScopes.set(result, scope);
       return [result];
     }
     if (
@@ -1428,31 +1511,17 @@ class Compiler {
       }
       const id = `${scope.component.name}_each${++this.nextID}`;
       const rendered = await this.render(body, childScope);
-      if (!key && this.virtualTypes(rendered).size > 1)
-        this.fail(
-          scope.source,
-          body,
-          "Un map sin key que cambia el tipo de sus filas necesita reconciliación virtual entre hermanos de la lista.",
-          scope,
-        );
-      if (key && !this.hasSinglePhysicalRoot(rendered))
-        this.fail(
-          scope.source,
-          body,
-          "El componente keyed debe producir una raíz física única en cada rama; fragmentos, listas y raíces vacías requieren grupos virtuales explícitos.",
-          scope,
-        );
-      return [
-        {
-          kind: "each",
-          id,
-          items: this.expr(node.expression.expression, scope),
-          item,
-          index,
-          ...(key ? { key } : {}),
-          children: rendered,
-        },
-      ];
+      const result: Node = {
+        kind: "each",
+        id,
+        items: this.expr(node.expression.expression, scope),
+        item,
+        index,
+        ...(key ? { key } : {}),
+        children: rendered,
+      };
+      this.reconciliationSources.set(result, body);
+      return [result];
     }
     return [{ kind: "text", value: this.expr(node, scope) }];
   }
@@ -1478,7 +1547,6 @@ class Compiler {
           nodes.push(...(await this.render(child.expression, scope)));
       } else nodes.push(...(await this.render(child, scope)));
     }
-    this.validateSiblingIdentity(nodes, scope);
     return nodes;
   }
 
@@ -2228,7 +2296,6 @@ class Compiler {
           located,
         );
     }
-    this.validateSiblingIdentity(nodes, scope);
     return nodes;
   }
 
