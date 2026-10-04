@@ -19,6 +19,9 @@ export function PrimitiveConformance() {
       <p id="number-nested">{String(Number([[phase]]))}</p>
       <p id="number-many">{String(Number([1, 2]))}</p>
       <p id="number-object">{String(Number({}))}</p>
+      <p id="child-nan">{Number([1, 2])}</p>
+      <p id="child-infinity">{Number("Infinity")}</p>
+      <p id="child-negative-zero">{Number("-0")}</p>
       <p id="number-valueof">{String(Number({ valueOf: null }))}</p>
       <p id="unary-array">{String(+([phase] as any))}</p>
       <p id="subtract-array">{String(([phase] as any) - 2)}</p>

@@ -162,7 +162,7 @@ and requires the comparator to fail. A release should report which scenarios act
 in CI and which remain untested, rather than applying a general fidelity badge to generated
 code. Failed or missing comparisons leave a profile uncertified.
 
-A separate primitive scenario compares 30 text fields over four real component states
+A separate primitive scenario compares 33 text fields over four real component states
 in Chromium and generated Go. Its coercion checks establish behavior rather than font
 pixel parity. The scale 2 geometry scenario captures the actual 320 × 240 logical canvas
 as 640 × 480 pixels in both renderers and checks the same zero-difference policy. It
