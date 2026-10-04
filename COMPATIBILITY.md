@@ -56,6 +56,18 @@ their source list, validated for duplicates before children render, and encoded 
 collisions from Unicode or path characters. A key change replaces the native object even
 when its explicit HTML ID stays the same. Mixed string/number keys or a key type change across
 renders are rejected until Preact's coercing identity rules have a complete native contract.
+The native reconciliation follows the pinned Preact sibling insertion order for the supported
+single-root rows. Focus follows the actual DOM movement in the Chromium profile: moving a
+focused subtree clears focus, while inserting or moving another sibling can preserve it.
+Programmatic activation and pointer taps have separate focus behavior and must be compared
+using the same gesture in both runtimes. General fragment and multi-root movement need
+additional virtual-node metadata before receiving this contract.
+
+Conditional branches with one compatible root preserve the same source position when both
+roots have the same component type or a matching fixed element structure. Component props can
+change while its hooks, native objects and focus remain mounted. Ambiguous fragment roots,
+changing child structure and dynamic nested sibling matching require a broader virtual-node
+reconciliation contract and produce diagnostics.
 
 The programmatic compiler API supports explicit package adapters. The initial CLI
 configuration only exposes entries and measurement files. Adapters must preserve a component's
@@ -90,6 +102,12 @@ incomplete or extra node measurements,
 viewport stretching and changes to a measured visual tree. The state label is scenario
 metadata; it does not establish that the correct application state was reached. Scenario
 assertions and the final image comparison establish that correspondence.
+
+Measured nodes also retain a typed signature of their evaluated source attributes, including
+classes and inline styles. A change to those values invalidates the frozen profile even when
+it does not change a native text or geometry field. Attributes are evaluated once during each
+render; computing the signature must not cause an extra host callback. This guard reports a
+missing profile, rather than supplying runtime CSS layout for arbitrary new states.
 
 `sourceHash` covers the compiler's recorded source dependency list, including embedded asset
 digests. It is not a signature of a running server or proof that an arbitrary URL serves

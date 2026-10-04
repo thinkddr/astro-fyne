@@ -72,13 +72,28 @@ cd native
 go mod tidy
 git diff --exit-code HEAD -- go.mod go.sum
 go vet ./...
-GOMAXPROCS=2 go test -p=2 -race ./...
-go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/web.png --native ../artifacts/native.png --out ../artifacts/diff.png | tee ../artifacts/comparison.json
-go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/images/web.png --native ../artifacts/images/native.png --out ../artifacts/images/diff.png | tee ../artifacts/images/comparison.json
-go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/reverse/native.png --native ../artifacts/reverse/web.png --out ../artifacts/reverse/web-diff.png | tee ../artifacts/reverse/web-comparison.json
-go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/reverse/native.png --native ../artifacts/reverse/roundtrip.png --out ../artifacts/reverse/roundtrip-diff.png | tee ../artifacts/reverse/roundtrip-comparison.json
-bun ../capture/compare-behavior.ts ../artifacts/web-behavior.json ../artifacts/native-behavior.json ../conformance-scenario.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH" | tee ../artifacts/behavior-comparison.json
-bun ../capture/compare-behavior.ts ../artifacts/web-keyed-behavior.json ../artifacts/native-keyed-behavior.json ../keyed-scenario.json "$task_keyed_source_hash" | tee ../artifacts/keyed-behavior-comparison.json
+# Keep independent comparisons as failure evidence even when another native test
+# fails. Every failure remains fatal; a missing capture also fails its own gate.
+task_native_test_status=0
+GOMAXPROCS=2 go test -p=2 -race ./... || task_native_test_status=$?
+task_comparison_status=0
+run_comparison() {
+  local task_result_path="$1"
+  shift
+  if "$@" | tee "$task_result_path"; then
+    return 0
+  else
+    task_comparison_status=1
+  fi
+}
+run_comparison ../artifacts/comparison.json go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/web.png --native ../artifacts/native.png --out ../artifacts/diff.png
+run_comparison ../artifacts/images/comparison.json go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/images/web.png --native ../artifacts/images/native.png --out ../artifacts/images/diff.png
+run_comparison ../artifacts/reverse/web-comparison.json go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/reverse/native.png --native ../artifacts/reverse/web.png --out ../artifacts/reverse/web-diff.png
+run_comparison ../artifacts/reverse/roundtrip-comparison.json go run ./visual/cmd/astro-fyne-compare --reference ../artifacts/reverse/native.png --native ../artifacts/reverse/roundtrip.png --out ../artifacts/reverse/roundtrip-diff.png
+run_comparison ../artifacts/behavior-comparison.json bun ../capture/compare-behavior.ts ../artifacts/web-behavior.json ../artifacts/native-behavior.json ../conformance-scenario.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH"
+run_comparison ../artifacts/keyed-behavior-comparison.json bun ../capture/compare-behavior.ts ../artifacts/web-keyed-behavior.json ../artifacts/native-keyed-behavior.json ../keyed-scenario.json "$task_keyed_source_hash"
+test "$task_native_test_status" -eq 0
+test "$task_comparison_status" -eq 0
 test -z "$(gofmt -l .)"
 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 cd ..
