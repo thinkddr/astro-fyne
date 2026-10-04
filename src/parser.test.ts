@@ -900,6 +900,79 @@ export function Page({save,t}) { const title=t('title'); const visible=Boolean(1
   expect(buttons[2]!.events.onClick!.steps[0]!.name).toBe("t");
 });
 
+test("object literal prototype properties cannot silently disappear from the IR", async () => {
+  for (const property of [
+    `__proto__: {label: 'inherited'}`,
+    `'__proto__': null`,
+    `__proto__: 7`,
+    `__proto__`,
+  ]) {
+    const entry = await source(
+      "Prototype.tsx",
+      `export function Page({__proto__}) {\n  const object = {${property}};\n  return <p>{String(object.label)}</p>;\n}`,
+    );
+    await expect(compile(entry)).rejects.toThrow(ConversionError);
+    await expect(compile(entry)).rejects.toThrow(
+      /Prototype\.tsx:2:19: La propiedad __proto__ en literales de objeto/,
+    );
+  }
+});
+
+test("ordinary own properties remain data in a prototype-free compiler dictionary", async () => {
+  const entry = await source(
+    "Properties.tsx",
+    `export function Page() {
+      const object = {constructor: 'own', toString: 3, valueOf: 7, hasOwnProperty: false};
+      return <p>{object.constructor}{String(object.toString)}{String(object.valueOf)}{String(object.hasOwnProperty)}</p>;
+    }`,
+  );
+  const compiled = await compile(entry);
+  const value = compiled.components[0]!.constants[0]!.value;
+  if (value.kind !== "object") throw new Error("missing object literal");
+  expect(Object.getPrototypeOf(value.entries)).toBeNull();
+  expect(Object.keys(value.entries)).toEqual([
+    "constructor",
+    "toString",
+    "valueOf",
+    "hasOwnProperty",
+  ]);
+  expect(Object.entries(value.entries)).toContainEqual([
+    "toString",
+    { kind: "literal", value: 3 },
+  ]);
+  expect(value.entries.absent).toBeUndefined();
+});
+
+test("primitive projections and object-to-primitive operators remain declarative expressions", async () => {
+  for (const expression of [
+    "Number([])",
+    "Number([null])",
+    "Number([1,2])",
+    "Number({})",
+    "String([])",
+    "String([null,undefined,[1,2]])",
+    "String({valueOf: 7})",
+    "String({toString: null})",
+    "[] + 1",
+    "1 + [2]",
+    "({}) + ''",
+    "[2] < [11]",
+    "[] <= [1]",
+    "'2' >= [11]",
+  ]) {
+    const entry = await source(
+      "Projection.tsx",
+      `export function Page() { return <p>{${expression}}</p>; }`,
+    );
+    const compiled = await compile(entry);
+    const root = compiled.components[0]!.body[0]!;
+    if (root.kind !== "element") throw new Error("missing paragraph");
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0]!.kind).toBe("text");
+    expect(compiled.actions).toEqual([]);
+  }
+});
+
 test("named handlers reject list shadows until lexical captures are qualified", async () => {
   for (const input of [
     `import {useState} from 'preact/hooks'; export function Page() { const [count,setCount]=useState(0); const items=[10]; const add=()=>setCount(count+1); return <main>{items.map(count=><button onClick={add} />)}</main>; }`,

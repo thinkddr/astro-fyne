@@ -992,8 +992,22 @@ class Compiler {
       };
     }
     if (ts.isObjectLiteralExpression(node)) {
-      const entries: Record<string, Expr> = {};
+      const entries: Record<string, Expr> = Object.create(null);
       for (const property of node.properties) {
+        if (
+          (ts.isShorthandPropertyAssignment(property) ||
+            ts.isPropertyAssignment(property)) &&
+          (ts.isIdentifier(property.name) ||
+            ts.isStringLiteral(property.name)) &&
+          property.name.text === "__proto__"
+        ) {
+          this.fail(
+            scope.source,
+            property.name,
+            "La propiedad __proto__ en literales de objeto está fuera del contrato de stage 01; usa una prop o un adaptador nativo explícito.",
+            scope,
+          );
+        }
         if (ts.isShorthandPropertyAssignment(property)) {
           entries[property.name.text] = this.expr(property.name, scope);
         } else if (

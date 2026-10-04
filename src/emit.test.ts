@@ -201,6 +201,34 @@ test("missing scalar props keep undefined semantics in emitted Go", async () => 
   );
 });
 
+test("array and ordinary object conversions use the native ECMAScript projection boundary", async () => {
+  const source = await program(`export function Page() { return <main>
+    <p>{Number([])}{Number([null])}{Number([1,2])}{Number({})}</p>
+    <p>{String([null,undefined,[1,2]])}{String({valueOf:7})}{String({toString:null})}</p>
+    <p>{[] + 1}{1 + [2]}{({}) + ''}{[2] < [11]}{[] <= [1]}{'2' >= [11]}</p>
+    <p>{String({constructor:'own',toString:3}.toString)}</p>
+  </main>; }`);
+  const go = emitGo(source, options);
+  for (const expression of [
+    "webui.Number([]any{})",
+    "webui.Number([]any{nil})",
+    "webui.Number([]any{float64(1), float64(2)})",
+    "webui.Number(webui.Scope{})",
+    "webui.String([]any{nil, webui.Undefined, []any{float64(1), float64(2)}})",
+    'webui.String(webui.Scope{"valueOf": float64(7)})',
+    'webui.String(webui.Scope{"toString": nil})',
+    'webui.Binary("+", []any{}, float64(1))',
+    'webui.Binary("+", float64(1), []any{float64(2)})',
+    'webui.Binary("+", webui.Scope{}, "")',
+    'webui.Binary("<", []any{float64(2)}, []any{float64(11)})',
+    'webui.Binary("<=", []any{}, []any{float64(1)})',
+    'webui.Binary(">=", "2", []any{float64(11)})',
+    'webui.String(webui.Get(webui.Scope{"constructor": "own", "toString": float64(3)}, "toString"))',
+  ]) {
+    expect(go).toContain(`webui.ChildText(${expression})`);
+  }
+});
+
 test("the generated constructor reports invalid native trees before returning a widget", async () => {
   const source = await program(
     `export function Page() { return <p>Hola</p>; }`,
