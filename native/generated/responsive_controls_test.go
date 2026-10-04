@@ -56,7 +56,7 @@ func controlsTap(t *testing.T, view *ResponsiveControlsWidget, target software.W
 	if err != nil {
 		t.Fatal(err)
 	}
-	rectangles, err := flexSnapshotRectangles(snapshot)
+	rectangles, err := responsiveSnapshotRectangles(snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestGeneratedResponsiveControlsPointerTypingResizeAndCommit(t *testing.T) {
 		if state.Measured || state.Size != fyne.NewSize(float32(width), 320) {
 			t.Fatal("controls layout must be source-only at its actual viewport")
 		}
-		rectangles, err := flexSnapshotRectangles(state)
+		rectangles, err := responsiveSnapshotRectangles(state)
 		if err != nil {
 			t.Fatal(err)
 		}

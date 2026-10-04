@@ -124,7 +124,7 @@ func TestGeneratedResponsiveBitmapResizesWithoutMeasurements(t *testing.T) {
 			if snapshot.Measured || snapshot.Size != size || snapshot.HasFocus {
 				t.Fatal("bitmap must remain an unmeasured source-only unfocused frame")
 			}
-			rectangles, err := flexSnapshotRectangles(snapshot)
+			rectangles, err := responsiveSnapshotRectangles(snapshot)
 			if err != nil {
 				t.Fatal(err)
 			}
