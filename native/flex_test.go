@@ -142,6 +142,38 @@ func TestResponsiveFlexValidatesUsedBorderAtTheActualCanvasScale(t *testing.T) {
 	}
 }
 
+func TestResponsiveFlexViewportClipsFixedRootAndDecorationFloor(t *testing.T) {
+	root := flexTestRoot(160)
+	root.Style.Background = "#ff0000"
+	root.Style.PaddingLeft, root.Style.PaddingRight = 40, 40
+	v := NewView(func() []Node { return []Node{root} })
+	canvas := software.NewCanvas()
+	canvas.SetPadded(false)
+	canvas.SetContent(v)
+	if err := v.BindCanvas(canvas); err != nil {
+		t.Fatal(err)
+	}
+	if v.MinSize() != fyne.NewSize(0, 0) {
+		t.Fatalf("responsive viewport inherited its root's CSS minimum: %v", v.MinSize())
+	}
+	// This proves native host clipping; it does not implement the browser's
+	// document scrollbars or certify reverse export of overflowing scenes.
+	for _, viewport := range []fyne.Size{fyne.NewSize(100, 100), fyne.NewSize(32, 40), fyne.NewSize(100, 100)} {
+		canvas.Resize(viewport)
+		frame := canvas.Capture()
+		if v.Error() != nil || canvas.Size() != viewport || v.Size() != viewport {
+			t.Fatalf("fixed root forced a larger native viewport: canvas=%v view=%v want=%v error=%v", canvas.Size(), v.Size(), viewport, v.Error())
+		}
+		if frame.Bounds().Dx() != int(viewport.Width) || frame.Bounds().Dy() != int(viewport.Height) {
+			t.Fatalf("capture grew to the root rather than clipping at the host viewport: %v", frame.Bounds())
+		}
+		flexTestFrame(t, v, "root", 0, 0, max(viewport.Width, 80), 160)
+		if rgba(frame.At(int(viewport.Width)-1, int(viewport.Height)-1)) != (color.NRGBA{R: 255, A: 255}) {
+			t.Fatal("the overflowing root did not paint through the host's visible bottom-right pixel")
+		}
+	}
+}
+
 func TestResponsiveFlexPartialFactorsLeaveFreeSpaceAndShrinkOnlyRequestedFraction(t *testing.T) {
 	for _, test := range []struct {
 		name                                                    string

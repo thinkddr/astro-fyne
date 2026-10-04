@@ -692,12 +692,14 @@ type viewRenderer struct {
 func (r *viewRenderer) Destroy()                     {}
 func (r *viewRenderer) Objects() []fyne.CanvasObject { return r.objects }
 func (r *viewRenderer) MinSize() fyne.Size {
+	if r.view.responsive && len(r.view.measurements) == 0 {
+		// The viewport is not a flex item. A fixed-height page or a root whose
+		// padding floor exceeds the viewport may overflow and be clipped by its
+		// native host; neither constraint may force the window to grow.
+		return fyne.NewSize(0, 0)
+	}
 	if r.view.viewport.Width > 0 {
 		return r.view.viewport
-	}
-	if r.view.responsive && len(r.view.roots) == 1 {
-		s := r.view.roots[0].style
-		return fyne.NewSize(horizontalDecoration(s), max(s.Height, verticalDecoration(s)))
 	}
 	return flowMin(r.objects, false, 0)
 }
