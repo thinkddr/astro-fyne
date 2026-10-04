@@ -28,35 +28,35 @@ import (
 )
 
 type typographyProbeConfig struct {
-	Schema int `json:"schema"`
-	ID string `json:"id"`
-	Fixture string `json:"fixture"`
+	Schema   int    `json:"schema"`
+	ID       string `json:"id"`
+	Fixture  string `json:"fixture"`
 	Viewport struct {
-		Width int `json:"width"`
+		Width  int `json:"width"`
 		Height int `json:"height"`
 	} `json:"viewport"`
 	Scales []int `json:"scales"`
-	Font struct {
-		Family string `json:"family"`
-		WebSrc string `json:"webSrc"`
-		Path string `json:"path"`
-		Weight int `json:"weight"`
-		Style string `json:"style"`
-		Size float32 `json:"size"`
+	Font   struct {
+		Family     string  `json:"family"`
+		WebSrc     string  `json:"webSrc"`
+		Path       string  `json:"path"`
+		Weight     int     `json:"weight"`
+		Style      string  `json:"style"`
+		Size       float32 `json:"size"`
 		LineHeight float32 `json:"lineHeight"`
 	} `json:"font"`
-	Foreground string `json:"foreground"`
-	Background string `json:"background"`
-	Samples []typographyProbeSample `json:"samples"`
+	Foreground string                  `json:"foreground"`
+	Background string                  `json:"background"`
+	Samples    []typographyProbeSample `json:"samples"`
 }
 
 type typographyProbeSample struct {
-	ID string `json:"id"`
-	Text string `json:"text"`
-	X float32 `json:"x"`
-	Y float32 `json:"y"`
-	Width float32 `json:"width"`
-	Height float32 `json:"height"`
+	ID       string   `json:"id"`
+	Text     string   `json:"text"`
+	X        float32  `json:"x"`
+	Y        float32  `json:"y"`
+	Width    float32  `json:"width"`
+	Height   float32  `json:"height"`
 	FontSize *float32 `json:"fontSize,omitempty"`
 }
 
@@ -66,13 +66,13 @@ type typographyPoint struct {
 }
 
 type typographySize struct {
-	Width float32 `json:"width"`
+	Width  float32 `json:"width"`
 	Height float32 `json:"height"`
 }
 
 type typographyDriverMetrics struct {
-	Width float32 `json:"width"`
-	Height float32 `json:"height"`
+	Width    float32 `json:"width"`
+	Height   float32 `json:"height"`
 	Baseline float32 `json:"baseline"`
 }
 
@@ -82,79 +82,79 @@ type typographyPixelOrigin struct {
 }
 
 type typographyTextEvidence struct {
-	NodeID string `json:"nodeID"`
-	Text string `json:"text"`
-	FontHash string `json:"fontHash"`
-	FontResourceName string `json:"fontResourceName"`
-	FontSize float32 `json:"fontSize"`
-	LineHeight float32 `json:"lineHeight"`
-	TextStyle fyne.TextStyle `json:"textStyle"`
-	LineBox typographyProbeSample `json:"lineBox"`
-	LocalPosition typographyPoint `json:"localPosition"`
-	AbsolutePosition typographyPoint `json:"absolutePosition"`
-	CanvasTextSize typographySize `json:"canvasTextSize"`
-	BackendMeasure typographySize `json:"backendMeasure"`
-	DriverText typographyDriverMetrics `json:"driverText"`
-	DriverH typographyDriverMetrics `json:"driverH"`
-	DriverSpace typographyDriverMetrics `json:"driverSpace"`
-	RoundedProbeAscent float32 `json:"roundedProbeAscent"`
-	ProbeHeightMinusBaseline float32 `json:"probeHeightMinusBaseline"`
-	RoundedProbeDescentAndGap float32 `json:"roundedProbeDescentAndGap"`
-	HalfLeading float32 `json:"halfLeading"`
-	IntendedLogicalBaseline float32 `json:"intendedLogicalBaseline"`
-	PlacedProbeBaseline float32 `json:"placedProbeBaseline"`
-	ScaledPosition typographyPoint `json:"scaledPosition"`
-	PhysicalOrigin *typographyPixelOrigin `json:"physicalOrigin,omitempty"`
-	OriginDerivation string `json:"originDerivation"`
-	CeilOrigin typographyPixelOrigin `json:"ceilOrigin"`
-	NearestOrigin typographyPixelOrigin `json:"nearestOrigin"`
+	NodeID                    string                  `json:"nodeID"`
+	Text                      string                  `json:"text"`
+	FontHash                  string                  `json:"fontHash"`
+	FontResourceName          string                  `json:"fontResourceName"`
+	FontSize                  float32                 `json:"fontSize"`
+	LineHeight                float32                 `json:"lineHeight"`
+	TextStyle                 fyne.TextStyle          `json:"textStyle"`
+	LineBox                   typographyProbeSample   `json:"lineBox"`
+	LocalPosition             typographyPoint         `json:"localPosition"`
+	AbsolutePosition          typographyPoint         `json:"absolutePosition"`
+	CanvasTextSize            typographySize          `json:"canvasTextSize"`
+	BackendMeasure            typographySize          `json:"backendMeasure"`
+	DriverText                typographyDriverMetrics `json:"driverText"`
+	DriverH                   typographyDriverMetrics `json:"driverH"`
+	DriverSpace               typographyDriverMetrics `json:"driverSpace"`
+	RoundedProbeAscent        float32                 `json:"roundedProbeAscent"`
+	ProbeHeightMinusBaseline  float32                 `json:"probeHeightMinusBaseline"`
+	RoundedProbeDescentAndGap float32                 `json:"roundedProbeDescentAndGap"`
+	HalfLeading               float32                 `json:"halfLeading"`
+	IntendedLogicalBaseline   float32                 `json:"intendedLogicalBaseline"`
+	PlacedProbeBaseline       float32                 `json:"placedProbeBaseline"`
+	ScaledPosition            typographyPoint         `json:"scaledPosition"`
+	PhysicalOrigin            *typographyPixelOrigin  `json:"physicalOrigin,omitempty"`
+	OriginDerivation          string                  `json:"originDerivation"`
+	CeilOrigin                typographyPixelOrigin   `json:"ceilOrigin"`
+	NearestOrigin             typographyPixelOrigin   `json:"nearestOrigin"`
 }
 
 type typographyProbeFrame struct {
-	Schema int `json:"schema"`
-	ID string `json:"id"`
-	FrameID string `json:"frameID"`
-	SourceHash string `json:"sourceHash"`
-	ProbeHash string `json:"probeHash"`
-	FixtureHash string `json:"fixtureHash"`
-	FontHash string `json:"fontHash"`
-	Variant string `json:"variant"`
-	OriginQuantization string `json:"originQuantization"`
-	Viewport flexViewport `json:"viewport"`
-	Texts []typographyTextEvidence `json:"texts"`
-	PNGHash string `json:"pngHash"`
-	RGBAHash string `json:"rgbaHash"`
-	DiagnosticOnly bool `json:"diagnosticOnly"`
-	PixelPerfectVerified bool `json:"pixelPerfectVerified"`
+	Schema               int                      `json:"schema"`
+	ID                   string                   `json:"id"`
+	FrameID              string                   `json:"frameID"`
+	SourceHash           string                   `json:"sourceHash"`
+	ProbeHash            string                   `json:"probeHash"`
+	FixtureHash          string                   `json:"fixtureHash"`
+	FontHash             string                   `json:"fontHash"`
+	Variant              string                   `json:"variant"`
+	OriginQuantization   string                   `json:"originQuantization"`
+	Viewport             flexViewport             `json:"viewport"`
+	Texts                []typographyTextEvidence `json:"texts"`
+	PNGHash              string                   `json:"pngHash"`
+	RGBAHash             string                   `json:"rgbaHash"`
+	DiagnosticOnly       bool                     `json:"diagnosticOnly"`
+	PixelPerfectVerified bool                     `json:"pixelPerfectVerified"`
 }
 
 // The sidecar receives actual canvas.Text inputs, not guessed nominal glyph IDs.
 type typographyTraceCase struct {
-	FrameID string `json:"frameID"`
-	NodeID string `json:"nodeID"`
-	Purpose string `json:"purpose"`
-	Text string `json:"text"`
-	FontSize float32 `json:"fontSize"`
-	Scale float32 `json:"scale"`
-	TextStyle fyne.TextStyle `json:"textStyle"`
+	FrameID         string                  `json:"frameID"`
+	NodeID          string                  `json:"nodeID"`
+	Purpose         string                  `json:"purpose"`
+	Text            string                  `json:"text"`
+	FontSize        float32                 `json:"fontSize"`
+	Scale           float32                 `json:"scale"`
+	TextStyle       fyne.TextStyle          `json:"textStyle"`
 	ExpectedMetrics typographyDriverMetrics `json:"expectedMetrics"`
-	PhysicalOrigin *typographyPixelOrigin `json:"physicalOrigin,omitempty"`
+	PhysicalOrigin  *typographyPixelOrigin  `json:"physicalOrigin,omitempty"`
 }
 
 type typographyTraceInput struct {
-	Schema int `json:"schema"`
-	ID string `json:"id"`
-	SourceHash string `json:"sourceHash"`
-	ProbeHash string `json:"probeHash"`
-	FixtureHash string `json:"fixtureHash"`
-	FontHash string `json:"fontHash"`
-	FontPath string `json:"fontPath"`
-	FontResourceName string `json:"fontResourceName"`
-	Variant string `json:"variant"`
-	OriginQuantization string `json:"originQuantization"`
-	DiagnosticOnly bool `json:"diagnosticOnly"`
-	PixelPerfectVerified bool `json:"pixelPerfectVerified"`
-	Cases []typographyTraceCase `json:"cases"`
+	Schema               int                   `json:"schema"`
+	ID                   string                `json:"id"`
+	SourceHash           string                `json:"sourceHash"`
+	ProbeHash            string                `json:"probeHash"`
+	FixtureHash          string                `json:"fixtureHash"`
+	FontHash             string                `json:"fontHash"`
+	FontPath             string                `json:"fontPath"`
+	FontResourceName     string                `json:"fontResourceName"`
+	Variant              string                `json:"variant"`
+	OriginQuantization   string                `json:"originQuantization"`
+	DiagnosticOnly       bool                  `json:"diagnosticOnly"`
+	PixelPerfectVerified bool                  `json:"pixelPerfectVerified"`
+	Cases                []typographyTraceCase `json:"cases"`
 }
 
 func typographyHash(data []byte) string {
@@ -333,9 +333,9 @@ func TestTypographyProbeSoftwareCanvasEvidence(t *testing.T) {
 				}
 				measure := backend.Measure(text.Text, style)
 				ascent := float32(math.Round(float64(hMetric.Baseline)))
-				descentAndGap := hMetric.Height-hMetric.Baseline
+				descentAndGap := hMetric.Height - hMetric.Baseline
 				roundedDescentAndGap := float32(math.Round(float64(descentAndGap)))
-				halfLeading := float32(math.Floor(float64(style.LineHeight-ascent-roundedDescentAndGap)/2))
+				halfLeading := float32(math.Floor(float64(style.LineHeight-ascent-roundedDescentAndGap) / 2))
 				scaledX, scaledY := absolute.X*float32(scale), absolute.Y*float32(scale)
 				ceilOrigin := typographyPixelOrigin{int(math.Ceil(float64(scaledX))), int(math.Ceil(float64(scaledY)))}
 				nearestOrigin := typographyPixelOrigin{int(math.Round(float64(scaledX))), int(math.Round(float64(scaledY)))}
@@ -351,13 +351,13 @@ func TestTypographyProbeSoftwareCanvasEvidence(t *testing.T) {
 					CanvasTextSize: typographySize{size.Width, size.Height}, BackendMeasure: typographySize{measure.Width, measure.Height},
 					DriverText: textMetric, DriverH: hMetric, DriverSpace: spaceMetric, RoundedProbeAscent: ascent,
 					ProbeHeightMinusBaseline: descentAndGap, RoundedProbeDescentAndGap: roundedDescentAndGap, HalfLeading: halfLeading,
-					IntendedLogicalBaseline: root.Position().Y+sample.Y+halfLeading+ascent, PlacedProbeBaseline: absolute.Y+hMetric.Baseline,
+					IntendedLogicalBaseline: root.Position().Y + sample.Y + halfLeading + ascent, PlacedProbeBaseline: absolute.Y + hMetric.Baseline,
 					ScaledPosition: typographyPoint{scaledX, scaledY}, PhysicalOrigin: origin,
 					OriginDerivation: "verified software painter formula applied to actual canvas.Text position; not inferred from ink bounds",
-					CeilOrigin: ceilOrigin, NearestOrigin: nearestOrigin})
+					CeilOrigin:       ceilOrigin, NearestOrigin: nearestOrigin})
 				for _, probe := range []struct {
 					purpose string
-					value string
+					value   string
 					metrics typographyDriverMetrics
 				}{{"text", text.Text, textMetric}, {"H", "H", hMetric}, {"space", " ", spaceMetric}} {
 					var paintedOrigin *typographyPixelOrigin

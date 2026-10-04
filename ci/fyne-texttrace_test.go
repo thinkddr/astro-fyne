@@ -24,8 +24,8 @@ import (
 )
 
 type astroTextMetrics struct {
-	Width float32 `json:"width"`
-	Height float32 `json:"height"`
+	Width    float32 `json:"width"`
+	Height   float32 `json:"height"`
 	Baseline float32 `json:"baseline"`
 }
 
@@ -35,113 +35,113 @@ type astroPixelOrigin struct {
 }
 
 type astroTextCase struct {
-	FrameID string `json:"frameID"`
-	NodeID string `json:"nodeID"`
-	Purpose string `json:"purpose"`
-	Text string `json:"text"`
-	FontSize float32 `json:"fontSize"`
-	Scale float32 `json:"scale"`
-	TextStyle fyne.TextStyle `json:"textStyle"`
-	ExpectedMetrics astroTextMetrics `json:"expectedMetrics"`
-	PhysicalOrigin *astroPixelOrigin `json:"physicalOrigin,omitempty"`
+	FrameID         string            `json:"frameID"`
+	NodeID          string            `json:"nodeID"`
+	Purpose         string            `json:"purpose"`
+	Text            string            `json:"text"`
+	FontSize        float32           `json:"fontSize"`
+	Scale           float32           `json:"scale"`
+	TextStyle       fyne.TextStyle    `json:"textStyle"`
+	ExpectedMetrics astroTextMetrics  `json:"expectedMetrics"`
+	PhysicalOrigin  *astroPixelOrigin `json:"physicalOrigin,omitempty"`
 }
 
 type astroTextInput struct {
-	Schema int `json:"schema"`
-	ID string `json:"id"`
-	SourceHash string `json:"sourceHash"`
-	ProbeHash string `json:"probeHash"`
-	FixtureHash string `json:"fixtureHash"`
-	FontHash string `json:"fontHash"`
-	FontPath string `json:"fontPath"`
-	FontResourceName string `json:"fontResourceName"`
-	Variant string `json:"variant"`
-	OriginQuantization string `json:"originQuantization"`
-	DiagnosticOnly bool `json:"diagnosticOnly"`
-	PixelPerfectVerified bool `json:"pixelPerfectVerified"`
-	Cases []astroTextCase `json:"cases"`
+	Schema               int             `json:"schema"`
+	ID                   string          `json:"id"`
+	SourceHash           string          `json:"sourceHash"`
+	ProbeHash            string          `json:"probeHash"`
+	FixtureHash          string          `json:"fixtureHash"`
+	FontHash             string          `json:"fontHash"`
+	FontPath             string          `json:"fontPath"`
+	FontResourceName     string          `json:"fontResourceName"`
+	Variant              string          `json:"variant"`
+	OriginQuantization   string          `json:"originQuantization"`
+	DiagnosticOnly       bool            `json:"diagnosticOnly"`
+	PixelPerfectVerified bool            `json:"pixelPerfectVerified"`
+	Cases                []astroTextCase `json:"cases"`
 }
 
 type astroTextBounds struct {
-	Ascent int32 `json:"ascent"`
+	Ascent  int32 `json:"ascent"`
 	Descent int32 `json:"descent"`
-	Gap int32 `json:"gap"`
+	Gap     int32 `json:"gap"`
 }
 
 type astroGlyphTrace struct {
-	ID uint32 `json:"id"`
-	TextIndex int `json:"textIndex"`
-	RunesCount int `json:"runesCount"`
-	GlyphsCount int `json:"glyphsCount"`
-	Mask uint32 `json:"mask"`
-	Advance int32 `json:"advance"`
-	XAdvance int32 `json:"xAdvance"`
-	YAdvance int32 `json:"yAdvance"`
-	XOffset int32 `json:"xOffset"`
-	YOffset int32 `json:"yOffset"`
-	XBearing int32 `json:"xBearing"`
-	YBearing int32 `json:"yBearing"`
-	Width int32 `json:"width"`
-	Height int32 `json:"height"`
+	ID          uint32 `json:"id"`
+	TextIndex   int    `json:"textIndex"`
+	RunesCount  int    `json:"runesCount"`
+	GlyphsCount int    `json:"glyphsCount"`
+	Mask        uint32 `json:"mask"`
+	Advance     int32  `json:"advance"`
+	XAdvance    int32  `json:"xAdvance"`
+	YAdvance    int32  `json:"yAdvance"`
+	XOffset     int32  `json:"xOffset"`
+	YOffset     int32  `json:"yOffset"`
+	XBearing    int32  `json:"xBearing"`
+	YBearing    int32  `json:"yBearing"`
+	Width       int32  `json:"width"`
+	Height      int32  `json:"height"`
 }
 
 type astroRunTrace struct {
-	RuneOffset int `json:"runeOffset"`
-	RuneCount int `json:"runeCount"`
-	VisualIndex int32 `json:"visualIndex"`
-	Direction uint8 `json:"direction"`
-	Size int32 `json:"size"`
-	Advance int32 `json:"advance"`
-	LineBounds astroTextBounds `json:"lineBounds"`
-	GlyphBounds astroTextBounds `json:"glyphBounds"`
-	FontHash string `json:"fontHash"`
-	UnitsPerEm uint16 `json:"unitsPerEm"`
-	RunX float32 `json:"runX"`
-	SharedScaledAscent float32 `json:"sharedScaledAscent"`
-	TextureRunOrigin astroPixelOrigin `json:"textureRunOrigin"`
+	RuneOffset          int               `json:"runeOffset"`
+	RuneCount           int               `json:"runeCount"`
+	VisualIndex         int32             `json:"visualIndex"`
+	Direction           uint8             `json:"direction"`
+	Size                int32             `json:"size"`
+	Advance             int32             `json:"advance"`
+	LineBounds          astroTextBounds   `json:"lineBounds"`
+	GlyphBounds         astroTextBounds   `json:"glyphBounds"`
+	FontHash            string            `json:"fontHash"`
+	UnitsPerEm          uint16            `json:"unitsPerEm"`
+	RunX                float32           `json:"runX"`
+	SharedScaledAscent  float32           `json:"sharedScaledAscent"`
+	TextureRunOrigin    astroPixelOrigin  `json:"textureRunOrigin"`
 	ViewportRunBaseline *astroPixelOrigin `json:"viewportRunBaseline,omitempty"`
-	Glyphs []astroGlyphTrace `json:"glyphs"`
+	Glyphs              []astroGlyphTrace `json:"glyphs"`
 }
 
 type astroCaseTrace struct {
-	Input astroTextCase `json:"input"`
-	RequestedSize26_6 int32 `json:"requestedSize26_6"`
-	EffectiveShaperPixels int `json:"effectiveShaperPixels"`
-	Measured astroTextMetrics `json:"measured"`
-	ScaledAdvance float32 `json:"scaledAdvance"`
-	ReturnedLogicalHeight float32 `json:"returnedLogicalHeight"`
-	ReturnedLogicalBaseline float32 `json:"returnedLogicalBaseline"`
-	Runs []astroRunTrace `json:"runs"`
+	Input                   astroTextCase    `json:"input"`
+	RequestedSize26_6       int32            `json:"requestedSize26_6"`
+	EffectiveShaperPixels   int              `json:"effectiveShaperPixels"`
+	Measured                astroTextMetrics `json:"measured"`
+	ScaledAdvance           float32          `json:"scaledAdvance"`
+	ReturnedLogicalHeight   float32          `json:"returnedLogicalHeight"`
+	ReturnedLogicalBaseline float32          `json:"returnedLogicalBaseline"`
+	Runs                    []astroRunTrace  `json:"runs"`
 }
 
 type astroFontExtents struct {
-	UnitsPerEm uint16 `json:"unitsPerEm"`
-	Available bool `json:"available"`
-	Ascender float32 `json:"ascender"`
-	Descender float32 `json:"descender"`
-	LineGap float32 `json:"lineGap"`
+	UnitsPerEm uint16  `json:"unitsPerEm"`
+	Available  bool    `json:"available"`
+	Ascender   float32 `json:"ascender"`
+	Descender  float32 `json:"descender"`
+	LineGap    float32 `json:"lineGap"`
 }
 
 type astroTextTrace struct {
-	Schema int `json:"schema"`
-	ID string `json:"id"`
-	InputHash string `json:"inputHash"`
-	SourceHash string `json:"sourceHash"`
-	ProbeHash string `json:"probeHash"`
-	FixtureHash string `json:"fixtureHash"`
-	FontHash string `json:"fontHash"`
-	FontResourceName string `json:"fontResourceName"`
-	Variant string `json:"variant"`
-	OriginQuantization string `json:"originQuantization"`
-	MetricUnits string `json:"metricUnits"`
-	RunPlacementUnits string `json:"runPlacementUnits"`
-	FontExtentUnits string `json:"fontExtentUnits"`
-	ShaperSizeDerivation string `json:"shaperSizeDerivation"`
-	Kernel string `json:"kernel"`
-	FontExtents astroFontExtents `json:"fontExtents"`
-	Cases []astroCaseTrace `json:"cases"`
-	DiagnosticOnly bool `json:"diagnosticOnly"`
-	PixelPerfectVerified bool `json:"pixelPerfectVerified"`
+	Schema               int              `json:"schema"`
+	ID                   string           `json:"id"`
+	InputHash            string           `json:"inputHash"`
+	SourceHash           string           `json:"sourceHash"`
+	ProbeHash            string           `json:"probeHash"`
+	FixtureHash          string           `json:"fixtureHash"`
+	FontHash             string           `json:"fontHash"`
+	FontResourceName     string           `json:"fontResourceName"`
+	Variant              string           `json:"variant"`
+	OriginQuantization   string           `json:"originQuantization"`
+	MetricUnits          string           `json:"metricUnits"`
+	RunPlacementUnits    string           `json:"runPlacementUnits"`
+	FontExtentUnits      string           `json:"fontExtentUnits"`
+	ShaperSizeDerivation string           `json:"shaperSizeDerivation"`
+	Kernel               string           `json:"kernel"`
+	FontExtents          astroFontExtents `json:"fontExtents"`
+	Cases                []astroCaseTrace `json:"cases"`
+	DiagnosticOnly       bool             `json:"diagnosticOnly"`
+	PixelPerfectVerified bool             `json:"pixelPerfectVerified"`
 }
 
 func astroTextHash(data []byte) string {
@@ -206,13 +206,13 @@ func TestAstroFyneTextTrace(t *testing.T) {
 		ProbeHash: input.ProbeHash, FixtureHash: input.FixtureHash, FontHash: input.FontHash, FontResourceName: input.FontResourceName,
 		Variant: input.Variant, OriginQuantization: input.OriginQuantization, MetricUnits: "signed integer 26.6 logical pixels",
 		RunPlacementUnits: "physical pixels; runX/sharedScaledAscent are pre-integer values",
-		FontExtentUnits: "unscaled font units", ShaperSizeDerivation: "typesetting v0.3.4 uses input.Size.Ceil() for its Harfbuzz scale",
+		FontExtentUnits:   "unscaled font units", ShaperSizeDerivation: "typesetting v0.3.4 uses input.Size.Ceil() for its Harfbuzz scale",
 		Kernel: "fyne.io/fyne/v2/internal/painter.walkString", FontExtents: astroFontExtents{parsed.Upem(), extentsAvailable, extents.Ascender, extents.Descender, extents.LineGap},
 		Cases: []astroCaseTrace{}, DiagnosticOnly: true, PixelPerfectVerified: false}
 	seen := map[string]bool{}
 	groups := map[string]map[string]astroTextCase{}
 	for _, item := range input.Cases {
-		key := item.FrameID+"/"+item.NodeID+"/"+item.Purpose
+		key := item.FrameID + "/" + item.NodeID + "/" + item.Purpose
 		if seen[key] || item.NodeID == "" || !utf8.ValidString(item.Text) || item.Text == "" || strings.ContainsAny(item.Text, "\r\n\t") ||
 			math.IsNaN(float64(item.FontSize)) || math.IsInf(float64(item.FontSize), 0) || item.FontSize <= 0 || item.FontSize > 128 ||
 			(item.Scale != 1 && item.Scale != 2) || item.FrameID != fmt.Sprintf("scale-%d", int(item.Scale)) ||
@@ -220,7 +220,7 @@ func TestAstroFyneTextTrace(t *testing.T) {
 			t.Fatalf("invalid or duplicate captured text case %q", key)
 		}
 		seen[key] = true
-		groupKey := item.FrameID+"/"+item.NodeID
+		groupKey := item.FrameID + "/" + item.NodeID
 		if groups[groupKey] == nil {
 			groups[groupKey] = map[string]astroTextCase{}
 		}
@@ -229,14 +229,14 @@ func TestAstroFyneTextTrace(t *testing.T) {
 			item.Purpose == "text" && item.PhysicalOrigin == nil || item.Purpose != "text" && item.PhysicalOrigin != nil {
 			t.Fatalf("painted and metric-only origins are inconsistent for %q", key)
 		}
-		for _, r := range []rune(item.Text+"H ") {
+		for _, r := range []rune(item.Text + "H ") {
 			if glyph, ok := parsed.NominalGlyph(r); !ok || glyph == 0 {
 				t.Fatalf("probe font lacks U+%04X; fallback would invalidate the trace", r)
 			}
 		}
 		faces := CachedFontFace(item.TextStyle, resource, nil).Fonts
 		primary := faces.ResolveFace(' ')
-		for _, r := range item.Text+"H " {
+		for _, r := range item.Text + "H " {
 			if faces.ResolveFace(r) != primary {
 				t.Fatalf("the painter resolved an implicit fallback face for %q", key)
 			}
@@ -260,7 +260,7 @@ func TestAstroFyneTextTrace(t *testing.T) {
 				origin := astroPixelOrigin{int(x), int(math.Ceil(float64(y)))}
 				var viewportBaseline *astroPixelOrigin
 				if item.PhysicalOrigin != nil {
-					viewportBaseline = &astroPixelOrigin{item.PhysicalOrigin.X+origin.X, item.PhysicalOrigin.Y+origin.Y}
+					viewportBaseline = &astroPixelOrigin{item.PhysicalOrigin.X + origin.X, item.PhysicalOrigin.Y + origin.Y}
 				}
 				record := astroRunTrace{RuneOffset: run.Runes.Offset, RuneCount: run.Runes.Count, VisualIndex: run.VisualIndex,
 					Direction: uint8(run.Direction), Size: int32(run.Size), Advance: int32(run.Advance),

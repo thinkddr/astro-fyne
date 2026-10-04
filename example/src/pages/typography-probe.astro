@@ -21,6 +21,7 @@ const { probe, identity, font } = await readTypographyProbe(
   style={{ backgroundColor: probe.background }}
 >
   <head>
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Typography evidence</title>
     <style is:inline set:html={fontsCSS([font])}></style>

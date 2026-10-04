@@ -108,10 +108,38 @@ try {
           throw new Error(
             "Font bytes served to Chromium differ from the shared probe font",
           );
-      const evidence = await collectTypography(page, probe, identity, scale);
-      if (errors.length) throw new Error(errors.join("\n"));
       const directory = resolve(args.out, `scale-${scale}`);
       await mkdir(directory, { recursive: true });
+      let evidence;
+      try {
+        evidence = await collectTypography(page, probe, identity, scale);
+      } catch (error) {
+        await writeFile(
+          resolve(directory, "failed-dom.html"),
+          await page.content(),
+        );
+        await writeFile(
+          resolve(directory, "failed-page.json"),
+          JSON.stringify(
+            await page.evaluate(() => ({
+              characterSet: document.characterSet,
+              text: Array.from(
+                document.querySelectorAll("[data-typography-text]"),
+              ).map((element) => ({
+                text: element.textContent,
+                nodes: Array.from(element.childNodes).map((node) => ({
+                  type: node.nodeType,
+                  text: node.textContent,
+                })),
+              })),
+            })),
+            null,
+            2,
+          ) + "\n",
+        );
+        throw error;
+      }
+      if (errors.length) throw new Error(errors.join("\n"));
       const png = await page.screenshot({
         path: resolve(directory, "web.png"),
         animations: "disabled",
