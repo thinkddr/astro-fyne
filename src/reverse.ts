@@ -125,6 +125,9 @@ function fields(
   for (const key of Object.keys(value))
     if (!allowed.includes(key)) fail(`${path}.${key}`, "unknown field");
 }
+
+// Shared JSON guards for validators of exported-scene conformance evidence.
+export { record as sceneJSONRecord, fields as sceneJSONFields };
 function text(
   value: unknown,
   path: string,
