@@ -836,6 +836,26 @@ class Compiler {
     return expression;
   }
 
+  private isAmbientUndefined(node: ts.Node, scope: Scope): boolean {
+    if (!ts.isIdentifier(node) || node.text !== "undefined") return false;
+    if (
+      scope.names.has(node.text) ||
+      scope.bindings.has(node.text) ||
+      scope.substitutions.has(node.text) ||
+      scope.handlers.has(node.text) ||
+      scope.setters.has(node.text) ||
+      scope.source.imports.has(node.text) ||
+      scope.source.definitions.has(node.text)
+    )
+      this.fail(
+        scope.source,
+        node,
+        "undefined sombreado por un binding léxico; renómbralo o proporciona un adaptador nativo explícito.",
+        scope,
+      );
+    return true;
+  }
+
   private expr(expression: ts.Expression, scope: Scope): Expr {
     const node = this.unwrap(expression);
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
@@ -855,7 +875,7 @@ class Compiler {
     if (node.kind === ts.SyntaxKind.FalseKeyword) return literal(false);
     if (node.kind === ts.SyntaxKind.NullKeyword) return literal(null);
     if (ts.isIdentifier(node)) {
-      if (node.text === "undefined") return { kind: "undefined" };
+      if (this.isAmbientUndefined(node, scope)) return { kind: "undefined" };
       const substituted = scope.substitutions.get(node.text);
       if (substituted) return substituted;
       if (!scope.names.has(node.text)) {
@@ -1072,7 +1092,7 @@ class Compiler {
       node.kind === ts.SyntaxKind.NullKeyword ||
       node.kind === ts.SyntaxKind.FalseKeyword ||
       node.kind === ts.SyntaxKind.TrueKeyword ||
-      (ts.isIdentifier(node) && node.text === "undefined")
+      this.isAmbientUndefined(node, scope)
     )
       return [];
     if (ts.isJsxElement(node))
@@ -1120,6 +1140,13 @@ class Compiler {
         );
       }
       const callback = node.arguments[0]!;
+      if (this.hasModifier(callback, ts.SyntaxKind.AsyncKeyword))
+        this.fail(
+          scope.source,
+          callback,
+          "map async devuelve promesas; requiere un ciclo de vida asíncrono nativo explícito.",
+          scope,
+        );
       if (
         callback.parameters.length < 1 ||
         callback.parameters.length > 2 ||
@@ -1541,6 +1568,13 @@ class Compiler {
       source.exports.set(tag, tag);
     } else
       this.fail(scope.source, node, `Componente desconocido: ${tag}.`, scope);
+    if (children.length)
+      this.fail(
+        scope.source,
+        node,
+        "Hijos de componentes requieren un contrato nativo explícito; no se omiten durante la conversión.",
+        scope,
+      );
     const id = `${scope.component.name}_c${++this.nextID}`;
     return {
       kind: "component",
