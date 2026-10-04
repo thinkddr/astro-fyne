@@ -2,6 +2,7 @@
 // Compare generated web pages against actual native frames, without feeding
 // browser measurements back into the responsive native layout.
 import { chromium } from "playwright";
+import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { validateSceneDocument } from "../src/reverse.ts";
@@ -54,7 +55,27 @@ try {
         join(directory, "FlexReverse.reverse.report.json"),
         "utf8",
       ),
-    ) as { rootId: string };
+    ) as {
+      rootId: string;
+      generator: string;
+      schema: number;
+      direction: string;
+      sceneHash: string;
+    };
+    const sceneHash = createHash("sha256")
+      .update(JSON.stringify(scene))
+      .digest("hex");
+    if (
+      report.generator !== "astro-fyne" ||
+      report.schema !== 1 ||
+      report.direction !== "fyne-to-astro" ||
+      report.sceneHash !== sceneHash ||
+      typeof report.rootId !== "string" ||
+      !/^[A-Za-z][A-Za-z0-9_-]*$/.test(report.rootId)
+    )
+      throw new Error(
+        `${item.name}: inverse report does not match native scene`,
+      );
     const context = await browser.newContext({
       viewport: { width: item.width, height: item.height },
       deviceScaleFactor: item.scale,
@@ -139,6 +160,7 @@ try {
         JSON.stringify(
           {
             viewport: scene.viewport,
+            sceneHash,
             bounds,
             geometryTolerance: 1 / 64,
             maximumDelta,

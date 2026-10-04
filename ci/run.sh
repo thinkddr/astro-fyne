@@ -38,6 +38,10 @@ bun src/cli.ts analyze --config primitive-conformance.json > artifacts-primitive
 bun src/cli.ts analyze --config visual-scale2.json > artifacts-scale2-analysis.json
 bun src/cli.ts analyze --config responsive-flex.json > artifacts-responsive-flex-analysis.json
 export ASTRO_FYNE_RESPONSIVE_FLEX_SOURCE_HASH="$(bun -e 'console.log((await Bun.file("artifacts-responsive-flex-analysis.json").json()).sourceHash)')"
+# A process substitution would hide a failed producer from set -e. Resolve this
+# list once through a checked assignment so no visual gate can silently disappear.
+task_flex_cases="$(bun -e 'const scenario = await Bun.file("responsive-flex-scenario.json").json(); if (scenario.schema !== 1 || !Array.isArray(scenario.cases) || !scenario.cases.length) throw new Error("Missing flex cases"); const names = scenario.cases.map(item => item.name); if (new Set(names).size !== names.length || names.some(name => typeof name !== "string" || !/^[A-Za-z0-9_-]+$/.test(name))) throw new Error("Invalid flex case names"); console.log(names.join("\n"));')"
+test -n "$task_flex_cases"
 task_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-analysis.json").json()).sourceHash)')"
 task_image_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-image-analysis.json").json()).sourceHash)')"
 task_reverse_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-reverse-analysis.json").json()).sourceHash)')"
@@ -101,15 +105,20 @@ if [[ "$task_native_test_status" -eq 0 ]]; then
     bun src/cli.ts reverse --scene "artifacts/responsive-flex/$task_flex_case/scene.json" --out "example/src/pages/flex-reverse/$task_flex_case" --name FlexReverse --public-dir example/public
     bun src/cli.ts reverse --scene "artifacts/responsive-flex/$task_flex_case/scene.json" --out "example/src/pages/flex-reverse/$task_flex_case" --name FlexReverse --public-dir example/public --check
     cp "example/src/pages/flex-reverse/$task_flex_case/"FlexReverse.* "artifacts/responsive-flex/$task_flex_case/"
-  done < <(bun -e 'for (const item of (await Bun.file("responsive-flex-scenario.json").json()).cases) console.log(item.name)')
+  done <<< "$task_flex_cases"
   kill "$task_preview_pid"
   wait "$task_preview_pid" 2>/dev/null || true
   bunx --no-install astro build --root example
   bunx --no-install astro preview --root example --host 127.0.0.1 --port 4321 > /tmp/astro-fyne-preview.log 2>&1 &
   task_preview_pid=$!
   task_preview_ready=false
+  task_flex_first="${task_flex_cases%%$'\n'*}"
   for attempt in $(seq 1 60); do
-    if curl -fsS http://127.0.0.1:4321/responsive-flex >/dev/null; then
+    if ! kill -0 "$task_preview_pid" 2>/dev/null; then
+      cat /tmp/astro-fyne-preview.log >&2
+      exit 1
+    fi
+    if curl -fsS "http://127.0.0.1:4321/flex-reverse/$task_flex_first/FlexReverse" >/dev/null; then
       task_preview_ready=true
       break
     fi
@@ -144,7 +153,7 @@ while IFS= read -r task_flex_case; do
   task_flex_directory="../artifacts/responsive-flex/$task_flex_case"
   run_comparison "$task_flex_directory/comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_flex_directory/web.png" --native "$task_flex_directory/native.png" --out "$task_flex_directory/diff.png"
   run_comparison "$task_flex_directory/reverse-comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_flex_directory/native.png" --native "$task_flex_directory/reverse-web.png" --out "$task_flex_directory/reverse-diff.png"
-done < <(bun -e 'for (const item of (await Bun.file("../responsive-flex-scenario.json").json()).cases) console.log(item.name)')
+done <<< "$task_flex_cases"
 test "$task_native_test_status" -eq 0
 test "$task_comparison_status" -eq 0
 test -z "$(gofmt -l .)"

@@ -139,6 +139,11 @@ min/max constraints, the CSS cascade, external stylesheets or arbitrary percenta
 Unsupported declarations or tree shapes fail explicitly. Measured profiles keep their
 existing exact-viewport restriction.
 
+Active borders require an explicit `borderStyle: "solid"`, `borderWidth` and
+`borderColor`. Source border widths currently use whole CSS pixels; binding a canvas
+must also make each width a whole number of device pixels. Fractional used border
+widths require the CSS device-pixel snapping implementation before they can be accepted.
+
 The responsive corpus compares a rectangular layout through 224 → 368 → 512 → 368 → 224
 logical pixels at scale 1, then 224 pixels at scale 2, with a fixed height of 640 pixels.
 It includes distribution, growth, shrinkage, nested axes and cross alignment. Native

@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "generator": "astro-fyne",
+  "name": "ResponsiveFlex",
+  "sourceHash": "1404ed8d789fd4bd5115b7db5a154e79e02a2cb15954d3e85129ba890859be08",
+  "sources": [
+    {
+      "path": "example/src/components/ResponsiveFlexConformance.tsx",
+      "hash": "17e31c5580c825b9a09e23f1c315265a09a629e8981fdc2fcce6aedee3dc5752"
+    }
+  ],
+  "resources": [],
+  "actions": [],
+  "components": [
+    "ResponsiveFlexConformance_1ce4b50f"
+  ],
+  "compatibility": "declarative-stage-1",
+  "visual": {
+    "measured": false,
+    "pixelPerfectVerified": false
+  }
+}
