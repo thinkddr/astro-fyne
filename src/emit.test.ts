@@ -24,6 +24,29 @@ async function program(source: string) {
 
 const options = { name: "Page", packageName: "generated" };
 
+test("object initializer callbacks retain source order across integer-like keys", async () => {
+  const source = await program(`export function Page({t}) {
+    const record = {z:t('first'), '2':t('second'), '1':t('third')};
+    return <p>{String(record)}</p>;
+  }`);
+  const go = emitGo(source, options);
+  const first = go.indexOf('actions["t"]("first")');
+  const second = go.indexOf('actions["t"]("second")');
+  const third = go.indexOf('actions["t"]("third")');
+  expect(first).toBeGreaterThan(-1);
+  expect(second).toBeGreaterThan(first);
+  expect(third).toBeGreaterThan(second);
+  const object = source.components.find((item) => item.name === source.entry)!
+    .constants[0]!.value;
+  if (object.kind !== "object") throw new Error("missing record literal");
+  object.order = ["z", "2", "2"];
+  expect(() => emitGo(source, options)).toThrow("orden de inicialización");
+  for (const invalid of [null, false, 0, ["z", "2", 1], ["z", "2"]]) {
+    object.order = invalid as unknown as string[];
+    expect(() => emitGo(source, options)).toThrow("orden de inicialización");
+  }
+});
+
 test("HTML input and change events keep distinct immediate and commit callbacks", async () => {
   const source =
     await program(`export function Page({onEdit,onCommit}) { return <input

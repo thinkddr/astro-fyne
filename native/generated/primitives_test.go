@@ -42,7 +42,28 @@ func TestExportBrowserComparablePrimitiveBehavior(t *testing.T) {
 	}
 	app := test.NewApp()
 	t.Cleanup(app.Quit)
-	view, err := NewPrimitiveConformance(webui.Scope{}, webui.Actions{})
+	type observation struct {
+		Prefix   string  `json:"prefix"`
+		Previous float64 `json:"previous"`
+	}
+	observations := []observation{}
+	translate := func(args ...any) any {
+		if len(args) != 1 {
+			t.Fatalf("primitive translator expects one key, got %v", args)
+		}
+		key := webui.String(args[0])
+		observations = append(observations, observation{key, 0})
+		return key
+	}
+	observeObject := func(args ...any) any {
+		if len(args) != 1 {
+			t.Fatalf("object observer expects one record, got %v", args)
+		}
+		prefix := "object:" + webui.String(webui.Get(args[0], "z")) + "|" + webui.String(webui.Get(args[0], "2")) + "|" + webui.String(webui.Get(args[0], "1"))
+		observations = append(observations, observation{prefix, 0})
+		return nil
+	}
+	view, err := NewPrimitiveConformance(webui.Scope{"t": translate, "observeObject": observeObject}, webui.Actions{"t": translate, "observeObject": observeObject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,13 +76,13 @@ func TestExportBrowserComparablePrimitiveBehavior(t *testing.T) {
 		Nodes  map[string]any `json:"nodes"`
 	}
 	trace := struct {
-		Schema          int      `json:"schema"`
-		SourceHash      string   `json:"sourceHash"`
-		ScenarioHash    string   `json:"scenarioHash"`
-		Frames          []frame  `json:"frames"`
-		Observations    []any    `json:"observations"`
-		UnexpectedCalls []string `json:"unexpectedCalls"`
-	}{1, PrimitiveConformanceSourceHash, hex.EncodeToString(digest[:]), []frame{}, []any{}, []string{}}
+		Schema          int           `json:"schema"`
+		SourceHash      string        `json:"sourceHash"`
+		ScenarioHash    string        `json:"scenarioHash"`
+		Frames          []frame       `json:"frames"`
+		Observations    []observation `json:"observations"`
+		UnexpectedCalls []string      `json:"unexpectedCalls"`
+	}{1, PrimitiveConformanceSourceHash, hex.EncodeToString(digest[:]), []frame{}, []observation{}, []string{}}
 	snapshot := func(action string) {
 		if err := view.Error(); err != nil {
 			t.Fatal(err)
@@ -85,6 +106,7 @@ func TestExportBrowserComparablePrimitiveBehavior(t *testing.T) {
 		tapGenerated(t, view, action)
 		snapshot(action)
 	}
+	trace.Observations = observations
 	data, err = json.MarshalIndent(trace, "", "  ")
 	if err != nil {
 		t.Fatal(err)
