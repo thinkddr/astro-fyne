@@ -113,8 +113,9 @@ prototype layout contract. Browser capture is used to verify the implementation,
 than to supply its positions.
 
 The root must have `width: "100%"`, an explicit pixel height and
-`boxSizing: "border-box"`. The entire subtree consists of empty container elements;
-containers with children must themselves use `display: "flex"`. Every flex item must
+`boxSizing: "border-box"`. Containers with children must themselves use
+`display: "flex"`; supported leaves are empty containers, plain text, buttons,
+single-line text inputs and bitmap images. Every flex item must
 declare a nonnegative pixel `flexBasis`, `minWidth: 0`, `minHeight: 0` and
 `boxSizing: "border-box"`. `flexGrow` defaults to 0 and `flexShrink` to 1; explicit zero
 factors remain zero. Sizes and spacing use numbers or `px`, not the prototype mapper's
@@ -133,8 +134,29 @@ their padding/border floor and remaining space is recalculated. Layout keeps sou
 order and updates existing native objects on resize. Runtime validation checks the
 expanded tree, including component and list results, before it lays out the frame.
 
+Text and control leaves require a definite cross size or stretch, `margin: 0`, an explicit
+font family, weight 400/700, normal/italic style, positive pixel font size and line height,
+color, text alignment and `whiteSpace: "nowrap"`. Numeric Preact `lineHeight` is a multiplier
+of the explicit pixel `fontSize`; a `px` string is an absolute line height. Unquoted family
+identifiers follow the [CSS Fonts family-name rules](https://www.w3.org/TR/css-fonts-4/#font-family-prop).
+Controls additionally require `type="button"` or `type="text"`, `appearance: "none"`,
+explicit padding, border width/style/color, radius and background. These declarations replace
+browser control defaults with a supported source style. The native text backend must parse
+the matching font and diagnose unavailable glyphs through `TextValidator`.
+
+This text contract currently covers a single line that fits its content box. Horizontal input
+scrolling, overflowing labels and wrapping require additional native layout/paint behavior.
+Input control characters, multiline editors and links are outside this responsive profile.
+Glyph coverage, matching font bytes and matching box geometry do not establish text raster
+equivalence. Focus outlines, caret/selection paint, shaping and antialiasing still require
+their own exact pixel profiles.
+
+Bitmap leaves require `display: "block"`, explicit positive pixel dimensions, `margin: 0`
+and zero padding, border and radius. The responsive bitmap corpus uses the source PNG at its
+natural 16×16 size and scale 1; it does not certify image interpolation at another size or scale.
+
 This mode does not implement text or control intrinsic sizes, automatic/content/percentage
-bases, automatic minima, margins, wrapping, reverse directions, `order`, baseline alignment,
+bases, automatic minima, nonzero margins, wrapping, reverse directions, `order`, baseline alignment,
 min/max constraints, the CSS cascade, external stylesheets or arbitrary percentage sizing.
 Unsupported declarations or tree shapes fail explicitly. Measured profiles keep their
 existing exact-viewport restriction.
@@ -152,6 +174,20 @@ comparison retains the zero-difference RGBA policy. Each native frame is also ex
 rendered through the inverse pipeline for another zero-difference comparison. These
 selected integer-edge cases do not establish general subpixel rasterization or platform
 renderer equivalence.
+
+The responsive controls corpus adds 22 retained frames at widths 224, 368 and 512 pixels,
+with real pointer gestures, typing on the existing focus, blur/Enter commits, disabled
+controls and object identity checks. Geometry and behavior comparisons are required. Chromium's
+actual font response and the native embedded resource must have the same SHA-256 digest.
+Its text PNGs are compared at zero tolerance as explicitly uncertified diagnostics: differences
+remain `accepted: false` and `pixelPerfectVerified: false`; CI success for the supported box/event
+contract is not certification of those pixels. The software-canvas harness invokes the focused
+control for typing and explicitly dispatches blur after the final background hit test.
+
+Five additional bitmap viewports (224 → 368 → 512 → 368 → 224, height 96, scale 1) require
+zero-difference forward and inverse RGBA comparisons. Inverse pages are generated from each
+already laid out native scene, rebuilt in Astro and checked in Chromium. These image scenes
+remain frozen exports rather than an inferred responsive web program.
 
 | Feature              | Current boundary                                                                                                                                                                      |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

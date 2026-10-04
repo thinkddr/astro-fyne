@@ -94,6 +94,7 @@ type View struct {
 	captureScale      float32
 	boundCanvas       fyne.Canvas
 	err               error
+	layoutErr         error
 	canvasErr         error
 	navigationErr     error
 	refreshing        bool
@@ -255,7 +256,7 @@ func (v *View) Error() error {
 	if len(v.measurements) != 0 {
 		editingErr = v.uncommittedInputError()
 	}
-	return errors.Join(v.err, v.canvasErr, v.navigationErr, editingErr)
+	return errors.Join(v.err, v.layoutErr, v.canvasErr, v.navigationErr, editingErr, v.responsiveFrameError())
 }
 
 func (v *View) uncommittedInputError() error {
@@ -433,6 +434,21 @@ func (v *View) reconcile() {
 		v.err = err
 		return
 	}
+	responsive := len(nodes) == 1 && nodes[0].Style.Display == "flex"
+	backend := v.backend
+	if responsive {
+		backend, err = freezeResponsiveFonts(backend)
+		if err == nil {
+			err = validateResponsiveBackend(nodes, backend)
+		}
+		if err == nil {
+			err = validateResponsiveFrame(nodes, backend, v.Size(), nil)
+		}
+		if err != nil {
+			v.err = err
+			return
+		}
+	}
 	nodes, err = v.freezeImages(nodes)
 	if err != nil {
 		v.err = err
@@ -457,7 +473,8 @@ func (v *View) reconcile() {
 	}
 	v.err = profileError
 	v.nodes = nodes
-	v.responsive = len(nodes) == 1 && nodes[0].Style.Display == "flex"
+	v.responsive = responsive
+	v.backend = backend
 	// Reused elements are updated in place below. Freeze their previous sibling
 	// lists first so source reordering can distinguish a moved DOM subtree from
 	// an anchor whose index changed only because another sibling moved.
@@ -704,6 +721,7 @@ func (r *viewRenderer) MinSize() fyne.Size {
 	return flowMin(r.objects, false, 0)
 }
 func (r *viewRenderer) Layout(size fyne.Size) {
+	r.view.layoutErr = nil
 	r.view.canvasErr = r.view.ValidateViewport(size)
 	if r.view.boundCanvas != nil {
 		r.view.canvasErr = errors.Join(r.view.canvasErr, r.view.ValidateCanvas())
@@ -723,6 +741,18 @@ func (r *viewRenderer) Layout(size fyne.Size) {
 		return
 	}
 	if r.view.responsive && len(r.view.roots) == 1 {
+		// Resizing must validate the proposed frame before moving any live
+		// object. Commit-only inputs may display more than their source value.
+		edits := make(map[string]string)
+		for id, e := range r.view.elements {
+			if e.input != nil {
+				edits[id] = e.input.Text()
+			}
+		}
+		if err := validateResponsiveFrame(r.view.nodes, r.view.backend, size, edits); err != nil {
+			r.view.layoutErr = err
+			return
+		}
 		root := r.view.roots[0]
 		root.object.Move(fyne.NewPos(0, 0))
 		root.object.Resize(fyne.NewSize(max(size.Width, horizontalDecoration(root.style)), max(root.style.Height, verticalDecoration(root.style))))
@@ -820,7 +850,13 @@ func (e *element) update() {
 		}
 	}
 	if e.input != nil {
+		if editor, ok := e.input.(*primitiveEditor); ok && e.view.responsive {
+			// A legacy editor may enter source mode without being remounted.
+			// Keep its drawing/metrics on the newly frozen backend as well.
+			editor.backend = e.view.backend
+		}
 		e.suppressChange = true
+		e.input.SetStyle(e.style)
 		if e.input.Text() != e.node.Value {
 			e.input.SetText(e.node.Value)
 			if w, ok := e.object.(*inputWidget); ok && !w.dirty {
@@ -829,7 +865,6 @@ func (e *element) update() {
 		}
 		e.input.SetPlaceholder(e.node.Placeholder)
 		e.input.SetDisabled(e.node.Disabled)
-		e.input.SetStyle(e.style)
 		e.input.Object().Refresh() // Materialize placeholder/scroller before the first Layout.
 		e.suppressChange = false
 	}
@@ -935,6 +970,13 @@ func (e *element) textLines(width float32) []string {
 		return nil
 	}
 	if e.style.WhiteSpace == "nowrap" {
+		if e.view.responsive {
+			text := sourceNowrap(e.node.Text)
+			if text == "" {
+				return nil
+			}
+			return []string{text}
+		}
 		return []string{e.node.Text}
 	}
 	return wrapText(e.node.Text, e.style, width, e.view.backend)
@@ -1105,6 +1147,15 @@ func (w *inputWidget) Tapped(event *fyne.PointEvent) {
 	if c != nil {
 		c.Focus(w)
 	}
+	if w.element.view.responsive && (w.element.node.Disabled || w.element.view.elements[w.element.node.ID] != w.element) {
+		// The preceding field's blur handler can remove/disable this target.
+		// Fyne assigns it after that callback, so revalidate the focus owner.
+		if c != nil && c.Focused() == w {
+			w.dirty = false
+			c.Unfocus()
+		}
+		return
+	}
 	if event != nil {
 		if pointer, ok := w.element.input.(interface{ Tapped(*fyne.PointEvent) }); ok {
 			local := *event
@@ -1171,7 +1222,7 @@ func (r *elementRenderer) Layout(size fyne.Size) {
 			}
 		} else if e.view.responsive && s.Display == "flex" {
 			if err := layoutFlex(e.children, s, fyne.NewSize(width, height), fyne.NewPos(left, top)); err != nil {
-				e.view.err = err
+				e.view.layoutErr = err
 			}
 		} else {
 			objs := e.childObjects()

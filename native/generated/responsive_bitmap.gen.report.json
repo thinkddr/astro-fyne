@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "generator": "astro-fyne",
+  "name": "ResponsiveBitmap",
+  "sourceHash": "1974be9b9f98265cc6311267a4061103f0c6d6a93f26081d049cb2faeb46bd33",
+  "sources": [
+    {
+      "path": "example/public/images/local-image.png",
+      "hash": "26a0665b25f28a1977f0531531dcb3cd3c923dbd62a212f14be62e19e7717783"
+    },
+    {
+      "path": "example/src/components/ResponsiveBitmapConformance.tsx",
+      "hash": "54bce6b61c3a1646f162fc69f420ce4dd6bf2b75bed9e5ff0c6dd509d0feed4e"
+    }
+  ],
+  "resources": [
+    {
+      "name": "bitmap_baae825f22641a43f7fdfc92",
+      "path": "example/public/images/local-image.png",
+      "hash": "26a0665b25f28a1977f0531531dcb3cd3c923dbd62a212f14be62e19e7717783",
+      "srcs": [
+        "/images/local-image.png"
+      ],
+      "mediaType": "image/png",
+      "width": 16,
+      "height": 16
+    }
+  ],
+  "actions": [],
+  "components": [
+    "ResponsiveBitmapConformance_e7724e61"
+  ],
+  "compatibility": "declarative-stage-1",
+  "visual": {
+    "measured": false,
+    "pixelPerfectVerified": false
+  }
+}

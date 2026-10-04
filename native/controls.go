@@ -4,6 +4,7 @@
 package webui
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 	"unicode"
@@ -80,7 +81,27 @@ func wrapText(text string, style Style, width float32, backend Backend) []string
 }
 
 func (w *actionWidget) Tapped(*fyne.PointEvent) {
-	if !w.disabled && w.onTap != nil {
+	if w.disabled {
+		return
+	}
+	if w.element.view.responsive {
+		target := w.element.view.boundCanvas
+		if target == nil && fyne.CurrentApp() != nil && fyne.CurrentApp().Driver() != nil {
+			target = fyne.CurrentApp().Driver().CanvasForObject(w)
+		}
+		if target != nil {
+			target.Focus(w)
+		}
+		// Focus commits the preceding editor. Its callback may disable or
+		// unmount this button before pointer activation reaches the tap handler.
+		if w.disabled || w.element.node.Disabled || w.element.view.elements[w.element.node.ID] != w.element {
+			if target != nil && target.Focused() == w {
+				target.Unfocus()
+			}
+			return
+		}
+	}
+	if w.onTap != nil {
 		w.onTap()
 	}
 }
@@ -115,6 +136,7 @@ type primitiveEditor struct {
 	cursor, anchor              int
 	active, disabled, multiline bool
 	onChange                    func(string)
+	editErr                     error
 }
 
 func (b FyneBackend) Editor(multiline bool, style Style, onChange func(string)) Editor {
@@ -170,7 +192,19 @@ func (e *primitiveEditor) replace(value string) {
 	result := append([]rune{}, runes[:lo]...)
 	result = append(result, insert...)
 	result = append(result, runes[hi:]...)
-	e.text = string(result)
+	value = string(result)
+	if e.style.Flex != nil && e.style.Flex.BoxSizing == "border-box" {
+		if invalidSingleLineInput(value) {
+			e.editErr = fmt.Errorf("single-line input cannot contain control characters")
+			return
+		}
+		if err := validateResponsiveLine(e.backend, e.style, value, e.Size()); err != nil {
+			e.editErr = err
+			return
+		}
+	}
+	e.editErr = nil
+	e.text = value
 	e.cursor = lo + len(insert)
 	e.anchor = e.cursor
 	e.Refresh()
@@ -375,14 +409,25 @@ func (r *editorRenderer) Layout(size fyne.Size) {
 		prefix = prefix[i+1:]
 	}
 	x := e.backend.Measure(prefix, s).Width
+	alignOffset := float32(0)
+	if s.Flex != nil && s.Flex.BoxSizing == "border-box" {
+		width := e.backend.Measure(e.text, s).Width
+		switch s.TextAlign {
+		case "center":
+			alignOffset = (size.Width - width) / 2
+		case "right":
+			alignOffset = size.Width - width
+		}
+	}
+	x += alignOffset
 	r.cursor.Move(fyne.NewPos(x, y+float32(row)*s.LineHeight))
 	r.cursor.Resize(fyne.NewSize(1, s.LineHeight))
 	r.cursor.FillColor = parseColor(s.Color)
 	r.cursor.Show()
 	lo, hi := e.selected()
 	if lo != hi && !strings.ContainsRune(string(runes[lo:hi]), '\n') {
-		start := e.backend.Measure(string(runes[:lo]), s).Width
-		end := e.backend.Measure(string(runes[:hi]), s).Width
+		start := e.backend.Measure(string(runes[:lo]), s).Width + alignOffset
+		end := e.backend.Measure(string(runes[:hi]), s).Width + alignOffset
 		r.selection.Move(fyne.NewPos(start, y))
 		r.selection.Resize(fyne.NewSize(end-start, s.LineHeight))
 		r.selection.Show()

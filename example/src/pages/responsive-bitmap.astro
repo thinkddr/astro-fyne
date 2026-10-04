@@ -1,0 +1,12 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+import { ResponsiveBitmapConformance } from "../components/ResponsiveBitmapConformance";
+import report from "../../../native/generated/responsive_bitmap.gen.report.json";
+---
+<html lang="en" data-responsive-bitmap-source-hash={report.sourceHash}>
+  <head><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+  <body><ResponsiveBitmapConformance client:load /></body>
+</html>
+<style is:global>
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+</style>

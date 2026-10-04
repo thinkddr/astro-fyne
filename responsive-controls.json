@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "package": "generated",
+  "entries": [
+    {
+      "name": "ResponsiveControls",
+      "source": "example/src/components/ResponsiveControlsConformance.tsx",
+      "export": "ResponsiveControlsConformance",
+      "output": "native/generated/responsive_controls.gen.go",
+      "fonts": [
+        {
+          "family": "AstroNoto",
+          "weight": 400,
+          "style": "normal",
+          "source": "example/public/fonts/NotoSans-Regular.ttf",
+          "webSrc": "/fonts/NotoSans-Regular.ttf"
+        }
+      ]
+    }
+  ]
+}

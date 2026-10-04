@@ -1,0 +1,13 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+import { ResponsiveControlsConformance } from "../components/ResponsiveControlsConformance";
+import report from "../../../native/generated/responsive_controls.gen.report.json";
+import "../../../native/generated/responsive_controls.gen.fonts.css";
+---
+<html lang="en" data-responsive-controls-source-hash={report.sourceHash}>
+  <head><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+  <body><ResponsiveControlsConformance client:load /></body>
+</html>
+<style is:global>
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+</style>

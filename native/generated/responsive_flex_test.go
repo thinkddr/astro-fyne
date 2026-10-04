@@ -179,18 +179,45 @@ func compareFlexRectangles(ids []string, reference, actual map[string]flexRectan
 }
 
 func flexSnapshotRectangles(snapshot webui.ViewSnapshot) (map[string]flexRectangle, error) {
+	return snapshotRectangles(snapshot, true)
+}
+
+func responsiveSnapshotRectangles(snapshot webui.ViewSnapshot) (map[string]flexRectangle, error) {
+	return snapshotRectangles(snapshot, false)
+}
+
+// The original rectangle corpus retains its empty-container restriction. The
+// wider source corpus measures supported leaves without weakening ID, resolved
+// metadata or finite-geometry validation for either kind of oracle.
+func snapshotRectangles(snapshot webui.ViewSnapshot, containersOnly bool) (map[string]flexRectangle, error) {
 	rectangles := map[string]flexRectangle{}
 	var walk func([]webui.SnapshotNode, *string) error
 	walk = func(nodes []webui.SnapshotNode, parent *string) error {
 		for _, node := range nodes {
 			id := node.Node.ID
-			if _, exists := rectangles[id]; exists || id == "" || node.Node.Kind != "container" || node.Node.Text != "" {
-				return fmt.Errorf("native flex corpus requires unique empty rectangle IDs: %q", id)
+			if _, exists := rectangles[id]; exists || id == "" {
+				return fmt.Errorf("native responsive corpus requires unique nonempty IDs: %q", id)
+			}
+			if containersOnly && (node.Node.Kind != "container" || node.Node.Text != "") {
+				return fmt.Errorf("native flex corpus requires empty rectangles: %q", id)
+			}
+			switch node.Node.Kind {
+			case "container", "text", "button", "input", "image":
+			default:
+				return fmt.Errorf("native responsive corpus has unsupported kind %q on %q", node.Node.Kind, id)
 			}
 			if node.Node.Style.Flex != nil {
 				return fmt.Errorf("native snapshot %q retained source-only layout metadata", id)
 			}
 			s := node.Node.Style
+			for _, value := range []float32{s.X, s.Y, s.Width, s.Height} {
+				if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+					return fmt.Errorf("native responsive snapshot %q has nonfinite geometry", id)
+				}
+			}
+			if s.Width < 0 || s.Height < 0 {
+				return fmt.Errorf("native responsive snapshot %q has negative dimensions", id)
+			}
 			rectangles[id] = flexRectangle{parent, float64(s.X), float64(s.Y), float64(s.Width), float64(s.Height)}
 			if err := walk(node.Children, &id); err != nil {
 				return err
@@ -273,7 +300,6 @@ func TestGeneratedResponsiveFlexResizesOneSourceTreeWithoutMeasurements(t *testi
 			size := fyne.NewSize(float32(item.Width), float32(item.Height))
 			target.Resize(size)
 			view.Resize(size)
-			view.Refresh()
 			capture := target.Capture()
 			if capture.Bounds() != image.Rect(0, 0, item.Width*item.Scale, item.Height*item.Scale) {
 				t.Fatalf("native flex PNG has incorrect physical dimensions: %v", capture.Bounds())

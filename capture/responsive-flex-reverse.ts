@@ -13,7 +13,7 @@ for (let i = 2; i < process.argv.length; i += 2) {
   const value = process.argv[i + 1];
   if (
     !flag ||
-    !["--base-url", "--out"].includes(flag) ||
+    !["--base-url", "--out", "--preset"].includes(flag) ||
     !value ||
     value.startsWith("--") ||
     args.has(flag)
@@ -27,20 +27,65 @@ const baseURL = new URL(args.get("--base-url")!);
 if (!["http:", "https:"].includes(baseURL.protocol))
   throw new Error("The preview must use HTTP or HTTPS");
 const out = resolve(args.get("--out")!);
-const scenario = (await Bun.file(
-  new URL("../responsive-flex-scenario.json", import.meta.url),
-).json()) as {
+const presets = {
+  flex: {
+    scenario: "responsive-flex-scenario.json",
+    route: "flex-reverse",
+    name: "FlexReverse",
+  },
+  bitmap: {
+    scenario: "responsive-bitmap-scenario.json",
+    route: "bitmap-reverse",
+    name: "BitmapReverse",
+  },
+} as const;
+const requestedPreset = args.get("--preset") ?? "flex";
+if (requestedPreset !== "flex" && requestedPreset !== "bitmap")
+  throw new Error("--preset must be flex or bitmap");
+const preset = presets[requestedPreset];
+const scenarioBytes = await readFile(
+  new URL(`../${preset.scenario}`, import.meta.url),
+);
+const scenarioHash = createHash("sha256").update(scenarioBytes).digest("hex");
+const scenario = JSON.parse(scenarioBytes.toString("utf8")) as {
   schema: number;
   cases: { name: string; width: number; height: number; scale: number }[];
 };
 if (scenario.schema !== 1 || !scenario.cases?.length)
-  throw new Error("Missing responsive flex cases");
+  throw new Error(`Missing responsive ${requestedPreset} cases`);
 const browser = await chromium.launch();
 try {
   for (const item of scenario.cases) {
     if (!/^[a-zA-Z0-9_-]+$/.test(item.name))
       throw new Error("Unsafe scenario name");
     const directory = join(out, item.name);
+    const nativeFrame = JSON.parse(
+      await readFile(join(directory, "native-geometry.json"), "utf8"),
+    ) as {
+      schema: number;
+      sourceHash: string;
+      scenarioHash: string;
+      case: string;
+      viewport: { width: number; height: number; scale: number };
+      screenshotHash: string;
+    };
+    const nativePngHash = createHash("sha256")
+      .update(await readFile(join(directory, "native.png")))
+      .digest("hex");
+    if (
+      nativeFrame.schema !== 1 ||
+      typeof nativeFrame.sourceHash !== "string" ||
+      !/^[a-f0-9]{64}$/.test(nativeFrame.sourceHash) ||
+      nativeFrame.scenarioHash !== scenarioHash ||
+      nativeFrame.case !== item.name ||
+      nativeFrame.viewport?.width !== item.width ||
+      nativeFrame.viewport?.height !== item.height ||
+      nativeFrame.viewport?.scale !== item.scale ||
+      nativeFrame.screenshotHash !== nativePngHash
+    )
+      throw new Error(
+        `${item.name}: native source/scenario/PNG frame mismatch`,
+      );
     const scene = validateSceneDocument(
       JSON.parse(await readFile(join(directory, "scene.json"), "utf8")),
     );
@@ -52,7 +97,7 @@ try {
       throw new Error(`${item.name}: native scene viewport mismatch`);
     const report = JSON.parse(
       await readFile(
-        join(directory, "FlexReverse.reverse.report.json"),
+        join(directory, `${preset.name}.reverse.report.json`),
         "utf8",
       ),
     ) as {
@@ -61,6 +106,7 @@ try {
       schema: number;
       direction: string;
       sceneHash: string;
+      name: string;
     };
     const sceneHash = createHash("sha256")
       .update(JSON.stringify(scene))
@@ -69,6 +115,7 @@ try {
       report.generator !== "astro-fyne" ||
       report.schema !== 1 ||
       report.direction !== "fyne-to-astro" ||
+      report.name !== preset.name ||
       report.sceneHash !== sceneHash ||
       typeof report.rootId !== "string" ||
       !/^[A-Za-z][A-Za-z0-9_-]*$/.test(report.rootId)
@@ -86,12 +133,32 @@ try {
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
       const response = await page.goto(
-        new URL(`/flex-reverse/${item.name}/FlexReverse`, baseURL).href,
+        new URL(`/${preset.route}/${item.name}/${preset.name}`, baseURL).href,
       );
       if (!response?.ok()) throw new Error(`${item.name}: preview failed`);
       await page.locator(`[id="${report.rootId}"]`).waitFor();
       await page.evaluate(async () => {
         await document.fonts.ready;
+        for (const image of document.querySelectorAll("img")) {
+          const bounds = image.getBoundingClientRect();
+          const css = getComputedStyle(image);
+          if (
+            bounds.width <= 0 ||
+            bounds.height <= 0 ||
+            css.visibility !== "visible" ||
+            css.display === "none"
+          )
+            continue;
+          // A loading or broken image must fail before a screenshot can be
+          // interpreted as native bitmap parity, including cached resources.
+          await image.decode();
+          if (
+            !image.complete ||
+            image.naturalWidth <= 0 ||
+            image.naturalHeight <= 0
+          )
+            throw new Error("A visible inverse bitmap did not decode");
+        }
         await new Promise<void>((done) =>
           requestAnimationFrame(() => requestAnimationFrame(() => done())),
         );
@@ -159,6 +226,9 @@ try {
         join(directory, "reverse-web-geometry.json"),
         JSON.stringify(
           {
+            preset: requestedPreset,
+            sourceHash: nativeFrame.sourceHash,
+            scenarioHash,
             viewport: scene.viewport,
             sceneHash,
             bounds,

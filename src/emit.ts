@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
+import { inspectFont, validateFontFaces } from "./fonts.ts";
 import type {
   BitmapResource,
   Component,
@@ -63,9 +64,14 @@ export function validateMeasurements(
 }
 
 export function sourceHash(program: Program): string {
-  return createHash("sha256")
-    .update(JSON.stringify(program.sources))
-    .digest("hex");
+  const hash = createHash("sha256").update(JSON.stringify(program.sources));
+  if (program.fonts?.length)
+    hash.update(
+      JSON.stringify(
+        program.fonts.map(({ content: _content, ...face }) => face),
+      ),
+    );
+  return hash.digest("hex");
 }
 
 const quote = (value: string): string =>
@@ -221,6 +227,8 @@ function style(
     alignSelf: "AlignSelf",
     boxSizing: "BoxSizing",
     borderStyle: "BorderStyle",
+    appearance: "Appearance",
+    margin: "MarginSet",
   };
   if (bitmap) {
     for (const dimension of ["width", "height"] as const) {
@@ -250,10 +258,72 @@ function style(
           value.kind === "literal" &&
           value.value === "flex"),
     );
-  if (bitmap && responsive)
-    throw new Error(
-      `${node.id}: img requiere captura; el contrato flex responsive no admite dimensionado intrínseco de imágenes.`,
-    );
+  if (responsive && inline?.kind === "object") {
+    const text = textTags.has(node.tag);
+    const control = ["button", "input"].includes(node.tag);
+    const required =
+      text || control
+        ? [
+            "fontFamily",
+            "fontStyle",
+            "fontSize",
+            "lineHeight",
+            "fontWeight",
+            "textAlign",
+            "whiteSpace",
+            "color",
+            "margin",
+          ]
+        : [];
+    if (control)
+      required.push(
+        "appearance",
+        "borderWidth",
+        "borderStyle",
+        "borderColor",
+        "borderRadius",
+        "backgroundColor",
+      );
+    if (bitmap)
+      required.push("display", "margin", "borderWidth", "borderRadius");
+    if ((control || bitmap) && !Object.hasOwn(inline.entries, "padding"))
+      required.push(
+        "paddingTop",
+        "paddingRight",
+        "paddingBottom",
+        "paddingLeft",
+      );
+    for (const property of required)
+      if (!Object.hasOwn(inline.entries, property))
+        throw new Error(
+          `${node.id}: CSS ${property} explícito es obligatorio en la hoja responsive ${node.tag}.`,
+        );
+    if (control) {
+      const type = node.attrs.type;
+      if (
+        type?.kind !== "literal" ||
+        type.value !== (node.tag === "button" ? "button" : "text")
+      )
+        throw new Error(
+          `${node.id}: ${node.tag} responsive requiere type=${node.tag === "button" ? "button" : "text"} literal explícito.`,
+        );
+    }
+    if (bitmap) {
+      const display = inline.entries.display;
+      if (display?.kind !== "literal" || display.value !== "block")
+        throw new Error(
+          `${node.id}: img responsive requiere display:block explícito.`,
+        );
+      for (const dimension of ["width", "height"])
+        if (
+          !Object.hasOwn(inline.entries, dimension) &&
+          !Object.hasOwn(node.attrs, dimension)
+        )
+          throw new Error(
+            `${node.id}: img responsive requiere ${dimension} explícito; no se infiere su tamaño intrínseco.`,
+          );
+    }
+  }
   if (
     responsive &&
     inline?.kind === "object" &&
@@ -411,6 +481,10 @@ function style(
       fontSize: "FontSize",
       lineHeight: "LineHeight",
       fontWeight: "FontWeight",
+      fontFamily: "FontFamily",
+      fontStyle: "FontStyle",
+      textAlign: "TextAlign",
+      whiteSpace: "WhiteSpace",
       flexDirection: "Direction",
     };
     for (const [property, val] of Object.entries(node.attrs.style.entries)) {
@@ -422,6 +496,19 @@ function style(
           throw new Error(
             `${node.id}: img ${property} sin soporte nativo en stage 01.`,
           );
+        continue;
+      }
+      if (property === "padding" && responsive) {
+        if (
+          val.kind !== "literal" ||
+          (typeof val.value !== "number" && typeof val.value !== "string")
+        )
+          throw new Error(
+            `${node.id}: CSS padding requiere un único número o px literal.`,
+          );
+        const padding = pixels(val.value, "padding");
+        for (const side of ["Top", "Right", "Bottom", "Left"])
+          values["Padding" + side] = padding;
         continue;
       }
       if (property === "display") {
@@ -458,6 +545,7 @@ function style(
           AlignSelf: ["auto", "flex-start", "flex-end", "center", "stretch"],
           BoxSizing: ["border-box"],
           BorderStyle: ["solid"],
+          Appearance: ["none"],
         };
         if (choices[flexField]) {
           if (
@@ -480,12 +568,19 @@ function style(
             );
           flex[flexField] = result;
         } else {
+          if (flexField === "MarginSet" && val.value === "0") {
+            flex.MarginSet = true;
+            continue;
+          }
           const result = pixels(val.value, property);
-          if (["MinWidth", "MinHeight"].includes(flexField) && result !== 0)
+          if (
+            ["MinWidth", "MinHeight", "MarginSet"].includes(flexField) &&
+            result !== 0
+          )
             throw new Error(
               `${node.id}: CSS ${property} necesita cero explícito en el contrato flex responsive.`,
             );
-          flex[flexField] = result;
+          flex[flexField] = flexField === "MarginSet" ? true : result;
         }
         continue;
       }
@@ -500,15 +595,117 @@ function style(
         throw new Error(
           `${node.id}: CSS ${property} requiere captura del navegador.`,
         );
+      if (
+        ["FontFamily", "FontStyle", "TextAlign", "WhiteSpace"].includes(field)
+      ) {
+        if (typeof val.value !== "string")
+          throw new Error(
+            `${node.id}: CSS ${property} requiere una cadena literal.`,
+          );
+        if (field === "FontFamily") {
+          const raw = val.value.trim();
+          const quoted = /^(['"])([A-Za-z0-9_ -]+)\1$/.exec(raw);
+          const name = quoted?.[2] ?? raw;
+          if (
+            !name ||
+            !name.trim() ||
+            name.trim() !== name ||
+            name.length > 80 ||
+            !(
+              quoted ||
+              /^[A-Za-z_][A-Za-z0-9_-]*(?: +[A-Za-z_][A-Za-z0-9_-]*)*$/.test(
+                name,
+              )
+            ) ||
+            (!quoted &&
+              [
+                "inherit",
+                "initial",
+                "unset",
+                "revert",
+                "revert-layer",
+                "default",
+                "caption",
+                "icon",
+                "menu",
+                "message-box",
+                "small-caption",
+                "status-bar",
+                "serif",
+                "sans-serif",
+                "monospace",
+                "cursive",
+                "fantasy",
+                "system-ui",
+                "ui-serif",
+                "ui-sans-serif",
+                "ui-monospace",
+                "ui-rounded",
+                "emoji",
+                "math",
+                "fangsong",
+              ].some((keyword) =>
+                name.toLowerCase().split(/ +/).includes(keyword),
+              ))
+          )
+            throw new Error(
+              `${node.id}: CSS fontFamily necesita una única familia literal con recurso explícito.`,
+            );
+          values[field] = quoted ? raw : name.split(/ +/).join(" ");
+        } else {
+          const choices: Record<string, string[]> = {
+            FontStyle: ["normal", "italic"],
+            TextAlign: ["left", "center", "right"],
+            WhiteSpace: ["nowrap"],
+          };
+          if (!choices[field]!.includes(val.value))
+            throw new Error(
+              `${node.id}: CSS ${property} sin soporte en el contrato de texto responsive.`,
+            );
+          values[field] = val.value;
+        }
+        continue;
+      }
+      if (field === "FontWeight") {
+        if (
+          typeof val.value !== "number" ||
+          !Number.isInteger(val.value) ||
+          val.value < 1 ||
+          val.value > 1000
+        )
+          throw new Error(
+            `${node.id}: CSS fontWeight necesita un entero literal entre 1 y 1000.`,
+          );
+        values[field] = val.value;
+        continue;
+      }
+      if (field === "LineHeight" && typeof val.value === "number") {
+        const size = node.attrs.style.entries.fontSize;
+        if (
+          size?.kind !== "literal" ||
+          (typeof size.value !== "number" && typeof size.value !== "string")
+        )
+          throw new Error(
+            `${node.id}: CSS lineHeight numérico es un multiplicador y requiere fontSize explícito en px.`,
+          );
+        const fontSize = pixels(size.value, "fontSize");
+        const lineHeight = finite(val.value * fontSize, "lineHeight");
+        if (
+          val.value <= 0 ||
+          Math.fround(fontSize) <= 0 ||
+          Math.fround(lineHeight) <= 0
+        )
+          throw new Error(
+            `${node.id}: CSS lineHeight y fontSize necesitan valores positivos.`,
+          );
+        values[field] = lineHeight;
+        continue;
+      }
       const numeric = /^(\d+(?:\.\d+)?)(px|rem)$/.exec(String(val.value));
       if (["Width", "Height"].includes(field) && val.value === "100%") {
         if (!responsive)
           throw new Error(
             `${node.id}: ${property} 100% requiere metadata explícita del contrato flex responsive o captura.`,
-          );
-        if (bitmap)
-          throw new Error(
-            `${node.id}: dimensiones img en porcentaje requieren captura.`,
           );
         flex[field + "Percent"] = 100;
         flex[field + "Set"] = true;
@@ -524,7 +721,7 @@ function style(
           );
         values[field] = val.value;
       } else {
-        if (responsive && field !== "FontWeight") {
+        if (responsive) {
           values[field] = pixels(val.value, property);
           continue;
         }
@@ -541,6 +738,18 @@ function style(
       }
     }
   }
+  if (
+    responsive &&
+    (textTags.has(node.tag) || ["button", "input"].includes(node.tag))
+  )
+    for (const field of ["FontSize", "LineHeight"])
+      if (
+        !(Number(values[field]) > 0) ||
+        !(Math.fround(Number(values[field])) > 0)
+      )
+        throw new Error(
+          `${node.id}: ${field} necesita píxeles positivos representables en la hoja responsive.`,
+        );
   if (bitmap) {
     for (const field of [
       "Radius",
@@ -555,25 +764,30 @@ function style(
           `${node.id}: img ${field} requiere clipping o una caja nativa adicional.`,
         );
     }
-    if (values.Width === undefined && values.Height === undefined) {
+    if (
+      !responsive &&
+      values.Width === undefined &&
+      values.Height === undefined
+    ) {
       values.Width = bitmap.width;
       values.Height = bitmap.height;
-    } else if (values.Width === undefined) {
+    } else if (!responsive && values.Width === undefined) {
       values.Width = (Number(values.Height) * bitmap.width) / bitmap.height;
-    } else if (values.Height === undefined) {
+    } else if (!responsive && values.Height === undefined) {
       values.Height = (Number(values.Width) * bitmap.height) / bitmap.width;
     }
     if (
-      !Number.isFinite(Number(values.Width)) ||
-      !Number.isFinite(Number(values.Height)) ||
-      Number(values.Width) <= 0 ||
-      Number(values.Height) <= 0
+      !responsive &&
+      (!Number.isFinite(Number(values.Width)) ||
+        !Number.isFinite(Number(values.Height)) ||
+        Number(values.Width) <= 0 ||
+        Number(values.Height) <= 0)
     )
       throw new Error(
         `${node.id}: dimensiones img necesitan píxeles positivos o una captura.`,
       );
   }
-  if (!bitmap)
+  if (!bitmap || responsive)
     for (const field of ["Width", "Height"])
       if (Object.hasOwn(values, field)) flex[field + "Set"] = true;
   if (responsive || Object.keys(flex).length) {
@@ -894,7 +1108,75 @@ export function emitGo(
       return `// Resource SHA-256: ${resource.hash}\nvar image${options.name}_${resource.name} = fyne.NewStaticResource(${quote(resource.path)}, []byte("${encoded}"))`;
     })
     .join("\n\n");
-  const resourceFactory = `func New${options.name}Resources() map[string]fyne.Resource { return map[string]fyne.Resource{${resources.map((resource) => `${quote(resource.path)}: image${options.name}_${resource.name}`).join(", ")}} }`;
+  const fonts = program.fonts ?? [];
+  if (fonts.length)
+    validateFontFaces(
+      fonts.map(({ family, weight, style, path, webSrc }) => ({
+        family,
+        weight,
+        style,
+        source: path,
+        webSrc,
+      })),
+    );
+  const fontNames = new Set<string>();
+  const fontWebSources = new Map<string, string>();
+  const fontEmbedded = fonts
+    .map((face) => {
+      if (!identifier.test(face.name) || fontNames.has(face.name))
+        throw new Error("Nombre de recurso font inválido o duplicado.");
+      fontNames.add(face.name);
+      if (
+        fontWebSources.has(face.webSrc) &&
+        fontWebSources.get(face.webSrc) !== face.hash
+      )
+        throw new Error(
+          `fonts.webSrc ${face.webSrc} vincula archivos con hashes diferentes.`,
+        );
+      fontWebSources.set(face.webSrc, face.hash);
+      const bytes = Buffer.from(face.content, "base64");
+      if (
+        bytes.toString("base64") !== face.content ||
+        createHash("sha256").update(bytes).digest("hex") !== face.hash
+      )
+        throw new Error(`${face.path}: bytes font y SHA-256 no coinciden.`);
+      inspectFont(bytes, face);
+      const encoded = bytes.toString("hex").replace(/../g, "\\x$&");
+      return `// Font SHA-256: ${face.hash}\nvar font${options.name}_${face.name} = fyne.NewStaticResource(${quote(face.path + "#sha256=" + face.hash)}, []byte("${encoded}"))`;
+    })
+    .join("\n\n");
+  const resourceBindings = new Map<string, string>(
+    resources.map((resource) => [
+      resource.path,
+      `image${options.name}_${resource.name}`,
+    ]),
+  );
+  for (const face of fonts)
+    if (!resourceBindings.has(face.path))
+      resourceBindings.set(face.path, `font${options.name}_${face.name}`);
+  const resourceFactory = `func New${options.name}Resources() map[string]fyne.Resource { return map[string]fyne.Resource{${[...resourceBindings].map(([path, name]) => `${quote(path)}: ${name}`).join(", ")}} }`;
+  const families = [...new Set(fonts.map((face) => face.family))];
+  const backendFactory = fonts.length
+    ? `func New${options.name}Backend() webui.FyneBackend { return webui.FyneBackend{Fonts: map[string]map[webui.Font]fyne.Resource{${families
+        .map(
+          (family) =>
+            `${quote(family)}: {${fonts
+              .filter((face) => face.family === family)
+              .map(
+                (face) =>
+                  `{Weight: ${face.weight}, Italic: ${face.style === "italic"}}: font${options.name}_${face.name}`,
+              )
+              .join(", ")}}`,
+        )
+        .join(", ")}}} }`
+    : "";
+  const themeFonts =
+    families.length === 1
+      ? `generated.Fonts = map[fyne.TextStyle]fyne.Resource{${fonts.map((face) => `{Bold: ${face.weight === 700}, Italic: ${face.style === "italic"}}: font${options.name}_${face.name}`).join(", ")}};`
+      : "";
+  const defaultBackend = fonts.length
+    ? `if len(backends) == 0 { backends = []webui.Backend{New${options.name}Backend()} }`
+    : "";
   if (program.hasStyles && !measured)
     throw new Error(
       "La fuente contiene CSS. Captura sus medidas calculadas antes de generar Fyne; el CSS no se aproxima ni se descarta.",
@@ -939,7 +1221,7 @@ export function emitGo(
     .sort(([a], [b]) => a.localeCompare(b, "en"))
     .map(([key, value]) => `${quote(key)}: ${quote(value)}`)
     .join(", ");
-  return `// Code generated by astro-fyne. DO NOT EDIT.\n// Source SHA-256: ${sourceHash(program)}\n// SPDX-License-Identifier: Apache-2.0\npackage ${options.packageName}\n\nimport (webui "${runtime}"; "fyne.io/fyne/v2")\n\nconst ${options.name}SourceHash = ${quote(sourceHash(program))}\n\n${embedded}\n${resourceFactory}\n\ntype ${options.name}Widget struct { *webui.View }\ntype ${options.name}Theme struct { *webui.CapturedTheme }\nfunc New${options.name}Theme(base fyne.Theme) (*${options.name}Theme,error) { generated,err := webui.NewCapturedTheme(map[string]string{${tokens}},base); if err != nil { return nil,err }; return &${options.name}Theme{CapturedTheme:generated},nil }\n\nfunc New${options.name}(props webui.Scope, actions webui.Actions, backends ...webui.Backend) (*${options.name}Widget, error) {\n if err := webui.Require(actions, []string{${program.actions.map(quote).join(", ")}}); err != nil { return nil, err }\n state := webui.Scope{}\n var view *webui.View\n var generated *${options.name}Widget\n refresh := func() { if view != nil { view.Refresh() } }\n view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &${options.name}Widget{View:v}; return generated }, func() []webui.Node { active := map[string]bool{}; nodes := build${options.name}_${program.entry}(props, actions, refresh, state, active, ""); for key := range state { if !active[key] { delete(state,key) } }; return nodes }, backends...)\n view.SetAutoRefreshEvents(false)\n if err := view.Error(); err != nil { return nil, err }\n ${measurementSetup}\n return generated, nil\n}\n\n${components.join("\n\n")}\n`;
+  return `// Code generated by astro-fyne. DO NOT EDIT.\n// Source SHA-256: ${sourceHash(program)}\n// SPDX-License-Identifier: Apache-2.0\npackage ${options.packageName}\n\nimport (webui "${runtime}"; "fyne.io/fyne/v2")\n\nconst ${options.name}SourceHash = ${quote(sourceHash(program))}\n\n${embedded}${fontEmbedded ? "\n" + fontEmbedded : ""}\n${resourceFactory}${backendFactory ? "\n" + backendFactory : ""}\n\ntype ${options.name}Widget struct { *webui.View }\ntype ${options.name}Theme struct { *webui.CapturedTheme }\nfunc New${options.name}Theme(base fyne.Theme) (*${options.name}Theme,error) { generated,err := webui.NewCapturedTheme(map[string]string{${tokens}},base); if err != nil { return nil,err }; ${themeFonts ? themeFonts + " " : ""}return &${options.name}Theme{CapturedTheme:generated},nil }\n\nfunc New${options.name}(props webui.Scope, actions webui.Actions, backends ...webui.Backend) (*${options.name}Widget, error) {\n if err := webui.Require(actions, []string{${program.actions.map(quote).join(", ")}}); err != nil { return nil, err }\n ${defaultBackend ? defaultBackend + "\n " : ""}state := webui.Scope{}\n var view *webui.View\n var generated *${options.name}Widget\n refresh := func() { if view != nil { view.Refresh() } }\n view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &${options.name}Widget{View:v}; return generated }, func() []webui.Node { active := map[string]bool{}; nodes := build${options.name}_${program.entry}(props, actions, refresh, state, active, ""); for key := range state { if !active[key] { delete(state,key) } }; return nodes }, backends...)\n view.SetAutoRefreshEvents(false)\n if err := view.Error(); err != nil { return nil, err }\n ${measurementSetup}\n return generated, nil\n}\n\n${components.join("\n\n")}\n`;
 }
 
 const measuredFields = new Set([
