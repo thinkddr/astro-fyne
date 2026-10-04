@@ -37,6 +37,20 @@ complete ECMAScript equivalence. Expanding it requires browser/native differenti
 value coercion, Unicode strings, missing values, short-circuit evaluation and event ordering.
 Compilation must reject a construction when its semantics cannot be preserved.
 
+The portable conversion rules include `String`, `Number`, addition and relational
+operators over supported scalars, dense arrays and ordinary data records. Arrays use
+their comma-separated primitive projection; ordinary records use the standard
+`valueOf`/`toString` order for each conversion hint. Non-callable own properties shadow
+those methods and can make conversion fail with a TypeError. Native callable overrides,
+custom prototypes, boxed values and `Symbol.toPrimitive` require explicit adapters.
+Array coercion is bounded and rejects cycles rather than recursing without limit.
+Known inherited prototype properties cannot be read as a fabricated `undefined` value;
+reading them requires a prototype adapter. Ordinary absent data properties still yield
+`undefined`. Prototype-mutating `__proto__` literals receive a source diagnostic.
+Object initializer values retain their source evaluation order, including integer-like
+keys. Duplicate literal keys require a diagnostic until ordered overwrite semantics are
+represented in the intermediate form; their earlier expressions must never disappear.
+
 Callback names bound to state, constants or shadowing list/event/updater parameters do not
 authorize host actions. Calls to shadowed `String`, `Number` or `Boolean` require an explicit
 native adapter. A component-local constant may call the host translator `t`; a module-level
@@ -150,6 +164,14 @@ The tests include a negative visual check that changes one channel of one pixel
 and requires the comparator to fail. A release should report which scenarios actually passed
 in CI and which remain untested, rather than applying a general fidelity badge to generated
 code. Failed or missing comparisons leave a profile uncertified.
+
+A separate primitive scenario compares 33 text fields across four real component states
+and eight observation frames in Chromium and generated Go. Its event callbacks also
+compare object initializer evaluation order. These checks establish behavior rather than font
+pixel parity. The scale 2 geometry scenario captures the actual 320 × 240 logical canvas
+as 640 × 480 pixels in both renderers and checks the same zero-difference policy. It
+also verifies that a scale 1 canvas cannot validate or export a scale 2 profile. This
+scenario contains solid rectangles; bitmap resampling and text at scale 2 remain untested.
 
 ## Reverse native scene contract
 

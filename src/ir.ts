@@ -12,7 +12,12 @@ export type Expr =
   | { kind: "unary"; op: string; value: Expr }
   | { kind: "conditional"; test: Expr; yes: Expr; no: Expr }
   | { kind: "array"; items: Expr[] }
-  | { kind: "object"; entries: Record<string, Expr> }
+  | {
+      kind: "object";
+      entries: Record<string, Expr>;
+      /** Literal initialization order, independent of integer-key enumeration. */
+      order?: string[];
+    }
   | { kind: "template"; parts: Expr[] }
   | { kind: "call"; name: string; args: Expr[] };
 

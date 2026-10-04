@@ -725,6 +725,7 @@ test("styles and attributes reach the emitter instead of being discarded", async
   expect(box.attrs.style).toEqual({
     kind: "object",
     entries: { padding: { kind: "literal", value: 10.5 } },
+    order: ["padding"],
   });
   expect(box.attrs["aria-label"]).toEqual({ kind: "name", name: "label" });
   expect(elements(box.children)[0]!.children[0]!).toEqual({
@@ -898,6 +899,171 @@ export function Page({save,t}) { const title=t('title'); const visible=Boolean(1
   expect(buttons[0]!.events.onClick!.steps[0]!.name).toBe("save");
   expect(buttons[1]!.events.onClick!.steps[0]!.name).toBe("save");
   expect(buttons[2]!.events.onClick!.steps[0]!.name).toBe("t");
+});
+
+test("object literal prototype properties cannot silently disappear from the IR", async () => {
+  for (const property of [
+    `__proto__: {label: 'inherited'}`,
+    `'__proto__': null`,
+    `__proto__: 7`,
+    `__proto__`,
+  ]) {
+    const entry = await source(
+      "Prototype.tsx",
+      `export function Page({__proto__}) {\n  const object = {${property}};\n  return <p>{String(object.label)}</p>;\n}`,
+    );
+    await expect(compile(entry)).rejects.toThrow(ConversionError);
+    await expect(compile(entry)).rejects.toThrow(
+      /Prototype\.tsx:2:19: La propiedad __proto__ en literales de objeto/,
+    );
+  }
+});
+
+test("ordinary own properties remain data in a prototype-free compiler dictionary", async () => {
+  const entry = await source(
+    "Properties.tsx",
+    `export function Page() {
+      const object = {constructor: 'own', toString: 3, valueOf: 7, hasOwnProperty: false};
+      return <p>{object.constructor}{String(object.toString)}{String(object.valueOf)}{String(object.hasOwnProperty)}</p>;
+    }`,
+  );
+  const compiled = await compile(entry);
+  const value = compiled.components[0]!.constants[0]!.value;
+  if (value.kind !== "object") throw new Error("missing object literal");
+  expect(Object.getPrototypeOf(value.entries)).toBeNull();
+  expect(Object.keys(value.entries)).toEqual([
+    "constructor",
+    "toString",
+    "valueOf",
+    "hasOwnProperty",
+  ]);
+  expect(Object.entries(value.entries)).toContainEqual([
+    "toString",
+    { kind: "literal", value: 3 },
+  ]);
+  expect(value.entries.absent).toBeUndefined();
+});
+
+test("duplicate literal keys reject discarded initializers before parsing the repeated value", async () => {
+  for (const [first, second, name] of [
+    [`valueOf: t('first')`, `valueOf: t('second')`, "valueOf"],
+    [`name: t('first')`, `'name': t('second')`, "name"],
+    [`'name': t('first')`, `name: t('second')`, "name"],
+    [`value`, `value: t('second')`, "value"],
+    [`value: t('first')`, `value`, "value"],
+    [`1: t('first')`, `'1': t('second')`, "1"],
+    [`'1': t('first')`, `1: t('second')`, "1"],
+    [`1: t('first')`, `1.0: t('second')`, "1"],
+    [`1e0: t('first')`, `'1': t('second')`, "1"],
+    [`0x1: t('first')`, `1: t('second')`, "1"],
+    [`duplicate: t('first')`, `duplicate: absent`, "duplicate"],
+  ]) {
+    const entry = await source(
+      "Duplicate.jsx",
+      `export function Page({t,value}) {\n  const object = {\n    ${first},\n    ${second}\n  };\n  return <p>{String(object)}</p>;\n}`,
+    );
+    await expect(compile(entry)).rejects.toThrow(
+      `Duplicate.jsx:4:5: La propiedad duplicada ${JSON.stringify(name)} requiere conservar la evaluación de todos sus valores`,
+    );
+  }
+});
+
+test("different literal names and an own toString field remain supported", async () => {
+  const entry = await source(
+    "Distinct.jsx",
+    `export function Page({t}) {
+      const object = {first: t('first'), second: t('second'), toString: 7, tostring: 'lowercase'};
+      return <p>{object.first}{object.second}{String(object.toString)}{object.tostring}</p>;
+    }`,
+  );
+  const compiled = await compile(entry);
+  const value = compiled.components[0]!.constants[0]!.value;
+  if (value.kind !== "object") throw new Error("missing object literal");
+  expect(Object.keys(value.entries)).toEqual([
+    "first",
+    "second",
+    "toString",
+    "tostring",
+  ]);
+  expect(Object.entries(value.entries)).toContainEqual([
+    "first",
+    { kind: "call", name: "t", args: [{ kind: "literal", value: "first" }] },
+  ]);
+  expect(Object.entries(value.entries)).toContainEqual([
+    "second",
+    { kind: "call", name: "t", args: [{ kind: "literal", value: "second" }] },
+  ]);
+  expect(compiled.actions).toEqual(["t"]);
+});
+
+test("integer-like literal keys retain source initialization order independently of enumeration", async () => {
+  const entry = await source(
+    "Order.tsx",
+    `export function Page({t}) {
+      const object = {z: t('first'), '2': t('second'), '1': t('third')};
+      return <p>{String(object)}</p>;
+    }`,
+  );
+  const compiled = await compile(entry);
+  const value = compiled.components[0]!.constants[0]!.value;
+  if (value.kind !== "object") throw new Error("missing object literal");
+  expect(value.order).toEqual(["z", "2", "1"]);
+  expect(Object.keys(value.entries)).toEqual(["1", "2", "z"]);
+  expect(value.order!.map((key) => value.entries[key])).toEqual([
+    { kind: "call", name: "t", args: [{ kind: "literal", value: "first" }] },
+    { kind: "call", name: "t", args: [{ kind: "literal", value: "second" }] },
+    { kind: "call", name: "t", args: [{ kind: "literal", value: "third" }] },
+  ]);
+});
+
+test("numeric literal keys normalize while quoted noncanonical keys remain distinct", async () => {
+  const entry = await source(
+    "NumericKeys.tsx",
+    `export function Page() {
+      const object = {1e0: 'numeric', '01': 'leading', '1.0': 'decimal', '1e0': 'exponent'};
+      return <p>{object[1]}{object['01']}{object['1.0']}{object['1e0']}</p>;
+    }`,
+  );
+  const compiled = await compile(entry);
+  const value = compiled.components[0]!.constants[0]!.value;
+  if (value.kind !== "object") throw new Error("missing object literal");
+  expect(value.order).toEqual(["1", "01", "1.0", "1e0"]);
+  expect(Object.entries(value.entries)).toEqual([
+    ["1", { kind: "literal", value: "numeric" }],
+    ["01", { kind: "literal", value: "leading" }],
+    ["1.0", { kind: "literal", value: "decimal" }],
+    ["1e0", { kind: "literal", value: "exponent" }],
+  ]);
+});
+
+test("primitive projections and object-to-primitive operators remain declarative expressions", async () => {
+  for (const expression of [
+    "Number([])",
+    "Number([null])",
+    "Number([1,2])",
+    "Number({})",
+    "String([])",
+    "String([null,undefined,[1,2]])",
+    "String({valueOf: 7})",
+    "String({toString: null})",
+    "[] + 1",
+    "1 + [2]",
+    "({}) + ''",
+    "[2] < [11]",
+    "[] <= [1]",
+    "'2' >= [11]",
+  ]) {
+    const entry = await source(
+      "Projection.tsx",
+      `export function Page() { return <p>{${expression}}</p>; }`,
+    );
+    const compiled = await compile(entry);
+    const root = compiled.components[0]!.body[0]!;
+    if (root.kind !== "element") throw new Error("missing paragraph");
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0]!.kind).toBe("text");
+    expect(compiled.actions).toEqual([]);
+  }
 });
 
 test("named handlers reject list shadows until lexical captures are qualified", async () => {

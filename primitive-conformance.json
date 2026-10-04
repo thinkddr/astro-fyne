@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "package": "generated",
+  "entries": [
+    {
+      "name": "PrimitiveConformance",
+      "source": "example/src/components/PrimitiveConformance.tsx",
+      "export": "PrimitiveConformance",
+      "output": "native/generated/primitive-conformance.gen.go"
+    }
+  ]
+}

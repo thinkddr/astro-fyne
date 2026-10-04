@@ -24,6 +24,29 @@ async function program(source: string) {
 
 const options = { name: "Page", packageName: "generated" };
 
+test("object initializer callbacks retain source order across integer-like keys", async () => {
+  const source = await program(`export function Page({t}) {
+    const record = {z:t('first'), '2':t('second'), '1':t('third')};
+    return <p>{String(record)}</p>;
+  }`);
+  const go = emitGo(source, options);
+  const first = go.indexOf('actions["t"]("first")');
+  const second = go.indexOf('actions["t"]("second")');
+  const third = go.indexOf('actions["t"]("third")');
+  expect(first).toBeGreaterThan(-1);
+  expect(second).toBeGreaterThan(first);
+  expect(third).toBeGreaterThan(second);
+  const object = source.components.find((item) => item.name === source.entry)!
+    .constants[0]!.value;
+  if (object.kind !== "object") throw new Error("missing record literal");
+  object.order = ["z", "2", "2"];
+  expect(() => emitGo(source, options)).toThrow("orden de inicialización");
+  for (const invalid of [null, false, 0, ["z", "2", 1], ["z", "2"]]) {
+    object.order = invalid as unknown as string[];
+    expect(() => emitGo(source, options)).toThrow("orden de inicialización");
+  }
+});
+
 test("HTML input and change events keep distinct immediate and commit callbacks", async () => {
   const source =
     await program(`export function Page({onEdit,onCommit}) { return <input
@@ -199,6 +222,34 @@ test("missing scalar props keep undefined semantics in emitted Go", async () => 
   expect(go).toContain(
     'webui.Binary("===", webui.Get(scope, "missing"), webui.Undefined)',
   );
+});
+
+test("array and ordinary object conversions use the native ECMAScript projection boundary", async () => {
+  const source = await program(`export function Page() { return <main>
+    <p>{Number([])}{Number([null])}{Number([1,2])}{Number({})}</p>
+    <p>{String([null,undefined,[1,2]])}{String({valueOf:7})}{String({toString:null})}</p>
+    <p>{[] + 1}{1 + [2]}{({}) + ''}{[2] < [11]}{[] <= [1]}{'2' >= [11]}</p>
+    <p>{String({constructor:'own',toString:3}.toString)}</p>
+  </main>; }`);
+  const go = emitGo(source, options);
+  for (const expression of [
+    "webui.Number([]any{})",
+    "webui.Number([]any{nil})",
+    "webui.Number([]any{float64(1), float64(2)})",
+    "webui.Number(webui.Scope{})",
+    "webui.String([]any{nil, webui.Undefined, []any{float64(1), float64(2)}})",
+    'webui.String(webui.Scope{"valueOf": float64(7)})',
+    'webui.String(webui.Scope{"toString": nil})',
+    'webui.Binary("+", []any{}, float64(1))',
+    'webui.Binary("+", float64(1), []any{float64(2)})',
+    'webui.Binary("+", webui.Scope{}, "")',
+    'webui.Binary("<", []any{float64(2)}, []any{float64(11)})',
+    'webui.Binary("<=", []any{}, []any{float64(1)})',
+    'webui.Binary(">=", "2", []any{float64(11)})',
+    'webui.String(webui.Get(webui.Scope{"constructor": "own", "toString": float64(3)}, "toString"))',
+  ]) {
+    expect(go).toContain(`webui.ChildText(${expression})`);
+  }
 });
 
 test("the generated constructor reports invalid native trees before returning a widget", async () => {
