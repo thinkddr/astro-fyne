@@ -125,6 +125,18 @@ function metadata(bytes: Buffer, extension: string) {
   return { mediaType: "image/jpeg" as const, ...size };
 }
 
+/** Shared validation for immutable bitmap bytes from source files or scene exports. */
+export function inspectBitmap(bytes: Uint8Array, mediaType: string) {
+  if (bytes.byteLength > maxBytes)
+    throw new Error("El recurso bitmap supera 20 MiB.");
+  if (!["image/png", "image/jpeg"].includes(mediaType))
+    throw new Error("Bitmap solo admite image/png e image/jpeg en stage 01.");
+  return metadata(
+    Buffer.from(bytes),
+    mediaType === "image/png" ? ".png" : ".jpg",
+  );
+}
+
 async function publicDirectory(source: string, explicit?: string) {
   if (explicit) {
     const directory = resolve(explicit);
@@ -203,6 +215,6 @@ export async function loadBitmap(
     hash: digest,
     content: bytes.toString("base64"),
     srcs: [src],
-    ...metadata(bytes, extension),
+    ...inspectBitmap(bytes, extension === ".png" ? "image/png" : "image/jpeg"),
   };
 }
