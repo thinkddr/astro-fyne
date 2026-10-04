@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { deflateSync } from "node:zlib";
 import { compile } from "./parser.ts";
 import { emitGo, sourceHash } from "./emit.ts";
-import { loadBitmap } from "./resources.ts";
+import { inspectBitmap, loadBitmap } from "./resources.ts";
 import type { Node } from "./ir.ts";
 
 let directory: string;
@@ -36,16 +36,33 @@ function chunk(kind: string, body: Buffer) {
   return Buffer.concat([prefix, content, suffix]);
 }
 
-/** A real, opaque 2x1 RGBA PNG without orientation or color-profile metadata. */
-function bitmap(extra?: Buffer) {
+function pngHeader(width = 2, height = 1, type = 6, interlace = 0) {
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(2, 0);
-  header.writeUInt32BE(1, 4);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
   header[8] = 8;
-  header[9] = 6;
+  header[9] = type;
+  header[12] = interlace;
+  return header;
+}
+function png(chunks: Buffer[]) {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    ...chunks,
+  ]);
+}
+function raster(raw: Buffer, header = pngHeader(), extra: Buffer[] = []) {
+  return png([
     chunk("IHDR", header),
+    ...extra,
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+/** A real, opaque 2x1 RGBA PNG without orientation or color-profile metadata. */
+function bitmap(extra?: Buffer) {
+  return png([
+    chunk("IHDR", pngHeader()),
     ...(extra ? [extra] : []),
     chunk(
       "IDAT",
@@ -54,6 +71,176 @@ function bitmap(extra?: Buffer) {
     chunk("IEND", Buffer.alloc(0)),
   ]);
 }
+
+test("PNG rejects missing pixels, bad chunk checksums, truncation and invalid chunk order", () => {
+  const header = chunk("IHDR", pngHeader());
+  const raw = Buffer.from([0, 255, 0, 0, 255, 0, 0, 255, 255]);
+  const compressed = deflateSync(raw);
+  const data = chunk("IDAT", compressed);
+  const end = chunk("IEND", Buffer.alloc(0));
+  const corrupted = bitmap();
+  corrupted[corrupted.length - 1]! ^= 1;
+  const badIDATCRC = Buffer.from(data);
+  badIDATCRC[8]! ^= 1;
+  const badHeaderCRC = Buffer.from(header);
+  badHeaderCRC[11]! ^= 1;
+  for (const [bytes, diagnostic] of [
+    [png([header, end]), "sin datos IDAT"],
+    [png([header, data]), "sin cierre IEND"],
+    [corrupted, "CRC inválido en IEND"],
+    [png([header, badIDATCRC, end]), "CRC inválido en IDAT"],
+    [png([badHeaderCRC, data, end]), "CRC inválido en IHDR"],
+    [bitmap().subarray(0, bitmap().length - 1), "truncado"],
+    [png([header, header, data, end]), "IHDR duplicado"],
+    [png([data, header, end]), "cabecera PNG válida"],
+    [
+      png([
+        header,
+        chunk("IDAT", compressed.subarray(0, 3)),
+        chunk("tEXt", Buffer.from("Note\u0000valid")),
+        chunk("IDAT", compressed.subarray(3)),
+        end,
+      ]),
+      "IDAT consecutivos",
+    ],
+    [
+      png([header, data, chunk("PLTE", Buffer.from([0, 0, 0])), end]),
+      "PLTE inválido",
+    ],
+    [
+      png([header, chunk("PLTE", Buffer.from([0])), data, end]),
+      "PLTE inválido",
+    ],
+    [png([header, chunk("tRNS", Buffer.alloc(6)), data, end]), "tRNS inválido"],
+    [
+      png([header, chunk("ABCD", Buffer.alloc(0)), data, end]),
+      "crítico desconocido",
+    ],
+    [
+      png([header, chunk("abca", Buffer.alloc(0)), data, end]),
+      "tipo de bloque inválido",
+    ],
+    [png([header, data, chunk("IEND", Buffer.from([0]))]), "datos adicionales"],
+    [Buffer.concat([bitmap(), Buffer.from([0])]), "datos adicionales"],
+  ] as [Buffer, string][])
+    expect(() => inspectBitmap(bytes, "image/png")).toThrow(diagnostic);
+});
+
+test("PNG inflates exactly the declared rows and rejects bombs, invalid filters and hidden zlib streams", () => {
+  const header = chunk("IHDR", pngHeader());
+  const raw = Buffer.from([0, 255, 0, 0, 255, 0, 0, 255, 255]);
+  const compressed = deflateSync(raw);
+  const end = chunk("IEND", Buffer.alloc(0));
+  const badAdler = Buffer.from(compressed);
+  badAdler[badAdler.length - 1]! ^= 1;
+  for (const [bytes, diagnostic] of [
+    [raster(raw.subarray(0, 8)), "longitud exacta"],
+    [raster(Buffer.concat([raw, Buffer.from([0])])), "fuera del límite"],
+    [raster(Buffer.alloc(1024 * 1024), pngHeader(1, 1)), "fuera del límite"],
+    [
+      raster(Buffer.from([5, ...raw.subarray(1)])),
+      "filtro de scanline inválido",
+    ],
+    [
+      raster(Buffer.from([255, ...raw.subarray(1)])),
+      "filtro de scanline inválido",
+    ],
+    [
+      png([
+        header,
+        chunk("IDAT", compressed.subarray(0, compressed.length - 1)),
+        end,
+      ]),
+      "IDAT inválidos",
+    ],
+    [png([header, chunk("IDAT", badAdler), end]), "IDAT inválidos"],
+    [
+      png([
+        header,
+        chunk("IDAT", Buffer.concat([compressed, Buffer.from([0, 1])])),
+        end,
+      ]),
+      "datos adicionales tras el stream zlib",
+    ],
+    [
+      png([
+        header,
+        chunk("IDAT", Buffer.concat([compressed, compressed])),
+        end,
+      ]),
+      "datos adicionales tras el stream zlib",
+    ],
+  ] as [Buffer, string][])
+    expect(() => inspectBitmap(bytes, "image/png")).toThrow(diagnostic);
+  for (const index of [10, 11, 12]) {
+    const ihdr = pngHeader();
+    ihdr[index] = index === 12 ? 2 : 1;
+    expect(() => inspectBitmap(raster(raw, ihdr), "image/png")).toThrow(
+      "método inválido",
+    );
+  }
+});
+
+test("PNG accepts RGB/RGBA8 legal filters, split IDAT and nonempty Adam7 passes", () => {
+  for (const type of [2, 6])
+    for (let filter = 0; filter <= 4; filter++) {
+      const raw = Buffer.alloc(type === 2 ? 4 : 5, 17);
+      raw[0] = filter;
+      expect(
+        inspectBitmap(raster(raw, pngHeader(1, 1, type)), "image/png"),
+      ).toEqual({ mediaType: "image/png", width: 1, height: 1 });
+    }
+  const compressed = deflateSync(
+    Buffer.from([0, 255, 0, 0, 255, 0, 0, 255, 255]),
+  );
+  expect(
+    inspectBitmap(
+      png([
+        chunk("IHDR", pngHeader()),
+        chunk("IDAT", Buffer.alloc(0)),
+        chunk("IDAT", compressed.subarray(0, 3)),
+        chunk("IDAT", compressed.subarray(3)),
+        chunk("IEND", Buffer.alloc(0)),
+      ]),
+      "image/png",
+    ),
+  ).toMatchObject({ width: 2, height: 1 });
+  // Adam7 1x1 emits only pass 1; 2x1 emits pass 1 and pass 6. At 3x3,
+  // the five nonempty passes contain six rows and exactly 36 pixel bytes.
+  for (const [width, height, rowLengths] of [
+    [1, 1, [5]],
+    [2, 1, [5, 5]],
+    [3, 3, [5, 5, 9, 5, 5, 13]],
+  ] as [number, number, number[]][]) {
+    const raw = Buffer.concat(rowLengths.map((length) => Buffer.alloc(length)));
+    expect(
+      inspectBitmap(raster(raw, pngHeader(width, height, 6, 1)), "image/png"),
+    ).toMatchObject({ width, height });
+    expect(() =>
+      inspectBitmap(
+        raster(raw.subarray(0, raw.length - 1), pngHeader(width, height, 6, 1)),
+        "image/png",
+      ),
+    ).toThrow("longitud exacta");
+  }
+  const lastPassFilter = Buffer.alloc(42);
+  lastPassFilter[29] = 255;
+  expect(() =>
+    inspectBitmap(raster(lastPassFilter, pngHeader(3, 3, 6, 1)), "image/png"),
+  ).toThrow("filtro de scanline inválido");
+  expect(
+    inspectBitmap(raster(Buffer.alloc(8), pngHeader(2, 1, 2, 1)), "image/png"),
+  ).toMatchObject({ width: 2, height: 1 });
+  expect(
+    inspectBitmap(
+      raster(Buffer.from([0, 1, 2, 3]), pngHeader(1, 1, 2), [
+        chunk("PLTE", Buffer.from([1, 2, 3])),
+        chunk("tRNS", Buffer.from([0, 1, 0, 2, 0, 3])),
+      ]),
+      "image/png",
+    ),
+  ).toMatchObject({ width: 1, height: 1 });
+});
 
 async function file(path: string, bytes: string | Buffer) {
   const target = join(directory, path);
