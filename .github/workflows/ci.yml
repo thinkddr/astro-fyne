@@ -35,3 +35,37 @@ jobs:
             native/go.sum
             native/go.mod
           if-no-files-found: warn
+  desktop-demo:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: native/cmd/astro-fyne-demo/go.mod
+          cache: false
+      - name: Resolve desktop demo dependencies
+        working-directory: native/cmd/astro-fyne-demo
+        run: go mod tidy
+      - name: Validate the demo with Fyne's headless driver
+        working-directory: native/cmd/astro-fyne-demo
+        run: |
+          export GOMAXPROCS=2
+          go vet -tags ci ./...
+          go test -tags ci -p=1 ./...
+          mkdir -p ../../../artifacts
+          go build -tags ci -p=1 -o ../../../artifacts/astro-fyne-demo-ci .
+      - name: Require committed desktop dependency lockfiles
+        run: |
+          git ls-files --error-unmatch native/cmd/astro-fyne-demo/go.sum
+          git diff --exit-code -- native/cmd/astro-fyne-demo/go.mod native/cmd/astro-fyne-demo/go.sum
+      - name: Preserve the demo dependency lockfiles
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-demo-${{ github.sha }}
+          path: |
+            native/cmd/astro-fyne-demo/go.mod
+            native/cmd/astro-fyne-demo/go.sum
+            artifacts/astro-fyne-demo-ci
+          if-no-files-found: warn
