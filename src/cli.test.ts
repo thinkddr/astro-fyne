@@ -41,7 +41,7 @@ test("generation preserves a handwritten output and writes none of the other ent
     entry("Two", "two.gen.go"),
   ]);
   await expect(generate({ config: path, check: false })).rejects.toThrow(
-    "archivo ajeno",
+    "not owned by the generator",
   );
   expect(await readFile(join(directory, "two.gen.go"), "utf8")).toBe(
     "package handwritten\n",
@@ -66,7 +66,7 @@ test("generation owns its reports explicitly and check notices source edits", as
     'export default function Page() { return <div id="root">Changed</div>; }',
   );
   await expect(generate({ config: path, check: true })).rejects.toThrow(
-    "desactualizado",
+    "out of date",
   );
   await generate({ config: path, check: false });
   await generate({ config: path, check: true });
@@ -76,7 +76,7 @@ test("a handwritten report blocks every write", async () => {
   await writeFile(join(directory, "page.gen.report.json"), '{"owner":"user"}');
   const path = await config([entry("Page", "page.gen.go")]);
   await expect(generate({ config: path, check: false })).rejects.toThrow(
-    "archivo ajeno",
+    "not owned by the generator",
   );
   expect(await readFile(join(directory, "page.gen.report.json"), "utf8")).toBe(
     '{"owner":"user"}',
@@ -91,10 +91,10 @@ test("output aliases and reserved helpers are rejected even when selecting a sin
   ]);
   await expect(
     generate({ config: path, entry: "One", check: false }),
-  ).rejects.toThrow("Salida duplicada");
+  ).rejects.toThrow("Duplicate output");
   path = await config([entry("Page", "astro_fyne_scope.gen.go")]);
   await expect(generate({ config: path, check: false })).rejects.toThrow(
-    "reservado",
+    "reserved",
   );
 });
 
