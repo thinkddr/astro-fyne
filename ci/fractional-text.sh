@@ -8,7 +8,7 @@ task_temporary="$(mktemp -d)"
 trap 'rm -rf "$task_temporary"' EXIT
 mkdir -p "$task_evidence"
 
-gofmt -w ci/typesetting-fractional_test.go
+test -z "$(gofmt -l ci/typesetting-fractional_test.go)"
 cp ci/typesetting-fractional_test.go "$task_evidence/fractional_size_test.go"
 go version > "$task_evidence/go-version.txt"
 cd native
@@ -55,11 +55,39 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
   'requestedSize26_6': 928, 'oldHarfBuzzScale': 960, 'newHarfBuzzScale': 928,
 }, indent=2) + '\n')
 PY
+task_fixture_status=0
+GOMAXPROCS=2 go test -json -count=1 -p=1 -race ./shaping > "$task_evidence/candidate-original-fixtures.jsonl" || task_fixture_status=$?
+python3 - "$task_evidence/candidate-original-fixtures.jsonl" "$task_fixture_status" shaping/wrapping_test.go "$task_evidence/wrapping-inputs.json" <<'PY'
+import hashlib, json, pathlib, sys
+events = [json.loads(line) for line in open(sys.argv[1])]
+names = ['TestTrailingSpace', 'TestRequiredBreaks', 'TestTrimmedTrailingWhitespace', 'TestMaxWidthRouding']
+failed = {e['Test'] for e in events if e.get('Action') == 'fail' and e.get('Test')}
+assert sys.argv[2] == '1' and failed == set(names), 'unexpected candidate failure outside the four integer-metric wrapping fixtures'
+path = pathlib.Path(sys.argv[3]); before = path.read_text(); after = before
+changes = []
+for name in names:
+    start = after.index('func ' + name + '(t *testing.T)')
+    end = after.find('\nfunc ', start + 1)
+    if end < 0: end = len(after)
+    body = after[start:end]
+    old, new = ('Size:   36,', 'Size:   fixed.I(1),') if name == 'TestMaxWidthRouding' else ('Size:   72,', 'Size:   fixed.I(2),')
+    assert body.count(old) == 1, 'wrapping fixture source precondition failed'
+    after = after[:start] + body.replace(old, new) + after[end:]
+    changes.append({'test': name, 'old': old, 'new': new})
+path.write_text(after)
+pathlib.Path(sys.argv[4]).write_text(json.dumps({
+    'schema': 1, 'beforeHash': hashlib.sha256(before.encode()).hexdigest(),
+    'afterHash': hashlib.sha256(after.encode()).hexdigest(), 'changes': changes,
+    'assertionsChanged': False,
+    'reason': 'Wrapping fixtures explicitly require 1px or 0.5px monospace advances. Integer font sizes retain those intended metrics; fractional scale behavior is tested independently.',
+}, indent=2) + '\n')
+PY
 GOMAXPROCS=2 go test -json -count=1 -p=1 -race ./shaping > "$task_evidence/candidate.jsonl"
 go list -m -json all > "$task_evidence/modules.jsonl"
 cp go.mod "$task_evidence/go.mod"
 cp go.sum "$task_evidence/go.sum"
 cp shaping/shaping.go "$task_evidence/shaping.go"
+cp shaping/wrapping_test.go "$task_evidence/wrapping_test.go"
 python3 - "$task_evidence/candidate.jsonl" "$task_evidence/result.json" <<'PY'
 import json, pathlib, sys
 events = [json.loads(line) for line in open(sys.argv[1])]

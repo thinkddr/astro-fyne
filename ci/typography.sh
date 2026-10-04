@@ -51,6 +51,20 @@ for task_variant in upstream-v2.8.1 fork-v2.8.1-sytue.16; do
   (
     cd "$task_checkout"
     go mod edit -modfile=probe.mod -module=fyne.io/fyne/v2 -droprequire=fyne.io/fyne/v2 -dropreplace=fyne.io/fyne/v2
+    python3 - "$task_directory/native-modules.jsonl" <<'PY'
+import json, pathlib, subprocess, sys
+remaining = pathlib.Path(sys.argv[1]).read_text()
+decoder, requirements = json.JSONDecoder(), []
+while remaining.strip():
+    module, end = decoder.raw_decode(remaining.lstrip())
+    remaining = remaining.lstrip()[end:]
+    if module.get('Main') or module['Path'] == 'fyne.io/fyne/v2':
+        continue
+    assert module.get('Version') and not module.get('Replace')
+    requirements.append('-require=' + module['Path'] + '@' + module['Version'])
+assert requirements
+subprocess.run(['go', 'mod', 'edit', '-modfile=probe.mod', *requirements], check=True)
+PY
     ASTRO_FYNE_TEXTTRACE_INPUT="$task_directory/texttrace-input.json" ASTRO_FYNE_TEXTTRACE_OUTPUT="$task_directory/native-shaping.json" \
       GOMAXPROCS=2 go test -mod=mod -modfile=probe.mod -count=1 -p=1 -run '^TestAstroFyneTextTrace$' ./internal/painter
     GOMAXPROCS=2 go list -mod=mod -modfile=probe.mod -m -json all > "$task_directory/sidecar-modules.jsonl"

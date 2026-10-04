@@ -136,6 +136,9 @@ pass the requested raw 26.6 size to HarfBuzz instead of rounding up to an intege
 pixel size. The candidate must pass the complete shaping package with the race
 detector, including direct HarfBuzz comparisons for fractional sizes, combining
 marks, RTL/context, font features, vertical text and font-cache transitions.
+Four wrapping fixtures use explicit integer font sizes to retain their original
+1px or 0.5px advance assumptions; every wrapping assertion remains unchanged.
+Their failures before that input correction and the exact input changes are retained.
 Its source hashes, original failure and candidate results are retained under
 `artifacts/fractional-text`. The experiment leaves production dependencies unchanged
 and establishes no Chromium raster or hinted-width equivalence.
