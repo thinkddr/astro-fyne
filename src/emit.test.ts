@@ -65,6 +65,32 @@ export function Page({active}) { return <main>{active ? <Counter seed={1}/> : <C
   expect(emitGo(source, options).split(expected)).toHaveLength(3);
 });
 
+test("JSX short circuit evaluates its host action once for either result", async () => {
+  for (const result of ["truthy", "falsy"]) {
+    const source = await program(
+      `export function Page() { return <main>{t("${result}") && <section id="child" />}</main>; }`,
+    );
+    const go = emitGo(source, options);
+    const call = `actions["t"]("${result}")`;
+    expect(go.split(call)).toHaveLength(2);
+    expect(go).toContain(`left := ${call}; if webui.Truth(left)`);
+    expect(go).toContain("webui.ChildText(left)");
+    expect(go).toContain('Identity: prefix + "/text_0"');
+  }
+});
+
+test("Boolean JSX short circuit evaluates once without a falsy text node", async () => {
+  const source = await program(
+    `export function Page() { return <main>{Boolean(t("condition")) && <section id="child" />}</main>; }`,
+  );
+  const go = emitGo(source, options);
+  expect(go.split('actions["t"]("condition")')).toHaveLength(2);
+  expect(go).toContain(
+    'left := webui.Truth(actions["t"]("condition")); if webui.Truth(left)',
+  );
+  expect(go).not.toContain("webui.ChildText(left)");
+});
+
 test("invalid capture metadata or wrong style types never produce invalid Go", async () => {
   const source = await program(
     `export function Page() { return <div id="panel" />; }`,
