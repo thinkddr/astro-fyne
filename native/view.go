@@ -440,6 +440,9 @@ func (v *View) reconcile() {
 		if err == nil {
 			err = validateResponsiveBackend(nodes, backend)
 		}
+		if err == nil {
+			err = validateResponsiveFrame(nodes, backend, v.Size())
+		}
 		if err != nil {
 			v.err = err
 			return
@@ -833,7 +836,13 @@ func (e *element) update() {
 		}
 	}
 	if e.input != nil {
+		if editor, ok := e.input.(*primitiveEditor); ok {
+			// A legacy editor may enter source mode without being remounted.
+			// Keep its drawing/metrics on the newly frozen backend as well.
+			editor.backend = e.view.backend
+		}
 		e.suppressChange = true
+		e.input.SetStyle(e.style)
 		if e.input.Text() != e.node.Value {
 			e.input.SetText(e.node.Value)
 			if w, ok := e.object.(*inputWidget); ok && !w.dirty {
@@ -842,7 +851,6 @@ func (e *element) update() {
 		}
 		e.input.SetPlaceholder(e.node.Placeholder)
 		e.input.SetDisabled(e.node.Disabled)
-		e.input.SetStyle(e.style)
 		e.input.Object().Refresh() // Materialize placeholder/scroller before the first Layout.
 		e.suppressChange = false
 	}
@@ -1124,6 +1132,15 @@ func (w *inputWidget) Tapped(event *fyne.PointEvent) {
 	}
 	if c != nil {
 		c.Focus(w)
+	}
+	if w.element.view.responsive && (w.element.node.Disabled || w.element.view.elements[w.element.node.ID] != w.element) {
+		// The preceding field's blur handler can remove/disable this target.
+		// Fyne assigns it after that callback, so revalidate the focus owner.
+		if c != nil && c.Focused() == w {
+			w.dirty = false
+			c.Unfocus()
+		}
+		return
 	}
 	if event != nil {
 		if pointer, ok := w.element.input.(interface{ Tapped(*fyne.PointEvent) }); ok {

@@ -181,6 +181,62 @@ func validateResponsiveBackend(nodes []Node, backend Backend) error {
 	return walk(nodes)
 }
 
+func validateResponsiveLine(backend Backend, style Style, text string, content fyne.Size) error {
+	if validator, ok := backend.(TextValidator); ok {
+		if err := validator.ValidateText(text, style); err != nil {
+			return err
+		}
+	}
+	if text != "" && (backend.Measure(text, style).Width > max(content.Width, 0) || style.LineHeight > max(content.Height, 0)) {
+		return fmt.Errorf("text exceeds its content box; overflow and horizontal editing scroll are not supported")
+	}
+	return nil
+}
+
+func validateResponsiveFrame(nodes []Node, backend Backend, viewport fyne.Size) error {
+	if viewport.Width <= 0 || viewport.Height <= 0 {
+		return nil // No native frame exists before the host supplies a viewport.
+	}
+	var candidate func(Node, Style) *element
+	candidate = func(n Node, inherited Style) *element {
+		e := &element{node: n, style: resolveStyle(n, n.Style, inherited, backend, true)}
+		for _, child := range n.Children {
+			e.children = append(e.children, candidate(child, e.style))
+		}
+		return e
+	}
+	root := candidate(nodes[0], Style{})
+	var check func(*element, fyne.Size) error
+	check = func(e *element, size fyne.Size) error {
+		content := fyne.NewSize(max(size.Width-horizontalDecoration(e.style), 0), max(size.Height-verticalDecoration(e.style), 0))
+		if responsiveHasText(e.node) {
+			texts := []string{sourceNowrap(e.node.Text)}
+			if e.node.Kind == "input" {
+				texts = []string{e.node.Value, e.node.Placeholder}
+			}
+			for _, text := range texts {
+				if err := validateResponsiveLine(backend, e.style, text, content); err != nil {
+					return fmt.Errorf("webui: responsive text on %q: %w", e.node.ID, err)
+				}
+			}
+		}
+		if len(e.children) == 0 {
+			return nil
+		}
+		frames, err := flexFrames(e.children, e.style, content, fyne.NewPos(0, 0))
+		if err != nil {
+			return err
+		}
+		for i, child := range e.children {
+			if err := check(child, frames[i].size); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return check(root, fyne.NewSize(max(viewport.Width, horizontalDecoration(root.style)), max(root.style.Height, verticalDecoration(root.style))))
+}
+
 // responsiveFrameError keeps the initial source text contract explicit: one
 // fitted line, including pending input edits. This diagnostic does not resize a
 // box, alter a minimum or replace missing text with a different font. Horizontal
@@ -189,13 +245,15 @@ func (v *View) responsiveFrameError() error {
 	if !v.responsive || v.Size().Width <= 0 || v.Size().Height <= 0 {
 		return nil
 	}
-	validator, _ := v.backend.(TextValidator)
 	for _, e := range v.elements {
 		if !responsiveHasText(e.node) {
 			continue
 		}
 		texts := []string{sourceNowrap(e.node.Text)}
 		if e.input != nil {
+			if editor, ok := e.input.(*primitiveEditor); ok && editor.editErr != nil {
+				return fmt.Errorf("webui: rejected responsive input edit on %q: %w", e.node.ID, editor.editErr)
+			}
 			value := e.input.Text()
 			if invalidSingleLineInput(value) {
 				return fmt.Errorf("webui: responsive input %q contains an unsupported control character", e.node.ID)
@@ -204,13 +262,8 @@ func (v *View) responsiveFrameError() error {
 		}
 		content := e.object.Size().SubtractWidthHeight(horizontalDecoration(e.style), verticalDecoration(e.style))
 		for _, text := range texts {
-			if validator != nil {
-				if err := validator.ValidateText(text, e.style); err != nil {
-					return fmt.Errorf("webui: %q: %w", e.node.ID, err)
-				}
-			}
-			if text != "" && (v.backend.Measure(text, e.style).Width > max(content.Width, 0) || e.style.LineHeight > max(content.Height, 0)) {
-				return fmt.Errorf("webui: responsive text on %q exceeds its content box; overflow and horizontal editing scroll are not supported", e.node.ID)
+			if err := validateResponsiveLine(v.backend, e.style, text, content); err != nil {
+				return fmt.Errorf("webui: responsive text on %q: %w", e.node.ID, err)
 			}
 		}
 	}

@@ -4,6 +4,7 @@
 package webui
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 	"unicode"
@@ -94,6 +95,9 @@ func (w *actionWidget) Tapped(*fyne.PointEvent) {
 		// Focus commits the preceding editor. Its callback may disable or
 		// unmount this button before pointer activation reaches the tap handler.
 		if w.disabled || w.element.node.Disabled || w.element.view.elements[w.element.node.ID] != w.element {
+			if target != nil && target.Focused() == w {
+				target.Unfocus()
+			}
 			return
 		}
 	}
@@ -132,6 +136,7 @@ type primitiveEditor struct {
 	cursor, anchor              int
 	active, disabled, multiline bool
 	onChange                    func(string)
+	editErr                     error
 }
 
 func (b FyneBackend) Editor(multiline bool, style Style, onChange func(string)) Editor {
@@ -187,7 +192,19 @@ func (e *primitiveEditor) replace(value string) {
 	result := append([]rune{}, runes[:lo]...)
 	result = append(result, insert...)
 	result = append(result, runes[hi:]...)
-	e.text = string(result)
+	value = string(result)
+	if e.style.Flex != nil && e.style.Flex.BoxSizing == "border-box" {
+		if invalidSingleLineInput(value) {
+			e.editErr = fmt.Errorf("single-line input cannot contain control characters")
+			return
+		}
+		if err := validateResponsiveLine(e.backend, e.style, value, e.Size()); err != nil {
+			e.editErr = err
+			return
+		}
+	}
+	e.editErr = nil
+	e.text = value
 	e.cursor = lo + len(insert)
 	e.anchor = e.cursor
 	e.Refresh()

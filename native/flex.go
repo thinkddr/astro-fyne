@@ -405,7 +405,14 @@ func flexibleSizes(children []*element, main float32, row bool, gap float32) []f
 	return out
 }
 
-func layoutFlex(children []*element, parent Style, content fyne.Size, origin fyne.Position) error {
+type flexFrame struct {
+	position fyne.Position
+	size     fyne.Size
+}
+
+// flexFrames is shared by live layout and source-frame validation. Computing a
+// proposed tree must not mutate the last valid objects or evaluate callbacks.
+func flexFrames(children []*element, parent Style, content fyne.Size, origin fyne.Position) ([]flexFrame, error) {
 	row := flexRow(parent)
 	main, cross := content.Height, content.Width
 	if row {
@@ -438,11 +445,7 @@ func layoutFlex(children []*element, parent Style, content fyne.Size, origin fyn
 			offset = extraGap
 		}
 	}
-	type frame struct {
-		position fyne.Position
-		size     fyne.Size
-	}
-	frames := make([]frame, len(children))
+	frames := make([]flexFrame, len(children))
 	for i, child := range children {
 		s, f := child.style, child.style.Flex
 		crossSize, crossSet, percent := s.Width, f.WidthSet, f.WidthPercent
@@ -470,10 +473,18 @@ func layoutFlex(children []*element, parent Style, content fyne.Size, origin fyn
 			size = fyne.NewSize(sizes[i], crossSize)
 		}
 		if !finite(position.X) || !finite(position.Y) || !finite(size.Width) || !finite(size.Height) || size.Width < 0 || size.Height < 0 {
-			return fmt.Errorf("webui: responsive flex computed nonfinite or negative bounds for %q", child.node.ID)
+			return nil, fmt.Errorf("webui: responsive flex computed nonfinite or negative bounds for %q", child.node.ID)
 		}
-		frames[i] = frame{position: position, size: size}
+		frames[i] = flexFrame{position: position, size: size}
 		offset += float64(sizes[i]) + float64(parent.Gap) + extraGap
+	}
+	return frames, nil
+}
+
+func layoutFlex(children []*element, parent Style, content fyne.Size, origin fyne.Position) error {
+	frames, err := flexFrames(children, parent, content, origin)
+	if err != nil {
+		return err
 	}
 	// Validate the whole line before assigning any child's new frame.
 	for i, child := range children {
