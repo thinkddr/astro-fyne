@@ -70,11 +70,11 @@ func buildCounter_Counter_fd415ca4(props webui.Scope, actions webui.Actions, ref
 	scope["name"] = state[prefix+"/Counter_fd415ca4/name"]
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("counter"), Kind: "container", Style: webui.Style{Direction: "column", Gap: 7, PaddingTop: 14, PaddingRight: 14, PaddingBottom: 14, PaddingLeft: 14}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("counter"), Identity: prefix + "/counter", Kind: "container", Style: webui.Style{Direction: "column", Gap: 7, PaddingTop: 14, PaddingRight: 14, PaddingBottom: 14, PaddingLeft: 14}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("title"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText("Astro + Preact → Fyne")}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("count"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String("Cuenta: ") + webui.String(webui.Get(scope, "count")) + webui.String(""))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("increment"), Kind: "button", Style: webui.Style{}, OnTap: func() {
+			nodes = append(nodes, []webui.Node{{ID: webui.String("title"), Identity: prefix + "/title", Kind: "text", Style: webui.Style{}, Text: webui.ChildText("Astro + Preact → Fyne")}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("count"), Identity: prefix + "/count", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String("Cuenta: ") + webui.String(webui.Get(scope, "count")) + webui.String(""))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("increment"), Identity: prefix + "/increment", Kind: "button", Style: webui.Style{}, OnTap: func() {
 				eventScope := cloneScope(scope)
 				_ = eventScope
 				pending := cloneScope(scope)
@@ -83,8 +83,8 @@ func buildCounter_Counter_fd415ca4(props webui.Scope, actions webui.Actions, ref
 				state[componentPrefix+"/Counter_fd415ca4/count"] = pending["count"]
 				refresh()
 			}, Text: webui.ChildText("Incrementar")}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("name-label"), Kind: "text", Style: webui.Style{}, LabelFor: webui.String("name"), Text: webui.ChildText("Nombre")}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("name"), Kind: "input", Style: webui.Style{}, Value: webui.String(webui.Get(scope, "name")), OnChange: func(value string) {
+			nodes = append(nodes, []webui.Node{{ID: webui.String("name-label"), Identity: prefix + "/name-label", Kind: "text", Style: webui.Style{}, LabelFor: webui.String("name"), Text: webui.ChildText("Nombre")}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("name"), Identity: prefix + "/name", Kind: "input", Style: webui.Style{}, Value: webui.String(webui.Get(scope, "name")), OnChange: func(value string) {
 				eventScope := cloneScope(scope)
 				_ = eventScope
 				eventScope["event"] = webui.Scope{"currentTarget": webui.Scope{"value": value}, "target": webui.Scope{"value": value}}
@@ -94,12 +94,12 @@ func buildCounter_Counter_fd415ca4(props webui.Scope, actions webui.Actions, ref
 				state[componentPrefix+"/Counter_fd415ca4/name"] = pending["name"]
 				refresh()
 			}, Children: func() []webui.Node { var nodes []webui.Node; ; return nodes }()}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("greeting"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String("Hola, ") + webui.String(webui.Get(scope, "name")) + webui.String(""))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("greeting"), Identity: prefix + "/greeting", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String("Hola, ") + webui.String(webui.Get(scope, "name")) + webui.String(""))}}...)
 			nodes = append(nodes, func() []webui.Node {
 				if webui.Truth(webui.Binary(">", webui.Get(scope, "count"), float64(0))) {
 					return func() []webui.Node {
 						var nodes []webui.Node
-						nodes = append(nodes, []webui.Node{{ID: webui.String("changed"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText("El mismo estado funciona en las dos interfaces.")}}...)
+						nodes = append(nodes, []webui.Node{{ID: webui.String("changed"), Identity: prefix + "/changed", Kind: "text", Style: webui.Style{}, Text: webui.ChildText("El mismo estado funciona en las dos interfaces.")}}...)
 						return nodes
 					}()
 				}
@@ -110,7 +110,7 @@ func buildCounter_Counter_fd415ca4(props webui.Scope, actions webui.Actions, ref
 						if text == "" {
 							return nil
 						}
-						return []webui.Node{{ID: prefix + "/text_0", Kind: "text", Text: text}}
+						return []webui.Node{{ID: prefix + "/text_0", Identity: prefix + "/text_0", Kind: "text", Text: text}}
 					}()...)
 					return nodes
 				}()
@@ -129,7 +129,7 @@ func buildCounter_index_26df59de(props webui.Scope, actions webui.Actions, refre
 
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("fyne-root"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("fyne-root"), Identity: prefix + "/fyne-root", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
 			nodes = append(nodes, buildCounter_Counter_fd415ca4(webui.Scope{}, actions, refresh, state, active, prefix+"/index_26df59de_c1")...)
 			return nodes

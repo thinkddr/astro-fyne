@@ -71,9 +71,9 @@ func buildImageGeometry_geometry_image_750d2bda(props webui.Scope, actions webui
 
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("fyne-root"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("fyne-root"), Identity: prefix + "/fyne-root", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("local-image"), Kind: "image", Style: webui.Style{}, ImageResource: imageImageGeometry_bitmap_baae825f22641a43f7fdfc92, AccessibleLabel: webui.String("Four solid color quadrants")}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("local-image"), Identity: prefix + "/local-image", Kind: "image", Style: webui.Style{}, ImageResource: imageImageGeometry_bitmap_baae825f22641a43f7fdfc92, AccessibleLabel: webui.String("Four solid color quadrants")}}...)
 			return nodes
 		}()}}...)
 		return nodes

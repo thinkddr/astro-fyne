@@ -6,9 +6,13 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 bun install --frozen-lockfile --ignore-scripts
 # Start with actual Fyne objects, then compile the exported scene into a web page.
 (cd native && GOMAXPROCS=2 go run -p=1 ./reverse/cmd/scene-fixture --out ../artifacts/reverse)
+(cd native && GOMAXPROCS=2 go run -p=1 ./reverse/cmd/scene-fixture --controls --out ../artifacts/reverse-controls)
 bun src/cli.ts reverse --scene artifacts/reverse/scene.json --out example/src/pages/reverse-generated --name ReverseGeometry --public-dir example/public
 bun src/cli.ts reverse --scene artifacts/reverse/scene.json --out example/src/pages/reverse-generated --name ReverseGeometry --public-dir example/public --check
 cp example/src/pages/reverse-generated/ReverseGeometry.* artifacts/reverse/
+bun src/cli.ts reverse --scene artifacts/reverse-controls/scene.json --out example/src/pages/reverse-controls --name ReverseControls --actions-module ../../../reverse-actions.ts --public-dir example/public
+bun src/cli.ts reverse --scene artifacts/reverse-controls/scene.json --out example/src/pages/reverse-controls --name ReverseControls --actions-module ../../../reverse-actions.ts --public-dir example/public --check
+cp example/src/pages/reverse-controls/ReverseControls.* artifacts/reverse-controls/
 bun run typecheck
 bun test src
 bunx --no-install prettier --check src capture example astro-fyne.json visual.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json package.json tsconfig.json
@@ -50,6 +54,8 @@ fi
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/geometry --out artifacts --width 320 --height 240 --scale 1 --source-hash "$task_source_hash"
 bun capture/behavior.ts http://127.0.0.1:4321/conformance conformance-scenario.json artifacts/web-behavior.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH"
 bun capture/keyed-behavior.ts http://127.0.0.1:4321/keyed keyed-scenario.json artifacts/web-keyed-behavior.json "$task_keyed_source_hash"
+bun capture/reverse-behavior.ts http://127.0.0.1:4321/reverse-controls/ReverseControls artifacts/reverse-controls/scene.json artifacts/reverse-controls/web-behavior.json
+bun capture/compare-reverse-behavior.ts artifacts/reverse-controls/web-behavior.json artifacts/reverse-controls/native-behavior.json artifacts/reverse-controls/scene.json | tee artifacts/reverse-controls/comparison.json
 bun src/cli.ts generate --config visual.json --entry Geometry --measurements artifacts/measurements.json
 bun src/cli.ts check --config visual.json --entry Geometry --measurements artifacts/measurements.json
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/geometry-image --out artifacts/images --width 320 --height 240 --scale 1 --source-hash "$task_image_source_hash" --analysis artifacts-image-analysis.json
