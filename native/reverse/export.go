@@ -493,23 +493,14 @@ func (e *exporter) bitmap(resource fyne.Resource) (string, error) {
 }
 
 func imageResource(o *canvas.Image) (fyne.Resource, error) {
-	sources := 0
+	// Fyne's source reader prefers Resource over File; Refresh materializes that
+	// source in Image, and the painter subsequently paints Image. These fields are
+	// therefore not mutually exclusive. Compare the actual cached bitmap before
+	// preserving original resource bytes, without calling Refresh during export.
+	var source fyne.Resource
 	if o.Resource != nil {
-		sources++
-	}
-	if o.File != "" {
-		sources++
-	}
-	if o.Image != nil {
-		sources++
-	}
-	if sources != 1 {
-		return nil, fmt.Errorf("exactly one resource, local file or decoded bitmap source is required")
-	}
-	if o.Resource != nil {
-		return o.Resource, nil
-	}
-	if o.File != "" {
+		source = o.Resource
+	} else if o.File != "" {
 		file, err := os.Open(o.File)
 		if err != nil {
 			return nil, err
@@ -529,7 +520,37 @@ func imageResource(o *canvas.Image) (fyne.Resource, error) {
 		if len(content) > 20*1024*1024 {
 			return nil, fmt.Errorf("local bitmap exceeds 20 MiB")
 		}
-		return fyne.NewStaticResource(o.File, content), nil
+		source = fyne.NewStaticResource(o.File, content)
+	}
+	if source != nil {
+		if reflect.ValueOf(source).Kind() == reflect.Pointer && reflect.ValueOf(source).IsNil() {
+			return nil, fmt.Errorf("bitmap resource is nil")
+		}
+		source = fyne.NewStaticResource(source.Name(), append([]byte(nil), source.Content()...))
+		if _, err := webui.ValidateBitmap(source); err != nil {
+			return nil, err
+		}
+		if o.Image == nil {
+			return source, nil
+		}
+		if err := validateDecodedBitmap(o.Image); err != nil {
+			return nil, err
+		}
+		decoded, _, err := image.Decode(bytes.NewReader(source.Content()))
+		if err != nil {
+			return nil, err
+		}
+		if equalPixels(decoded, o.Image) {
+			return source, nil
+		}
+		// A caller changed/replaced the decoded cache: export the bitmap currently
+		// painted instead of stale Resource/File bytes, retaining no hidden asset.
+	}
+	if o.Image == nil {
+		return nil, fmt.Errorf("bitmap source is missing")
+	}
+	if err := validateDecodedBitmap(o.Image); err != nil {
+		return nil, err
 	}
 	bounds := o.Image.Bounds()
 	if bounds.Dx() <= 0 || bounds.Dy() <= 0 || bounds.Dx() > 16384 || bounds.Dy() > 16384 || int64(bounds.Dx())*int64(bounds.Dy()) > 64*1024*1024 {
@@ -542,6 +563,47 @@ func imageResource(o *canvas.Image) (fyne.Resource, error) {
 		return nil, err
 	}
 	return fyne.NewStaticResource("decoded.png", encoded.Bytes()), nil
+}
+
+func validateDecodedBitmap(bitmap image.Image) error {
+	if bitmap == nil || (reflect.ValueOf(bitmap).Kind() == reflect.Pointer && reflect.ValueOf(bitmap).IsNil()) {
+		return fmt.Errorf("decoded bitmap is nil")
+	}
+	switch bitmap := bitmap.(type) {
+	case *image.NRGBA, *image.RGBA, *image.Gray, *image.Alpha, *image.CMYK, *image.YCbCr, *image.NYCbCrA:
+	case *image.Paletted:
+		for _, c := range bitmap.Palette {
+			switch c.(type) {
+			case color.NRGBA, color.RGBA, color.Gray, color.Alpha, color.CMYK:
+			default:
+				return fmt.Errorf("decoded palette requires standard 8-bit colors")
+			}
+		}
+	default:
+		return fmt.Errorf("decoded bitmap %T requires a standard 8-bit image; 16-bit and generic images cannot be quantized silently", bitmap)
+	}
+	bounds := bitmap.Bounds()
+	if bounds.Dx() <= 0 || bounds.Dy() <= 0 || bounds.Dx() > 16384 || bounds.Dy() > 16384 || int64(bounds.Dx())*int64(bounds.Dy()) > 64*1024*1024 {
+		return fmt.Errorf("decoded bitmap dimensions exceed the supported limits")
+	}
+	return nil
+}
+
+func equalPixels(a, b image.Image) bool {
+	ab, bb := a.Bounds(), b.Bounds()
+	if ab.Size() != bb.Size() {
+		return false
+	}
+	for y := 0; y < ab.Dy(); y++ {
+		for x := 0; x < ab.Dx(); x++ {
+			ac := color.NRGBAModel.Convert(a.At(ab.Min.X+x, ab.Min.Y+y)).(color.NRGBA)
+			bc := color.NRGBAModel.Convert(b.At(bb.Min.X+x, bb.Min.Y+y)).(color.NRGBA)
+			if ac != bc {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func finite(v float32) bool { return !math.IsNaN(float64(v)) && !math.IsInf(float64(v), 0) }
