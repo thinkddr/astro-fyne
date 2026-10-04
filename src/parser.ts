@@ -22,6 +22,7 @@ import type {
   Program,
 } from "./ir.ts";
 import { loadBitmap } from "./resources.ts";
+import { loadFonts } from "./fonts.ts";
 
 interface AstroNode {
   type: string;
@@ -200,6 +201,7 @@ class Compiler {
         "Elige un componente exportado; la entrada es ambigua.",
       );
     const entry = await this.component(source, choice);
+    const fonts = await loadFonts(this.options.fonts, this.root);
     return {
       entry,
       components: [...this.components.values()].sort((a, b) =>
@@ -219,12 +221,14 @@ class Compiler {
             hash,
           })),
         )
+        .concat(fonts.map(({ path, hash }) => ({ path, hash })))
         .sort((a, b) => compare(a.path, b.path)),
       actions: [...this.actions].sort(),
       hasStyles: this.hasStyles,
       resources: [...this.resources.values()].sort((a, b) =>
         compare(a.path, b.path),
       ),
+      ...(fonts.length ? { fonts } : {}),
     };
   }
 

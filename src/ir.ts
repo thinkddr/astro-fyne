@@ -93,6 +93,22 @@ export interface Program {
   /** Inline/external CSS requires captured browser measurements in stage 01. */
   hasStyles?: boolean;
   resources?: BitmapResource[];
+  fonts?: FontResource[];
+}
+
+/** Explicit web CSS face bound to the exact native TrueType bytes. */
+export interface FontFace {
+  family: string;
+  weight: 400 | 700;
+  style: "normal" | "italic";
+  source: string;
+  webSrc: string;
+}
+export interface FontResource extends Omit<FontFace, "source"> {
+  name: string;
+  path: string;
+  hash: string;
+  content: string;
 }
 
 export interface BitmapResource {
@@ -115,4 +131,5 @@ export interface CompileOptions {
   publicDir?: string;
   /** Optional package adapters: package -> exported name -> native builtin name. */
   adapters?: Record<string, Record<string, string>>;
+  fonts?: FontFace[];
 }
