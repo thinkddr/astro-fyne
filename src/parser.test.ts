@@ -725,6 +725,7 @@ test("styles and attributes reach the emitter instead of being discarded", async
   expect(box.attrs.style).toEqual({
     kind: "object",
     entries: { padding: { kind: "literal", value: 10.5 } },
+    order: ["padding"],
   });
   expect(box.attrs["aria-label"]).toEqual({ kind: "name", name: "label" });
   expect(elements(box.children)[0]!.children[0]!).toEqual({
@@ -941,6 +942,98 @@ test("ordinary own properties remain data in a prototype-free compiler dictionar
     { kind: "literal", value: 3 },
   ]);
   expect(value.entries.absent).toBeUndefined();
+});
+
+test("duplicate literal keys reject discarded initializers before parsing the repeated value", async () => {
+  for (const [first, second, name] of [
+    [`valueOf: t('first')`, `valueOf: t('second')`, "valueOf"],
+    [`name: t('first')`, `'name': t('second')`, "name"],
+    [`'name': t('first')`, `name: t('second')`, "name"],
+    [`value`, `value: t('second')`, "value"],
+    [`value: t('first')`, `value`, "value"],
+    [`1: t('first')`, `'1': t('second')`, "1"],
+    [`'1': t('first')`, `1: t('second')`, "1"],
+    [`1: t('first')`, `1.0: t('second')`, "1"],
+    [`1e0: t('first')`, `'1': t('second')`, "1"],
+    [`0x1: t('first')`, `1: t('second')`, "1"],
+    [`duplicate: t('first')`, `duplicate: absent`, "duplicate"],
+  ]) {
+    const entry = await source(
+      "Duplicate.jsx",
+      `export function Page({t,value}) {\n  const object = {\n    ${first},\n    ${second}\n  };\n  return <p>{String(object)}</p>;\n}`,
+    );
+    await expect(compile(entry)).rejects.toThrow(
+      `Duplicate.jsx:4:5: La propiedad duplicada ${JSON.stringify(name)} requiere conservar la evaluación de todos sus valores`,
+    );
+  }
+});
+
+test("different literal names and an own toString field remain supported", async () => {
+  const entry = await source(
+    "Distinct.jsx",
+    `export function Page({t}) {
+      const object = {first: t('first'), second: t('second'), toString: 7, tostring: 'lowercase'};
+      return <p>{object.first}{object.second}{String(object.toString)}{object.tostring}</p>;
+    }`,
+  );
+  const compiled = await compile(entry);
+  const value = compiled.components[0]!.constants[0]!.value;
+  if (value.kind !== "object") throw new Error("missing object literal");
+  expect(Object.keys(value.entries)).toEqual([
+    "first",
+    "second",
+    "toString",
+    "tostring",
+  ]);
+  expect(Object.entries(value.entries)).toContainEqual([
+    "first",
+    { kind: "call", name: "t", args: [{ kind: "literal", value: "first" }] },
+  ]);
+  expect(Object.entries(value.entries)).toContainEqual([
+    "second",
+    { kind: "call", name: "t", args: [{ kind: "literal", value: "second" }] },
+  ]);
+  expect(compiled.actions).toEqual(["t"]);
+});
+
+test("integer-like literal keys retain source initialization order independently of enumeration", async () => {
+  const entry = await source(
+    "Order.tsx",
+    `export function Page({t}) {
+      const object = {z: t('first'), '2': t('second'), '1': t('third')};
+      return <p>{String(object)}</p>;
+    }`,
+  );
+  const compiled = await compile(entry);
+  const value = compiled.components[0]!.constants[0]!.value;
+  if (value.kind !== "object") throw new Error("missing object literal");
+  expect(value.order).toEqual(["z", "2", "1"]);
+  expect(Object.keys(value.entries)).toEqual(["1", "2", "z"]);
+  expect(value.order!.map((key) => value.entries[key])).toEqual([
+    { kind: "call", name: "t", args: [{ kind: "literal", value: "first" }] },
+    { kind: "call", name: "t", args: [{ kind: "literal", value: "second" }] },
+    { kind: "call", name: "t", args: [{ kind: "literal", value: "third" }] },
+  ]);
+});
+
+test("numeric literal keys normalize while quoted noncanonical keys remain distinct", async () => {
+  const entry = await source(
+    "NumericKeys.tsx",
+    `export function Page() {
+      const object = {1e0: 'numeric', '01': 'leading', '1.0': 'decimal', '1e0': 'exponent'};
+      return <p>{object[1]}{object['01']}{object['1.0']}{object['1e0']}</p>;
+    }`,
+  );
+  const compiled = await compile(entry);
+  const value = compiled.components[0]!.constants[0]!.value;
+  if (value.kind !== "object") throw new Error("missing object literal");
+  expect(value.order).toEqual(["1", "01", "1.0", "1e0"]);
+  expect(Object.entries(value.entries)).toEqual([
+    ["1", { kind: "literal", value: "numeric" }],
+    ["01", { kind: "literal", value: "leading" }],
+    ["1.0", { kind: "literal", value: "decimal" }],
+    ["1e0", { kind: "literal", value: "exponent" }],
+  ]);
 });
 
 test("primitive projections and object-to-primitive operators remain declarative expressions", async () => {
