@@ -95,7 +95,8 @@ module can be used and tested without first rebuilding Astro. CI regenerates the
 if committed snapshots or resolved Go dependencies change unexpectedly.
 
 The example contains a stateful counter, a controlled input and conditional content. State
-updates reuse objects by identifier so the input can retain focus. Hosts should surface
+updates reuse objects by source position and supported list keys so the input can retain focus.
+Public HTML IDs can change while the same source instance stays mounted. Hosts should surface
 `view.Error()` when a runtime contract fails and perform UI mutations on Fyne's event
 goroutine. Background service work returns to the UI through `fyne.Do`.
 
