@@ -63,6 +63,7 @@ func newDemoWindow(a fyne.App, example string) (*webui.View, fyne.Window, error)
 	var err error
 	size, title := fyne.NewSize(520, 320), "Astro Fyne — Counter"
 	if example == "responsive" {
+		size, title = fyne.NewSize(480, 320), "Astro Fyne — Responsive controls"
 	} else if example != "counter" {
 		return nil, nil, fmt.Errorf("unknown example %q", example)
 	}
