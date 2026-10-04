@@ -34,12 +34,13 @@ func NewImageGeometry(props webui.Scope, actions webui.Actions, backends ...webu
 	}
 	state := webui.Scope{}
 	var view *webui.View
+	var generated *ImageGeometryWidget
 	refresh := func() {
 		if view != nil {
 			view.Refresh()
 		}
 	}
-	view = webui.NewView(func() []webui.Node {
+	view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &ImageGeometryWidget{View: v}; return generated }, func() []webui.Node {
 		active := map[string]bool{}
 		nodes := buildImageGeometry_geometry_image_750d2bda(props, actions, refresh, state, active, "")
 		for key := range state {
@@ -60,7 +61,7 @@ func NewImageGeometry(props webui.Scope, actions webui.Actions, backends ...webu
 	if err := view.ApplyMeasurements(map[string]webui.Style{"fyne-root": {X: 0, Y: 0, Width: 320, Height: 240, PaddingTop: 0, PaddingRight: 0, PaddingBottom: 0, PaddingLeft: 0, Gap: 0, Direction: "row", Background: "rgb(255, 255, 255)", Color: "rgb(0, 0, 0)", BorderColor: "rgb(0, 0, 0)", BorderWidth: 0, Radius: 0, FontFamily: "", FontStyle: "normal", FontWeight: 400, FontSize: 0, LineHeight: 0, TextAlign: "left", WhiteSpace: "normal", Display: "block", Opacity: 1, Measured: true}, "local-image": {X: 24, Y: 30, Width: 16, Height: 16, PaddingTop: 0, PaddingRight: 0, PaddingBottom: 0, PaddingLeft: 0, Gap: 0, Direction: "row", Background: "rgba(0, 0, 0, 0)", Color: "rgb(0, 0, 0)", BorderColor: "rgb(0, 0, 0)", BorderWidth: 0, Radius: 0, FontFamily: "", FontStyle: "normal", FontWeight: 400, FontSize: 0, LineHeight: 0, TextAlign: "left", WhiteSpace: "normal", Display: "block", Opacity: 1, Measured: true}}); err != nil {
 		return nil, err
 	}
-	return &ImageGeometryWidget{View: view}, nil
+	return generated, nil
 }
 
 func buildImageGeometry_geometry_image_750d2bda(props webui.Scope, actions webui.Actions, refresh func(), state webui.Scope, active map[string]bool, prefix string) []webui.Node {
@@ -71,11 +72,17 @@ func buildImageGeometry_geometry_image_750d2bda(props webui.Scope, actions webui
 
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("fyne-root"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
-			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("local-image"), Kind: "image", Style: webui.Style{}, ImageResource: imageImageGeometry_bitmap_baae825f22641a43f7fdfc92, AccessibleLabel: webui.String("Four solid color quadrants")}}...)
-			return nodes
-		}()}}...)
+		nodes = append(nodes, func() []webui.Node {
+			capturedAttrs := webui.Scope{"id": "fyne-root"}
+			return []webui.Node{{ID: webui.String(webui.Get(capturedAttrs, "id")), Identity: prefix + "/fyne-root", Kind: "container", Style: webui.Style{}, CaptureSignature: webui.SnapshotAttributes("main", capturedAttrs), Children: func() []webui.Node {
+				var nodes []webui.Node
+				nodes = append(nodes, func() []webui.Node {
+					capturedAttrs := webui.Scope{"id": "local-image", "src": "/images/local-image.png", "alt": "Four solid color quadrants", "width": "16", "height": "16"}
+					return []webui.Node{{ID: webui.String(webui.Get(capturedAttrs, "id")), Identity: prefix + "/local-image", Kind: "image", Style: webui.Style{}, CaptureSignature: webui.SnapshotAttributes("img", capturedAttrs), ImageResource: imageImageGeometry_bitmap_baae825f22641a43f7fdfc92, AccessibleLabel: webui.String(webui.Get(capturedAttrs, "alt"))}}
+				}()...)
+				return nodes
+			}()}}
+		}()...)
 		return nodes
 	}()
 }

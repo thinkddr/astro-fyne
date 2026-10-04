@@ -29,12 +29,13 @@ func NewUpdaterConformance(props webui.Scope, actions webui.Actions, backends ..
 	}
 	state := webui.Scope{}
 	var view *webui.View
+	var generated *UpdaterConformanceWidget
 	refresh := func() {
 		if view != nil {
 			view.Refresh()
 		}
 	}
-	view = webui.NewView(func() []webui.Node {
+	view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &UpdaterConformanceWidget{View: v}; return generated }, func() []webui.Node {
 		active := map[string]bool{}
 		nodes := buildUpdaterConformance_UpdaterConformance_cc5f4c8c(props, actions, refresh, state, active, "")
 		for key := range state {
@@ -49,7 +50,7 @@ func NewUpdaterConformance(props webui.Scope, actions webui.Actions, backends ..
 		return nil, err
 	}
 
-	return &UpdaterConformanceWidget{View: view}, nil
+	return generated, nil
 }
 
 func buildUpdaterConformance_CrossHookUnit_cc5f4c8c(props webui.Scope, actions webui.Actions, refresh func(), state webui.Scope, active map[string]bool, prefix string) []webui.Node {
@@ -70,11 +71,11 @@ func buildUpdaterConformance_CrossHookUnit_cc5f4c8c(props webui.Scope, actions w
 	scope["b"] = state[prefix+"/CrossHookUnit_cc5f4c8c/b"]
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-unit")), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-unit")), Identity: prefix + "/CrossHookUnit_cc5f4c8c_n5", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-a")), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "a"))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-b")), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "b"))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-update")), Kind: "button", Style: webui.Style{}, OnTap: func() {
+			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-a")), Identity: prefix + "/CrossHookUnit_cc5f4c8c_n2", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "a"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-b")), Identity: prefix + "/CrossHookUnit_cc5f4c8c_n3", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "b"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-update")), Identity: prefix + "/CrossHookUnit_cc5f4c8c_n4", Kind: "button", Style: webui.Style{}, OnTap: func() {
 				eventScope := cloneScope(scope)
 				_ = eventScope
 				pending := cloneScope(scope)
@@ -105,10 +106,10 @@ func buildUpdaterConformance_EventArgumentUnit_cc5f4c8c(props webui.Scope, actio
 	scope["count"] = state[prefix+"/EventArgumentUnit_cc5f4c8c/count"]
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("event-unit"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("event-unit"), Identity: prefix + "/event-unit", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("event-count"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "count"))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("event-input"), Kind: "input", Style: webui.Style{}, Value: webui.String(""), OnChange: func(value string) {
+			nodes = append(nodes, []webui.Node{{ID: webui.String("event-count"), Identity: prefix + "/event-count", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "count"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("event-input"), Identity: prefix + "/event-input", Kind: "input", Style: webui.Style{}, Value: webui.String(""), OnChange: func(value string) {
 				eventScope := cloneScope(scope)
 				_ = eventScope
 				eventScope["count"] = webui.Scope{"currentTarget": webui.Scope{"value": value}, "target": webui.Scope{"value": value}}
@@ -138,20 +139,21 @@ func buildUpdaterConformance_MappedUnit_cc5f4c8c(props webui.Scope, actions webu
 	scope["count"] = state[prefix+"/MappedUnit_cc5f4c8c/count"]
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("mapped-unit"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("mapped-unit"), Identity: prefix + "/mapped-unit", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("mapped-count"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "count"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("mapped-count"), Identity: prefix + "/mapped-count", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "count"))}}...)
 			nodes = append(nodes, func() []webui.Node {
 				var result []webui.Node
-				for index, item := range webui.Values(webui.Get(scope, "items")) {
+				items := webui.Values(webui.Get(scope, "items"))
+				for index, item := range items {
 					scope := cloneScope(scope)
 					scope["count"] = item
 					scope["index"] = float64(index)
-					prefix := prefix + "/" + webui.String(index)
+					prefix := prefix + "/MappedUnit_cc5f4c8c_each12/" + "i" + webui.String(index)
 					_ = prefix
-					result = append(result, func() []webui.Node {
+					result = append(result, webui.KeyedIdentity(func() []webui.Node {
 						var nodes []webui.Node
-						nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("mapped-") + webui.String(webui.Get(scope, "index")) + webui.String("")), Kind: "button", Style: webui.Style{}, OnTap: func() {
+						nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("mapped-") + webui.String(webui.Get(scope, "index")) + webui.String("")), Identity: prefix + "/MappedUnit_cc5f4c8c_n13", Kind: "button", Style: webui.Style{}, OnTap: func() {
 							eventScope := cloneScope(scope)
 							_ = eventScope
 							pending := cloneScope(scope)
@@ -161,9 +163,9 @@ func buildUpdaterConformance_MappedUnit_cc5f4c8c(props webui.Scope, actions webu
 							refresh()
 						}, Text: webui.ChildText("Add captured row value")}}...)
 						return nodes
-					}()...)
+					}(), prefix)...)
 				}
-				return result
+				return webui.GroupList(result, prefix+"/MappedUnit_cc5f4c8c_each12")
 			}()...)
 			return nodes
 		}()}}...)
@@ -185,20 +187,21 @@ func buildUpdaterConformance_NormalMappedUnit_cc5f4c8c(props webui.Scope, action
 	scope["total"] = state[prefix+"/NormalMappedUnit_cc5f4c8c/total"]
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("normal-mapped-unit"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("normal-mapped-unit"), Identity: prefix + "/normal-mapped-unit", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("normal-mapped-total"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "total"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("normal-mapped-total"), Identity: prefix + "/normal-mapped-total", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "total"))}}...)
 			nodes = append(nodes, func() []webui.Node {
 				var result []webui.Node
-				for index, item := range webui.Values(webui.Get(scope, "items")) {
+				items := webui.Values(webui.Get(scope, "items"))
+				for index, item := range items {
 					scope := cloneScope(scope)
 					scope["item"] = item
 					scope["index"] = float64(index)
-					prefix := prefix + "/" + webui.String(index)
+					prefix := prefix + "/NormalMappedUnit_cc5f4c8c_each15/" + "i" + webui.String(index)
 					_ = prefix
-					result = append(result, func() []webui.Node {
+					result = append(result, webui.KeyedIdentity(func() []webui.Node {
 						var nodes []webui.Node
-						nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("normal-mapped-") + webui.String(webui.Get(scope, "index")) + webui.String("")), Kind: "button", Style: webui.Style{}, OnTap: func() {
+						nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("normal-mapped-") + webui.String(webui.Get(scope, "index")) + webui.String("")), Identity: prefix + "/NormalMappedUnit_cc5f4c8c_n16", Kind: "button", Style: webui.Style{}, OnTap: func() {
 							eventScope := cloneScope(scope)
 							_ = eventScope
 							pending := cloneScope(scope)
@@ -208,9 +211,9 @@ func buildUpdaterConformance_NormalMappedUnit_cc5f4c8c(props webui.Scope, action
 							refresh()
 						}, Text: webui.ChildText("Add row value to the owning component")}}...)
 						return nodes
-					}()...)
+					}(), prefix)...)
 				}
-				return result
+				return webui.GroupList(result, prefix+"/NormalMappedUnit_cc5f4c8c_each15")
 			}()...)
 			return nodes
 		}()}}...)
@@ -231,10 +234,10 @@ func buildUpdaterConformance_SelfClosureUnit_cc5f4c8c(props webui.Scope, actions
 	scope["a"] = state[prefix+"/SelfClosureUnit_cc5f4c8c/a"]
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("self-unit"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("self-unit"), Identity: prefix + "/self-unit", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("self-a"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "a"))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("self-update"), Kind: "button", Style: webui.Style{}, OnTap: func() {
+			nodes = append(nodes, []webui.Node{{ID: webui.String("self-a"), Identity: prefix + "/self-a", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "a"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("self-update"), Identity: prefix + "/self-update", Kind: "button", Style: webui.Style{}, OnTap: func() {
 				eventScope := cloneScope(scope)
 				_ = eventScope
 				pending := cloneScope(scope)
@@ -263,10 +266,10 @@ func buildUpdaterConformance_SequentialUnit_cc5f4c8c(props webui.Scope, actions 
 	scope["count"] = state[prefix+"/SequentialUnit_cc5f4c8c/count"]
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("sequential-unit"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("sequential-unit"), Identity: prefix + "/sequential-unit", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("sequential-count"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "count"))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("sequential-update"), Kind: "button", Style: webui.Style{}, OnTap: func() {
+			nodes = append(nodes, []webui.Node{{ID: webui.String("sequential-count"), Identity: prefix + "/sequential-count", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "count"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("sequential-update"), Identity: prefix + "/sequential-update", Kind: "button", Style: webui.Style{}, OnTap: func() {
 				eventScope := cloneScope(scope)
 				_ = eventScope
 				pending := cloneScope(scope)
@@ -300,11 +303,11 @@ func buildUpdaterConformance_ShadowedParameterUnit_cc5f4c8c(props webui.Scope, a
 	scope["count"] = state[prefix+"/ShadowedParameterUnit_cc5f4c8c/count"]
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("shadow-unit"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("shadow-unit"), Identity: prefix + "/shadow-unit", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("shadow-prev"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "prev"))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("shadow-count"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "count"))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("shadow-update"), Kind: "button", Style: webui.Style{}, OnTap: func() {
+			nodes = append(nodes, []webui.Node{{ID: webui.String("shadow-prev"), Identity: prefix + "/shadow-prev", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "prev"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("shadow-count"), Identity: prefix + "/shadow-count", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "count"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("shadow-update"), Identity: prefix + "/shadow-update", Kind: "button", Style: webui.Style{}, OnTap: func() {
 				eventScope := cloneScope(scope)
 				_ = eventScope
 				pending := cloneScope(scope)
@@ -331,7 +334,7 @@ func buildUpdaterConformance_UpdaterConformance_cc5f4c8c(props webui.Scope, acti
 
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("updater-conformance"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("updater-conformance"), Identity: prefix + "/updater-conformance", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
 			nodes = append(nodes, buildUpdaterConformance_CrossHookUnit_cc5f4c8c(webui.Scope{"prefix": "left"}, actions, refresh, state, active, prefix+"/UpdaterConformance_cc5f4c8c_c1")...)
 			nodes = append(nodes, buildUpdaterConformance_CrossHookUnit_cc5f4c8c(webui.Scope{"prefix": "right"}, actions, refresh, state, active, prefix+"/UpdaterConformance_cc5f4c8c_c6")...)
@@ -340,7 +343,7 @@ func buildUpdaterConformance_UpdaterConformance_cc5f4c8c(props webui.Scope, acti
 			nodes = append(nodes, buildUpdaterConformance_ShadowedParameterUnit_cc5f4c8c(webui.Scope{}, actions, refresh, state, active, prefix+"/UpdaterConformance_cc5f4c8c_c9")...)
 			nodes = append(nodes, buildUpdaterConformance_EventArgumentUnit_cc5f4c8c(webui.Scope{}, actions, refresh, state, active, prefix+"/UpdaterConformance_cc5f4c8c_c10")...)
 			nodes = append(nodes, buildUpdaterConformance_MappedUnit_cc5f4c8c(webui.Scope{}, actions, refresh, state, active, prefix+"/UpdaterConformance_cc5f4c8c_c11")...)
-			nodes = append(nodes, buildUpdaterConformance_NormalMappedUnit_cc5f4c8c(webui.Scope{}, actions, refresh, state, active, prefix+"/UpdaterConformance_cc5f4c8c_c13")...)
+			nodes = append(nodes, buildUpdaterConformance_NormalMappedUnit_cc5f4c8c(webui.Scope{}, actions, refresh, state, active, prefix+"/UpdaterConformance_cc5f4c8c_c14")...)
 			return nodes
 		}()}}...)
 		return nodes

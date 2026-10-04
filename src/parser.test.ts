@@ -33,6 +33,142 @@ function elements(nodes: Node[]): Extract<Node, { kind: "element" }>[] {
   });
 }
 
+test("type-changing branches cannot steal an unkeyed sibling's component state", async () => {
+  const counter = `function Counter({ label }) {
+    const [count, setCount] = useState(0);
+    return <section><p id={label}>{count}</p></section>;
+  }`;
+  const entry = await source(
+    "Ambiguous.tsx",
+    `import { useState } from 'preact/hooks'; ${counter}
+    export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main>{visible ? <Counter label="a"/> : <p id="empty">empty</p>}<Counter label="b"/></main>;
+    }`,
+  );
+  await expect(compile(entry)).rejects.toThrow(/otro hermano sin key/);
+
+  const compatible = await source(
+    "Compatible.tsx",
+    `import { useState } from 'preact/hooks'; ${counter}
+    export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main>{visible ? <Counter label="a"/> : <Counter label="alternate"/>}<Counter label="b"/></main>;
+    }`,
+  );
+  await expect(compile(compatible)).resolves.toBeDefined();
+  const isolated = await source(
+    "Isolated.tsx",
+    `import { useState } from 'preact/hooks'; ${counter}
+    export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main>{visible ? <Counter label="a"/> : <p id="empty">empty</p>}<button id="next">Next</button></main>;
+    }`,
+  );
+  await expect(compile(isolated)).resolves.toBeDefined();
+});
+
+test("keyed component groups require one physical root through component indirection", async () => {
+  for (const body of [
+    `return <><section/><input/></>;`,
+    `return item ? <section/> : null;`,
+    `return ['a', 'b'].map(value => <p>{value}</p>);`,
+  ]) {
+    const entry = await source(
+      "Keyed.tsx",
+      `function Row({ item }) { ${body} }
+      function Alias({ item }) { return <Row item={item}/>; }
+      export function Page() { return <main>{['a', 'b'].map(item => <Alias key={item} item={item}/>)}</main>; }`,
+    );
+    await expect(compile(entry)).rejects.toThrow(/raíz física única/);
+  }
+  const entry = await source(
+    "Single.tsx",
+    `function Row({ item }) { return item ? <section/> : <article/>; }
+    export function Page() { return <main>{['a', 'b'].map(item => <Row key={item} item={item}/>)}</main>; }`,
+  );
+  await expect(compile(entry)).resolves.toBeDefined();
+});
+
+test("unkeyed maps retain their own child-type boundary", async () => {
+  const entry = await source(
+    "Heterogeneous.tsx",
+    `function CounterA({ label }) { return <section>{label}</section>; }
+    function CounterB({ label }) { return <article>{label}</article>; }
+    export function Page() { return <main>{['a','b'].map(item => item === 'a' ? <CounterA label={item}/> : <CounterB label={item}/>)}</main>; }`,
+  );
+  await expect(compile(entry)).rejects.toThrow(/map sin key.*tipo/);
+  const stable = await source(
+    "Stable.tsx",
+    `function Switch({ label }) { return label === 'a' ? <section>{label}</section> : <article>{label}</article>; }
+    export function Page() { return <main>{['a','b'].map(item => <Switch label={item}/>)}</main>; }`,
+  );
+  await expect(compile(stable)).resolves.toBeDefined();
+});
+
+test("intrinsically Boolean JSX conditions leave an empty virtual slot", async () => {
+  const entry = await source(
+    "Boolean.tsx",
+    `export function Page({ count }) { return <main><p>Stable sibling</p>{count > 0 && <p>Conditional sibling</p>}</main>; }`,
+  );
+  const program = await compile(entry);
+  const root = program.components.find((value) => value.name === program.entry)!
+    .body[0]!;
+  expect(root.kind).toBe("element");
+  if (root.kind !== "element") throw new Error("missing root");
+  const conditional = root.children[1]!;
+  expect(conditional.kind).toBe("conditional");
+  if (conditional.kind !== "conditional") throw new Error("missing condition");
+  expect(conditional.no).toEqual([]);
+  expect(conditional.shortCircuit).toBe(true);
+});
+
+test("Boolean hook slots require a Boolean initializer and every setter", async () => {
+  const shared = `import { useState } from 'preact/hooks';
+    function Row() { return <section>Row</section>; }`;
+  const entry = await source(
+    "BooleanHook.tsx",
+    `${shared} export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main><Row/>{visible && <Row/>}<button onClick={() => setVisible(previous => !previous)}>Toggle</button></main>;
+    }`,
+  );
+  await expect(compile(entry)).resolves.toBeDefined();
+  const changedType = await source(
+    "ChangedHook.tsx",
+    `${shared} export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main><Row/>{visible && <Row/>}<button onClick={() => setVisible(0)}>Change type</button></main>;
+    }`,
+  );
+  await expect(compile(changedType)).rejects.toThrow(/otro hermano sin key/);
+  const shadowed = await source(
+    "ShadowedHook.tsx",
+    `${shared} export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main>{[false, 0].map(visible => visible && <Row/>)}</main>;
+    }`,
+  );
+  await expect(compile(shadowed)).rejects.toThrow(/map sin key.*tipo/);
+});
+
+test("nested list roots require their own physical parent through component aliases", async () => {
+  const entry = await source(
+    "Nested.tsx",
+    `function Rows({ item }) { return ['x','y'].map(child => <p>{item}{child}</p>); }
+    export function Page() { return <main>{['a','b'].map(item => <Rows item={item}/>)}</main>; }`,
+  );
+  await expect(compile(entry)).rejects.toThrow(
+    /Listas anidadas sin.*contenedor/,
+  );
+  const owned = await source(
+    "Owned.tsx",
+    `function Rows({ item }) { return <div>{['x','y'].map(child => <p>{item}{child}</p>)}</div>; }
+    export function Page() { return <main>{['a','b'].map(item => <Rows item={item}/>)}</main>; }`,
+  );
+  await expect(compile(owned)).resolves.toBeDefined();
+});
+
 test("Astro imports a Preact component, preserving props, state, events and list branches", async () => {
   const entry = await source(
     "Page.astro",
@@ -348,13 +484,110 @@ export function Overflow() { return <p>{value}</p>; }`,
   ).rejects.toThrow("debe ser finito");
 });
 
-test("keyed component identity is rejected instead of degrading to index identity", async () => {
+test("map key is consumed as reconciliation metadata and never a component prop", async () => {
   const entry = await source(
     "Page.tsx",
     `function Counter() { return <span>0</span>; }
 export function Page({ items }) { return <main>{items.map(item => <Counter key={item.id} />)}</main>; }`,
   );
-  await expect(compile(entry)).rejects.toThrow("key requiere identidad");
+  const program = await compile(entry);
+  const page = program.components.find(
+    (component) => component.name === program.entry,
+  )!;
+  const root = page.body[0]!;
+  expect(root.kind).toBe("element");
+  if (root.kind !== "element") throw new Error("missing root");
+  const list = root.children[0]!;
+  expect(list.kind).toBe("each");
+  if (list.kind !== "each") throw new Error("missing list");
+  expect(list.key).toEqual({
+    kind: "get",
+    object: { kind: "name", name: "item" },
+    key: { kind: "literal", value: "id" },
+  });
+  const child = list.children[0]!;
+  if (child.kind !== "component") throw new Error("missing mapped component");
+  expect(Object.hasOwn(child.props, "key")).toBe(false);
+});
+
+test("compatible conditional child slots preserve component and native source identities", async () => {
+  const entry = await source(
+    "BranchSlots.tsx",
+    `import { useState } from "preact/hooks";
+function Counter({seed}) { const [count,setCount] = useState(seed); return <p>{count}</p>; }
+export function BranchSlots({active}) { return <main>{active
+ ? <section><Counter seed={1}/><input id="on"/></section>
+ : <section><Counter seed={2}/><input id="off"/></section>}</main>; }`,
+  );
+  const program = await compile(entry);
+  const root = program.components.find((item) => item.name === program.entry)!
+    .body[0]!;
+  if (root.kind !== "element") throw new Error("missing root");
+  const branch = root.children[0]!;
+  if (branch.kind !== "conditional") throw new Error("missing conditional");
+  const yes = branch.yes[0]!,
+    no = branch.no[0]!;
+  if (yes.kind !== "element" || no.kind !== "element")
+    throw new Error("missing section");
+  expect(yes.identity).toBeDefined();
+  expect(yes.identity).toBe(no.identity);
+  for (const index of [0, 1]) {
+    const left = yes.children[index]!,
+      right = no.children[index]!;
+    if (!("identity" in left) || !("identity" in right))
+      throw new Error("missing shared child slot");
+    expect(left.identity).toBeDefined();
+    expect(left.identity).toBe(right.identity);
+  }
+  expect((yes.children[1] as { id: string }).id).toBe("on");
+  expect((no.children[1] as { id: string }).id).toBe("off");
+});
+
+test("conditional virtual groups and ambiguous child positions fail explicitly", async () => {
+  for (const body of [
+    `<main>{active ? <><p/></> : <p/>}</main>`,
+    `<main>{active ? items.map(item => <p>{item}</p>) : items.map(item => <p>{item}</p>)}</main>`,
+    `<main>{active ? <section><p/><input/></section> : <section><input/><p/></section>}</main>`,
+    `<main>{active ? <section><p/></section> : <section><p/><input/></section>}</main>`,
+    `<main>{active ? (other ? <p/> : <p/>) : <p/>}</main>`,
+  ])
+    await expect(
+      compile(
+        await source(
+          "AmbiguousBranches.tsx",
+          `export function AmbiguousBranches({active,other,items}) { return ${body}; }`,
+        ),
+      ),
+    ).rejects.toThrow(/contrato|posiciones virtuales/);
+});
+
+test("keys without a single stable map root fail explicitly", async () => {
+  for (const body of [
+    `<p key={items} />`,
+    `<main>{items.map(item => <><p key={item}/><p/></>)}</main>`,
+    `<main>{items.map(item => <section><p key={item}/></section>)}</main>`,
+    `<main>{items.map((item,index) => <p key={index}/>)}</main>`,
+    `<main>{items.map(item => <p key={item.id + "suffix"}/>)}</main>`,
+    `<main>{items.map(item => <p key={item.id} key={item.id}/>)}</main>`,
+    `<main>{items.map(item => item.active ? <p key={item.id}/> : null)}</main>`,
+  ])
+    await expect(
+      compile(
+        await source(
+          "InvalidKeys.tsx",
+          `export function InvalidKeys({items}) { return ${body}; }`,
+        ),
+      ),
+    ).rejects.toThrow();
+  await expect(
+    compile(
+      await source(
+        "FragmentKeys.tsx",
+        `import { Fragment as Group } from "preact";
+export function FragmentKeys({items}) { return <main>{items.map(item => <Group key={item.id}><p/><p/></Group>)}</main>; }`,
+      ),
+    ),
+  ).rejects.toThrow("contrato de grupo keyed");
 });
 
 test("loose equality requires a native adapter instead of an unsupported runtime operator", async () => {

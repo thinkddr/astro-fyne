@@ -20,16 +20,16 @@ The source compiler uses Astro's parser and TypeScript's AST. It lowers a declar
 to a portable intermediate representation and then generates Go. It does not evaluate the
 original JavaScript or execute a general ECMAScript runtime.
 
-| Area | Initial contract | Outside the initial contract |
-| --- | --- | --- |
-| Entry files | `.astro`, `.tsx` and `.jsx`; local component imports; default or selected named exports | General package resolution, server execution and arbitrary module side effects |
-| Components | Function components with supported props, constants and a declarative JSX return | Class components, arbitrary imperative component bodies and slots/children without a native contract |
-| State | Supported `useState` declarations; direct and declarative updater setters in event handlers | Other hooks, arbitrary custom hooks and general effect lifecycles |
-| Expressions | Literals, supported property/index access, arrays, objects, templates, conditionals and listed operators | Arbitrary function calls, spread, optional chaining and unsupported JavaScript constructs |
-| Branches and lists | Supported JSX conditionals and declarative `map` callbacks | General iteration, arbitrary callback bodies and full keyed Preact reconciliation guarantees |
-| Events | Button/link `onClick`; input/textarea `onInput` and `onChange`; Go host callbacks declared explicitly in props and the host translator `t` | Full DOM event propagation, arbitrary event payloads, browser effects and implicit platform adapters |
-| HTML nodes | Supported container, plain text, button, link, input, textarea and local bitmap image tags | Rich text nesting, forms, specialized form controls and unsupported tags |
-| Application effects | Explicit named native actions supplied by the Go host | Host calls during module initialization; automatic translation of browser APIs, networking, SSR, storage or navigation implementations |
+| Area                | Initial contract                                                                                                                           | Outside the initial contract                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Entry files         | `.astro`, `.tsx` and `.jsx`; local component imports; default or selected named exports                                                    | General package resolution, server execution and arbitrary module side effects                                                         |
+| Components          | Function components with supported props, constants and a declarative JSX return                                                           | Class components, arbitrary imperative component bodies and slots/children without a native contract                                   |
+| State               | Supported `useState` declarations; direct and declarative updater setters in event handlers                                                | Other hooks, arbitrary custom hooks and general effect lifecycles                                                                      |
+| Expressions         | Literals, supported property/index access, arrays, objects, templates, conditionals and listed operators                                   | Arbitrary function calls, spread, optional chaining and unsupported JavaScript constructs                                              |
+| Branches and lists  | Supported JSX conditionals and declarative `map` callbacks; unique finite homogeneous string or number keys on a single root               | General iteration, arbitrary callback bodies, mixed or changing key types and fragment keys                                            |
+| Events              | Button/link `onClick`; input/textarea `onInput` and `onChange`; Go host callbacks declared explicitly in props and the host translator `t` | Full DOM event propagation, arbitrary event payloads, browser effects and implicit platform adapters                                   |
+| HTML nodes          | Supported container, plain text, button, link, input, textarea and local bitmap image tags                                                 | Rich text nesting, forms, specialized form controls and unsupported tags                                                               |
+| Application effects | Explicit named native actions supplied by the Go host                                                                                      | Host calls during module initialization; automatic translation of browser APIs, networking, SSR, storage or navigation implementations |
 
 The accepted operators and calls are defined in `src/parser.ts`; their native implementations
 live in `native/expressions.go`. This is a portable expression contract rather than proof of
@@ -50,6 +50,35 @@ Ordinary components cannot receive nested child nodes without a native children/
 scalar props named `children` retain their ordinary prop value, and explicit adapters keep
 their declared native child behavior.
 
+Keyed list identities preserve native objects and component state when supported rows reorder.
+Removing a row prunes its state; reinserting it mounts a fresh instance. Keys are scoped to
+their source list, validated for duplicates before children render, and encoded without
+collisions from Unicode or path characters. A key change replaces the native object even
+when its explicit HTML ID stays the same. Mixed string/number keys or a key type change across
+renders are rejected until Preact's coercing identity rules have a complete native contract.
+The native reconciliation follows the pinned Preact sibling insertion order for the supported
+single-root rows. Focus follows the actual DOM movement in the Chromium profile: moving a
+focused subtree clears focus, while inserting or moving another sibling can preserve it.
+Programmatic activation and pointer taps have separate focus behavior and must be compared
+using the same gesture in both runtimes. General fragment and multi-root movement need
+additional virtual-node metadata before receiving this contract.
+
+Conditional branches with one compatible root preserve the same source position when both
+roots have the same component type or a matching fixed element structure. Component props can
+change while its hooks, native objects and focus remain mounted. Ambiguous fragment roots,
+changing child structure and dynamic nested sibling matching require a broader virtual-node
+reconciliation contract and produce diagnostics.
+Type-changing conditional roots that could reuse another unkeyed sibling also produce a
+diagnostic; Preact can transfer that sibling's instance into the changed position. Keyed
+component rows must resolve to one physical element root through component aliases in every
+branch. Returning a fragment, list or empty root requires virtual group metadata.
+Each direct array keeps its own source group, including when multiple arrays share a DOM
+parent. Nested arrays require a physical containing element until hierarchical virtual groups
+are implemented. Unkeyed callbacks that change their virtual row type produce diagnostics.
+JSX `&&` evaluates its left operand once. Boolean conditions leave an empty false slot; a
+Boolean hook requires a Boolean initializer and Boolean results from every reachable setter.
+Unknown values keep JavaScript's falsy child value, such as the rendered number `0`.
+
 The programmatic compiler API supports explicit package adapters. The initial CLI
 configuration only exposes entries and measurement files. Adapters must preserve a component's
 behavior and styling contract; recognizing a component name alone does not establish parity.
@@ -61,19 +90,19 @@ its own fixed spacing and typography profile, including a 14px `rem`; it is not 
 Tailwind implementation. CSS inside Astro files or imported stylesheets requires browser
 measurements. A measured profile uses the browser's actual rectangles and computed styles.
 
-| Feature | Current boundary |
-| --- | --- |
-| Geometry | CSS pixel dimensions; viewport coordinates for roots; parent border-box coordinates for children |
-| Layout | Recorded positions for one viewport and state; source-only row/column layouts within the supported style subset |
-| Paint | Supported solid colors, uniform borders and uniform radii; the backend and zero-difference gate decide actual equivalence |
-| Opacity | Measured group opacity must be 1; translucent colors require correct composition from the backend |
-| Typography | Explicit loaded browser fonts and corresponding native resources; supported text alignment, line height and whitespace |
-| Stacking and effects | Capture rejects non-default stacking, transforms, shadows, gradients, filters, masks and pseudo content |
-| Overflow | Capture rejects content extending outside its measured box; scrolling and clipping need explicit future support |
-| Resources | Embedded local PNG RGB/RGBA8 and supported JPEG, without color/orientation metadata; SVG, media, iframe, canvas, remote images, srcset and Shadow DOM require further native adapters |
-| Themes | The capture currently requests light color scheme; dark and system-theme switching need separate scenarios and implementation |
-| Scale | Capture records device scale 1 or 2; each native profile must enforce and verify its corresponding scale |
-| Platforms | A pass in the pinned test renderer does not certify desktop GPU rendering, other operating systems or mobile devices |
+| Feature              | Current boundary                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Geometry             | CSS pixel dimensions; viewport coordinates for roots; parent border-box coordinates for children                                                                                      |
+| Layout               | Recorded positions for one viewport and state; source-only row/column layouts within the supported style subset                                                                       |
+| Paint                | Supported solid colors, uniform borders and uniform radii; the backend and zero-difference gate decide actual equivalence                                                             |
+| Opacity              | Measured group opacity must be 1; translucent colors require correct composition from the backend                                                                                     |
+| Typography           | Explicit loaded browser fonts and corresponding native resources; supported text alignment, line height and whitespace                                                                |
+| Stacking and effects | Capture rejects non-default stacking, transforms, shadows, gradients, filters, masks and pseudo content                                                                               |
+| Overflow             | Capture rejects content extending outside its measured box; scrolling and clipping need explicit future support                                                                       |
+| Resources            | Embedded local PNG RGB/RGBA8 and supported JPEG, without color/orientation metadata; SVG, media, iframe, canvas, remote images, srcset and Shadow DOM require further native adapters |
+| Themes               | The capture currently requests light color scheme; dark and system-theme switching need separate scenarios and implementation                                                         |
+| Scale                | Capture records device scale 1 or 2; each native profile must enforce and verify its corresponding scale                                                                              |
+| Platforms            | A pass in the pinned test renderer does not certify desktop GPU rendering, other operating systems or mobile devices                                                                  |
 
 Each capture carries a `sourceHash`, a state label, viewport dimensions, scale, DOM hash,
 screenshot hash and root custom-property tokens. The generator checks the source digest and
@@ -83,6 +112,17 @@ incomplete or extra node measurements,
 viewport stretching and changes to a measured visual tree. The state label is scenario
 metadata; it does not establish that the correct application state was reached. Scenario
 assertions and the final image comparison establish that correspondence.
+
+PNG source and scene assets validate chunk order and CRCs, the complete bounded zlib stream,
+scanline lengths and filters, including Adam7 passes. RGB8 `tRNS` samples require canonical
+0..255 values until decoder masking behavior is certified across both renderers. JPEG input
+receives structural and metadata inspection in the compiler and complete decoding in Go.
+
+Measured nodes also retain a typed signature of their evaluated source attributes, including
+classes and inline styles. A change to those values invalidates the frozen profile even when
+it does not change a native text or geometry field. Attributes are evaluated once during each
+render; computing the signature must not cause an extra host callback. This guard reports a
+missing profile, rather than supplying runtime CSS layout for arbitrary new states.
 
 `sourceHash` covers the compiler's recorded source dependency list, including embedded asset
 digests. It is not a signature of a running server or proof that an arbitrary URL serves
@@ -110,6 +150,43 @@ The tests include a negative visual check that changes one channel of one pixel
 and requires the comparator to fail. A release should report which scenarios actually passed
 in CI and which remain untested, rather than applying a general fidelity badge to generated
 code. Failed or missing comparisons leave a profile uncertified.
+
+## Reverse native scene contract
+
+`native/reverse.Export` reads supported real Fyne objects after layout and emits schema 1.
+`webui.View.Snapshot` exports its reconciled tree without reevaluating its builder or executing
+callbacks. Unsupported objects, invalid geometry, duplicate identities, stale measured
+profiles and missing action bindings produce errors. The scene contains viewport and scale,
+parent-relative border-box coordinates, resolved styles, native control values, theme tokens,
+explicit action IDs and embedded PNG/JPEG bytes with SHA-256 digests.
+
+The export also preserves the canvas paint behind the object tree. If no visible, opaque,
+unrounded and borderless solid rectangle in the tree covers the entire viewport, the host
+must supply `Options.CanvasBackground` with its actual background color, or
+`color.Transparent` for a transparent canvas. This requirement applies even without
+`Options.Canvas`: Fyne's public canvas interface does not reveal transparency. The asserted
+paint becomes a viewport-sized background node behind the exported root; it is never inferred
+from the current theme.
+
+The web emitter validates the complete scene before generating literal JSX and scoped CSS.
+It escapes scene strings, rejects unsupported style values and verifies bitmap bytes, MIME
+types and dimensions. Text controls use browser input/textarea elements and local state;
+button callbacks and field events require an explicit client action implementation.
+Native Go functions, server behavior, custom renderers, dynamic Fyne layouts and an application's
+full state machine require additional source or host contracts. A frozen export describes one
+rendered state. Export success alone does not prove behavior or pixel equality.
+
+Raw native entries currently require a borderless host theme; Fyne's centered asymmetric
+input chrome needs a layered paint contract. Native textarea export is rejected until shared
+hard-line and soft-wrap behavior is defined. Focus, caret and selection are outside the scene
+contract, so exporting an actively focused canvas fails. Single-line control strings that
+the browser would normalize, unsupported text formatting and unsupported paint effects also
+fail explicitly.
+
+The reverse geometry scenario starts from real native rectangles and a bitmap, builds the
+generated Astro page and compares the browser capture against the original native image.
+It then lowers that generated Preact source back into a measured native widget and compares
+the round-trip image. Both comparisons use the same zero-difference policy as forward conversion.
 
 ## Roadmap toward broad compatibility
 

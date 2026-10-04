@@ -80,6 +80,8 @@ interface Scope {
   setters: Map<string, string>;
   handlers: Map<string, ts.ArrowFunction | ts.FunctionExpression>;
   substitutions: Map<string, Expr>;
+  /** Only this direct map callback root may consume JSX key metadata. */
+  keyRoot?: ts.Node;
   location?: { line: number; column: number };
 }
 
@@ -168,6 +170,8 @@ class Compiler {
   private hasStyles = false;
   private resources = new Map<string, BitmapResource>();
   private jsxReferences = new Map<string, string>();
+  private reconciliationSources = new WeakMap<Node, ts.Node>();
+  private conditionalScopes = new WeakMap<Node, Scope>();
 
   constructor(private readonly options: CompileOptions) {}
 
@@ -591,6 +595,8 @@ class Compiler {
           this.fail(source, body, "Componente sin return declarativo.");
       } else component.body = await this.render(body, scope);
     }
+    this.normalizeBooleanSlots(component);
+    this.validateReconciliation(component.body, scope);
     this.components.set(name, component);
     this.active.delete(name);
     return name;
@@ -1083,6 +1089,240 @@ class Compiler {
     );
   }
 
+  private conditionalIdentity(
+    yes: Node[],
+    no: Node[],
+    scope: Scope,
+    source: ts.Node,
+  ): void {
+    if (!yes.length || !no.length) return;
+    const unsupported = () =>
+      this.fail(
+        scope.source,
+        source,
+        "Ramas condicionales compatibles necesitan posiciones virtuales estables; map, fragmentos y estructuras distintas requieren un contrato de reconciliación adicional.",
+        scope,
+      );
+    if (yes.length !== 1 || no.length !== 1) unsupported();
+    const sameType = (left: Node, right: Node): boolean =>
+      left.kind === "text"
+        ? right.kind === "text"
+        : left.kind === "element"
+          ? right.kind === "element" && left.tag === right.tag
+          : left.kind === "component"
+            ? right.kind === "component" && left.name === right.name
+            : false;
+    const left = yes[0]!;
+    const right = no[0]!;
+    if (left.kind === "conditional" || right.kind === "conditional")
+      unsupported();
+    if (left.kind === "each" && right.kind === "each") unsupported();
+    // A different type may search other unkeyed siblings for an old instance.
+    // validateSiblingIdentity rejects those ambiguous matches until the IR
+    // carries a full virtual child list, rather than assigning state by source.
+    if (!sameType(left, right)) return;
+    const share = (left: Node, right: Node): void => {
+      if (!sameType(left, right)) unsupported();
+      if (
+        left.kind === "text" ||
+        left.kind === "element" ||
+        left.kind === "component"
+      ) {
+        const identity =
+          left.identity ?? `${scope.component.name}_slot${++this.nextID}`;
+        left.identity = identity;
+        if (
+          right.kind === "text" ||
+          right.kind === "element" ||
+          right.kind === "component"
+        )
+          right.identity = identity;
+      }
+      if (left.kind === "element" && right.kind === "element") {
+        if (left.children.length !== right.children.length) unsupported();
+        left.children.forEach((child, index) =>
+          share(child, right.children[index]!),
+        );
+      }
+    };
+    share(left, right);
+  }
+
+  private virtualTypes(nodes: Node[]): Set<string> {
+    return new Set(
+      nodes.flatMap((node) =>
+        node.kind === "conditional"
+          ? [...this.virtualTypes(node.yes), ...this.virtualTypes(node.no)]
+          : node.kind === "component"
+            ? [`component:${node.name}`]
+            : node.kind === "element"
+              ? [`element:${node.tag}`]
+              : node.kind === "each"
+                ? ["fragment"]
+                : ["text"],
+      ),
+    );
+  }
+
+  private validateSiblingIdentity(nodes: Node[], scope: Scope): void {
+    for (const [index, node] of nodes.entries()) {
+      if (node.kind !== "conditional") continue;
+      const yes = this.virtualTypes(node.yes);
+      const no = this.virtualTypes(node.no);
+      if (!yes.size || !no.size) continue;
+      if (yes.size === no.size && [...yes].every((type) => no.has(type)))
+        continue;
+      const choices = new Set([...yes, ...no]);
+      if (
+        nodes.some(
+          (sibling, siblingIndex) =>
+            siblingIndex !== index &&
+            [...this.virtualTypes([sibling])].some((type) => choices.has(type)),
+        )
+      )
+        this.fail(
+          scope.source,
+          this.reconciliationSources.get(node) ?? scope.source.ts,
+          "Una rama que cambia de tipo puede reutilizar otro hermano sin key en Preact; requiere reconciliación virtual de hermanos explícita.",
+          scope,
+        );
+    }
+  }
+
+  private hasSinglePhysicalRoot(nodes: Node[]): boolean {
+    if (nodes.length !== 1) return false;
+    const node = nodes[0]!;
+    if (node.kind === "element") return true;
+    if (node.kind === "component") {
+      if (node.name.startsWith("$ui.")) return BUILTINS.has(node.name.slice(4));
+      const component = this.components.get(node.name);
+      return !!component && this.hasSinglePhysicalRoot(component.body);
+    }
+    if (node.kind === "conditional")
+      return (
+        this.hasSinglePhysicalRoot(node.yes) &&
+        this.hasSinglePhysicalRoot(node.no)
+      );
+    return false;
+  }
+
+  private hasBareListGroup(nodes: Node[]): boolean {
+    return nodes.some((node) => {
+      if (node.kind === "each") return true;
+      if (node.kind === "component")
+        return this.hasBareListGroup(
+          this.components.get(node.name)?.body ?? [],
+        );
+      if (node.kind === "conditional")
+        return (
+          this.hasBareListGroup(node.yes) || this.hasBareListGroup(node.no)
+        );
+      return false; // A physical element owns its children's independent groups.
+    });
+  }
+
+  private alwaysBoolean(value: Expr): boolean {
+    return (
+      (value.kind === "literal" && typeof value.value === "boolean") ||
+      (value.kind === "unary" && value.op === "!") ||
+      (value.kind === "binary" &&
+        (["===", "!==", "<", "<=", ">", ">="].includes(value.op) ||
+          (["&&", "||", "??"].includes(value.op) &&
+            this.alwaysBoolean(value.left) &&
+            this.alwaysBoolean(value.right)))) ||
+      (value.kind === "call" && value.name === "Boolean") ||
+      (value.kind === "conditional" &&
+        this.alwaysBoolean(value.yes) &&
+        this.alwaysBoolean(value.no))
+    );
+  }
+
+  private normalizeBooleanSlots(component: Component): void {
+    const writes = new Map<string, Expr[]>();
+    const walk = (nodes: Node[], visit: (node: Node) => void): void => {
+      for (const node of nodes) {
+        visit(node);
+        if (node.kind === "element" || node.kind === "each")
+          walk(node.children, visit);
+        else if (node.kind === "conditional") {
+          walk(node.yes, visit);
+          walk(node.no, visit);
+        }
+      }
+    };
+    walk(component.body, (node) => {
+      if (node.kind !== "element") return;
+      for (const handler of Object.values(node.events))
+        for (const step of handler.steps)
+          if (step.kind === "set") {
+            const values = writes.get(step.name) ?? [];
+            values.push(...step.args);
+            writes.set(step.name, values);
+          }
+    });
+    // State is Boolean only when its initializer and every reachable setter
+    // produce an intrinsic Boolean result. A TypeScript annotation is not proof
+    // of the runtime values, and list parameters can shadow the state binding.
+    const names = new Set(
+      component.states
+        .filter(
+          (state) =>
+            this.alwaysBoolean(state.initial) &&
+            (writes.get(state.name) ?? []).every((value) =>
+              this.alwaysBoolean(value),
+            ),
+        )
+        .map((state) => state.name),
+    );
+    for (const constant of component.constants)
+      if (this.alwaysBoolean(constant.value)) names.add(constant.name);
+    walk(component.body, (node) => {
+      if (
+        node.kind === "conditional" &&
+        node.shortCircuit &&
+        node.test.kind === "name" &&
+        names.has(node.test.name) &&
+        !this.conditionalScopes.get(node)?.listShadows.has(node.test.name)
+      )
+        node.no = [];
+    });
+  }
+
+  private validateReconciliation(nodes: Node[], scope: Scope): void {
+    this.validateSiblingIdentity(nodes, scope);
+    for (const node of nodes) {
+      if (node.kind === "element")
+        this.validateReconciliation(node.children, scope);
+      else if (node.kind === "conditional") {
+        this.validateReconciliation(node.yes, scope);
+        this.validateReconciliation(node.no, scope);
+      } else if (node.kind === "each") {
+        if (!node.key && this.hasBareListGroup(node.children))
+          this.fail(
+            scope.source,
+            this.reconciliationSources.get(node) ?? scope.source.ts,
+            "Listas anidadas sin un elemento contenedor necesitan grupos virtuales jerárquicos explícitos.",
+            scope,
+          );
+        if (!node.key && this.virtualTypes(node.children).size > 1)
+          this.fail(
+            scope.source,
+            this.reconciliationSources.get(node) ?? scope.source.ts,
+            "Un map sin key que cambia el tipo de sus filas necesita reconciliación virtual entre hermanos de la lista.",
+            scope,
+          );
+        if (node.key && !this.hasSinglePhysicalRoot(node.children))
+          this.fail(
+            scope.source,
+            this.reconciliationSources.get(node) ?? scope.source.ts,
+            "El componente keyed debe producir una raíz física única en cada rama; fragmentos, listas y raíces vacías requieren grupos virtuales explícitos.",
+            scope,
+          );
+        this.validateReconciliation(node.children, scope);
+      }
+    }
+  }
+
   private async render(
     expression: ts.Expression,
     scope: Scope,
@@ -1101,27 +1341,44 @@ class Compiler {
       return [await this.jsx(node, [], scope)];
     if (ts.isJsxFragment(node)) return this.jsxChildren(node.children, scope);
     if (ts.isConditionalExpression(node)) {
-      return [
-        {
-          kind: "conditional",
-          test: this.expr(node.condition, scope),
-          yes: await this.render(node.whenTrue, scope),
-          no: await this.render(node.whenFalse, scope),
-        },
-      ];
+      if (
+        ts.isJsxFragment(this.unwrap(node.whenTrue)) ||
+        ts.isJsxFragment(this.unwrap(node.whenFalse))
+      )
+        this.fail(
+          scope.source,
+          node,
+          "Fragmentos en ramas condicionales requieren un contrato de grupo virtual explícito.",
+          scope,
+        );
+      const yes = await this.render(node.whenTrue, scope);
+      const no = await this.render(node.whenFalse, scope);
+      this.conditionalIdentity(yes, no, scope, node);
+      const result: Node = {
+        kind: "conditional",
+        test: this.expr(node.condition, scope),
+        yes,
+        no,
+      };
+      this.reconciliationSources.set(result, node);
+      this.conditionalScopes.set(result, scope);
+      return [result];
     }
     if (
       ts.isBinaryExpression(node) &&
       node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
     ) {
-      return [
-        {
-          kind: "conditional",
-          test: this.expr(node.left, scope),
-          yes: await this.render(node.right, scope),
-          no: [{ kind: "text", value: this.expr(node.left, scope) }],
-        },
-      ];
+      const test = this.expr(node.left, scope);
+      const result: Node = {
+        kind: "conditional",
+        test,
+        shortCircuit: true,
+        yes: await this.render(node.right, scope),
+        no: this.alwaysBoolean(test) ? [] : [{ kind: "text", value: test }],
+      };
+      this.reconciliationSources.set(result, node);
+      this.conditionalScopes.set(result, scope);
+      return [result];
     }
     if (
       ts.isCallExpression(node) &&
@@ -1202,15 +1459,91 @@ class Compiler {
         }
         body = callback.body.statements[0]!.expression;
       } else body = callback.body;
-      return [
-        {
-          kind: "each",
-          items: this.expr(node.expression.expression, scope),
-          item,
-          index,
-          children: await this.render(body, childScope),
-        },
-      ];
+      while (ts.isParenthesizedExpression(body)) body = body.expression;
+      if (ts.isJsxFragment(body))
+        this.fail(
+          scope.source,
+          body,
+          "Fragmentos en map requieren un contrato de grupo keyed explícito; devuelve un único elemento o componente.",
+          childScope,
+        );
+      const opening = ts.isJsxElement(body)
+        ? body.openingElement
+        : ts.isJsxSelfClosingElement(body)
+          ? body
+          : undefined;
+      let key: Expr | undefined;
+      if (opening) {
+        const imported = scope.source.imports.get(opening.tagName.getText());
+        if (
+          imported?.exported === "Fragment" &&
+          ["preact", "preact/compat", "preact/jsx-runtime"].includes(
+            imported.from,
+          )
+        )
+          this.fail(
+            scope.source,
+            opening,
+            "Fragmentos en map requieren un contrato de grupo keyed explícito; devuelve un único elemento o componente.",
+            childScope,
+          );
+        childScope.keyRoot = opening;
+        for (const attribute of opening.attributes.properties) {
+          if (
+            !ts.isJsxAttribute(attribute) ||
+            attribute.name.getText() !== "key"
+          )
+            continue;
+          if (key)
+            this.fail(
+              scope.source,
+              attribute,
+              "Atributo duplicado: key.",
+              childScope,
+            );
+          if (
+            !attribute.initializer ||
+            !ts.isJsxExpression(attribute.initializer) ||
+            !attribute.initializer.expression
+          )
+            this.fail(
+              scope.source,
+              attribute,
+              "key en map necesita key={item} o key={item.id}.",
+              childScope,
+            );
+          key = this.expr(attribute.initializer.expression, childScope);
+          if (
+            !(key.kind === "name" && key.name === item) &&
+            !(
+              key.kind === "get" &&
+              key.object.kind === "name" &&
+              key.object.name === item &&
+              key.key.kind === "literal" &&
+              key.key.value === "id"
+            )
+          )
+            this.fail(
+              scope.source,
+              attribute,
+              "key en map solo admite el item primitivo o item.id; claves calculadas/index requieren un contrato adicional.",
+              childScope,
+            );
+        }
+      }
+      const id = `${scope.component.name}_each${++this.nextID}`;
+      const rendered = await this.render(body, childScope);
+      const result: Node = {
+        kind: "each",
+        id,
+        items: this.expr(node.expression.expression, scope),
+        item,
+        index,
+        ...(key ? { key } : {}),
+        children: rendered,
+      };
+      this.reconciliationSources.set(result, body);
+      return [result];
     }
     return [{ kind: "text", value: this.expr(node, scope) }];
   }
@@ -1324,13 +1657,15 @@ class Compiler {
           scope,
         );
       const name = attribute.name.getText();
-      if (name === "key")
+      if (name === "key") {
+        if (scope.keyRoot === opening) continue;
         this.fail(
           scope.source,
           attribute,
-          "key requiere identidad y ciclo de vida de componentes; no se aproxima en stage 01.",
+          "key solo se admite en la raíz única de un callback map; las claves de fragmentos, ramas o hermanos requieren un contrato adicional.",
           scope,
         );
+      }
       if (Object.hasOwn(attrs, name) || Object.hasOwn(events, name)) {
         this.fail(
           scope.source,

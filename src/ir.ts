@@ -30,6 +30,8 @@ export type Node =
   | {
       kind: "element";
       id: string;
+      /** A shared virtual child slot may span compatible conditional branches. */
+      identity?: string;
       tag: string;
       attrs: Record<string, Expr>;
       events: Record<string, Handler>;
@@ -37,18 +39,30 @@ export type Node =
       /** A compile-time local bitmap, never a network URL or interpreted DOM. */
       imageResource?: string;
     }
-  | { kind: "text"; value: Expr }
-  | { kind: "conditional"; test: Expr; yes: Node[]; no: Node[] }
+  | { kind: "text"; value: Expr; identity?: string }
+  | {
+      kind: "conditional";
+      test: Expr;
+      yes: Node[];
+      no: Node[];
+      /** JSX && retains its falsy value and evaluates its left operand once. */
+      shortCircuit?: boolean;
+    }
   | {
       kind: "each";
+      /** Stable source site separates sibling/nested list namespaces. */
+      id: string;
       items: Expr;
       item: string;
       index?: string;
+      /** JSX key is reconciliation metadata, never a DOM/component prop. */
+      key?: Expr;
       children: Node[];
     }
   | {
       kind: "component";
       id: string;
+      identity?: string;
       name: string;
       props: Record<string, Expr>;
       children: Node[];

@@ -14,22 +14,31 @@ import (
 	"image/color"
 	"math"
 	"net/url"
+	"reflect"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/widget"
 )
 
-// Node is generated Go, not interpreted markup. ID is stable across reevaluation
-// so changing state preserves the object which owns the keyboard focus and cursor.
+// Node describes generated native objects. ID is the public lookup identifier;
+// Identity and ListGroup preserve the supported source lifetime and child order.
 type Node struct {
 	ID, Kind, Text, Value, Placeholder, Href, Variant, Size string
-	AccessibleLabel, LabelFor                               string
-	Disabled                                                bool
-	Style                                                   Style
-	Children                                                []Node
-	OnTap                                                   func()
-	OnChange                                                func(string)
+	// Identity distinguishes keyed source instances which share a DOM ID.
+	Identity string
+	// ListGroup identifies one stable direct-child array/Fragment source site.
+	// It belongs to the list's physical roots, not their descendants or DOM IDs.
+	ListGroup string
+	// CaptureSignature records evaluated source attributes that affect browser
+	// paint even when native geometry and colors come from a captured profile.
+	CaptureSignature          string
+	AccessibleLabel, LabelFor string
+	Disabled                  bool
+	Style                     Style
+	Children                  []Node
+	OnTap                     func()
+	OnChange                  func(string)
 	// OnCommit represents HTML change; OnChange represents immediate input.
 	OnCommit      func(string)
 	ImageResource fyne.Resource
@@ -70,6 +79,7 @@ type Style struct {
 // Fyne's event goroutine; native adapters completing background work use fyne.Do.
 type View struct {
 	widget.BaseWidget
+	owner             fyne.Widget
 	backend           Backend
 	build             func() []Node
 	nodes             []Node
@@ -93,12 +103,38 @@ var _ fyne.Widget = (*View)(nil)
 // NewView builds the initial tree before its first render, so the first frame is
 // complete without relying on Fyne to call a renderer's Refresh for us.
 func NewView(build func() []Node, backends ...Backend) *View {
+	return NewViewForWidget(func(view *View) fyne.Widget { return view }, build, backends...)
+}
+
+// NewViewForWidget builds a View owned by an extending widget. attach is called
+// once with the allocated View and must attach it to the returned widget before
+// returning (for example, &GeneratedWidget{View: view}). Only then does the View
+// bind its BaseWidget and evaluate its initial source tree. No owner methods or
+// renderers are invoked while an extending widget's embedded View is still nil.
+//
+// Fyne cannot rebind ExtendBaseWidget after NewView has already bound it to the
+// inner View. Using this factory from the beginning keeps refresh, geometry,
+// renderer cache, focus traversal and repaint attached to the actual owner.
+func NewViewForWidget(attach func(*View) fyne.Widget, build func() []Node, backends ...Backend) *View {
 	var backend Backend = FyneBackend{}
 	if len(backends) > 0 && backends[0] != nil {
 		backend = backends[0]
 	}
 	v := &View{build: build, backend: backend, elements: make(map[string]*element), bitmaps: make(map[[32]byte]bitmapAsset), autoRefreshEvents: true}
-	v.ExtendBaseWidget(v)
+	v.owner = v
+	if attach == nil {
+		v.ExtendBaseWidget(v)
+		v.err = fmt.Errorf("webui: an extending widget requires an attachment factory")
+		return v
+	}
+	owner := attach(v)
+	if owner == nil || reflect.ValueOf(owner).Kind() == reflect.Pointer && reflect.ValueOf(owner).IsNil() {
+		v.ExtendBaseWidget(v)
+		v.err = fmt.Errorf("webui: attachment factory returned a nil widget owner")
+		return v
+	}
+	v.owner = owner
+	v.ExtendBaseWidget(owner)
 	v.reconcile()
 	return v
 }
@@ -109,6 +145,91 @@ func (v *View) Object(id string) fyne.CanvasObject {
 		return e.object
 	}
 	return nil
+}
+
+// SnapshotNode is a copy of a rendered element, with resolved styles and its real
+// native object for explicit export bindings. Node.Children is empty; Children
+// contains the frozen hierarchy. Callback references are retained only so an
+// exporter can require named bindings, never to execute or serialize functions.
+type SnapshotNode struct {
+	Node             Node
+	Object           fyne.CanvasObject
+	Children         []SnapshotNode
+	PlaceholderColor string
+}
+
+// ViewSnapshot describes the existing frame. Size and CaptureScale let exporters
+// reject a measured profile at a different viewport or device scale.
+type ViewSnapshot struct {
+	Roots        []SnapshotNode
+	Size         fyne.Size
+	CaptureScale float32
+	Measured     bool
+	HasFocus     bool
+}
+
+// Snapshot reads the current reconciled tree on Fyne's event goroutine. It does
+// not invoke the builder, create renderers, relayout, refresh or call callbacks.
+// An invalid or stale measured tree cannot become a valid export by freezing it.
+func (v *View) Snapshot() (ViewSnapshot, error) {
+	if err := errors.Join(v.Error(), v.ValidateCanvas()); err != nil {
+		return ViewSnapshot{}, err
+	}
+	var freeze func([]*element) []SnapshotNode
+	freeze = func(elements []*element) []SnapshotNode {
+		out := make([]SnapshotNode, len(elements))
+		for i, e := range elements {
+			n := e.node
+			n.Children = nil
+			n.Style = e.style
+			position, size := e.object.Position(), e.object.Size()
+			n.Style.X, n.Style.Y = position.X, position.Y
+			n.Style.Width, n.Style.Height = size.Width, size.Height
+			n.Style.Measured = true
+			if !e.object.Visible() {
+				n.Style.Display = "none"
+			}
+			n.AccessibleLabel = e.label
+			if e.input != nil {
+				n.Value = e.input.Text()
+			}
+			if e.node.Kind == "image" {
+				asset := v.bitmaps[e.imageHash]
+				if asset.resource != nil {
+					n.ImageResource = fyne.NewStaticResource(asset.resource.Name(), append([]byte(nil), asset.resource.Content()...))
+				}
+			}
+			placeholderColor := ""
+			if n.Placeholder != "" {
+				if _, supported := e.input.(*primitiveEditor); supported {
+					c := cssColor(e.style.Color)
+					c.A = uint8(float64(c.A) * 0.5)
+					placeholderColor = colorCSS(c)
+				}
+			}
+			out[i] = SnapshotNode{Node: n, Object: e.object, Children: freeze(e.children), PlaceholderColor: placeholderColor}
+		}
+		return out
+	}
+	target := v.boundCanvas
+	if target == nil && fyne.CurrentApp() != nil && fyne.CurrentApp().Driver() != nil {
+		target = fyne.CurrentApp().Driver().CanvasForObject(v.owner)
+		if target == nil {
+			for _, e := range v.elements {
+				target = fyne.CurrentApp().Driver().CanvasForObject(e.object)
+				if target != nil {
+					break
+				}
+			}
+		}
+	}
+	hasFocus := target != nil && target.Focused() != nil
+	for _, e := range v.elements {
+		if editor, ok := e.input.(*primitiveEditor); ok && editor.active {
+			hasFocus = true
+		}
+	}
+	return ViewSnapshot{Roots: freeze(v.roots), Size: v.Size(), CaptureScale: v.captureScale, Measured: len(v.measurements) != 0, HasFocus: hasFocus}, nil
 }
 
 // SetAutoRefreshEvents selects who reevaluates the source tree after callbacks.
@@ -296,7 +417,7 @@ func (v *View) reconcile() {
 		return
 	}
 	ids := make(map[string]bool)
-	if err := validateNodes(nodes, ids); err != nil {
+	if err := validateNodes(nodes, ids, make(map[string]bool)); err != nil {
 		v.err = err
 		return // Keep the last valid native tree rather than partly mutating it.
 	}
@@ -323,15 +444,39 @@ func (v *View) reconcile() {
 	}
 	v.err = profileError
 	v.nodes = nodes
+	// Reused elements are updated in place below. Freeze their previous sibling
+	// lists first so source reordering can distinguish a moved DOM subtree from
+	// an anchor whose index changed only because another sibling moved.
+	previousRoots := append([]*element(nil), v.roots...)
+	previousChildren := make(map[*element][]*element, len(v.elements))
+	previousGroups := make(map[*element]string, len(v.elements))
 	current := make(map[string]*element, len(ids))
+	previousByIdentity := make(map[string]*element, len(v.elements))
+	for _, previous := range v.elements {
+		previousChildren[previous] = append([]*element(nil), previous.children...)
+		previousGroups[previous] = previous.node.ListGroup
+		if previous.node.Identity != "" {
+			previousByIdentity[previous.node.Identity] = previous
+		}
+	}
+	retained := make(map[*element]bool, len(ids))
 	var build func([]Node, Style) []*element
 	build = func(nodes []Node, inherited Style) []*element {
 		out := make([]*element, 0, len(nodes))
 		for _, n := range nodes {
-			e := v.elements[n.ID]
-			if e == nil || e.node.Kind != n.Kind {
+			var e *element
+			if n.Identity != "" {
+				e = previousByIdentity[n.Identity]
+			} else {
+				e = v.elements[n.ID]
+				if e != nil && e.node.Identity != "" {
+					e = nil
+				}
+			}
+			if e == nil || e.node.Kind != n.Kind || e.node.ListGroup != n.ListGroup || retained[e] {
 				e = newElement(v, n)
 			}
+			retained[e] = true
 			e.node = n
 			e.label = n.AccessibleLabel
 			style := n.Style
@@ -347,6 +492,22 @@ func (v *View) reconcile() {
 		return out
 	}
 	v.roots = build(nodes, Style{})
+	v.clearMovedFocus(previousRoots, previousChildren, previousGroups)
+	visible := make(map[*element]bool, len(current))
+	var visibility func([]*element, bool)
+	visibility = func(elements []*element, parentVisible bool) {
+		for _, e := range elements {
+			visible[e] = parentVisible && e.style.Display != "none"
+			visibility(e.children, visible[e])
+		}
+	}
+	visibility(v.roots, true)
+	for _, previous := range v.elements {
+		if retained[previous] && !previous.node.Disabled && visible[previous] {
+			continue
+		}
+		v.clearDetachedFocus(previous)
+	}
 	v.elements = current
 	for _, e := range current {
 		if e.node.LabelFor != "" {
@@ -355,6 +516,26 @@ func (v *View) reconcile() {
 			}
 		}
 	}
+}
+
+func (v *View) clearDetachedFocus(e *element) {
+	focusable, ok := e.object.(fyne.Focusable)
+	if !ok {
+		return
+	}
+	target := v.boundCanvas
+	if target == nil && fyne.CurrentApp() != nil && fyne.CurrentApp().Driver() != nil {
+		target = fyne.CurrentApp().Driver().CanvasForObject(e.object)
+	}
+	if target == nil || target.Focused() != focusable {
+		return
+	}
+	// DOM removal, movement and hidden ancestors release focus without a user
+	// change event. Suppress commit while the editor drops its caret/selection.
+	if input, ok := e.object.(*inputWidget); ok {
+		input.dirty = false
+	}
+	target.Unfocus()
 }
 
 // Only generated expression evaluation is a recoverable boundary. Panics in
@@ -372,12 +553,18 @@ func buildSafely(build func() []Node) (nodes []Node, err error) {
 	return build(), nil
 }
 
-func validateNodes(nodes []Node, ids map[string]bool) error {
+func validateNodes(nodes []Node, ids, identities map[string]bool) error {
 	for _, n := range nodes {
 		if n.ID == "" || ids[n.ID] {
 			return fmt.Errorf("webui: node ID %q must be nonempty and unique", n.ID)
 		}
 		ids[n.ID] = true
+		if n.Identity != "" {
+			if identities[n.Identity] {
+				return fmt.Errorf("webui: source identity %q must be unique", n.Identity)
+			}
+			identities[n.Identity] = true
+		}
 		switch n.Kind {
 		case "container", "text", "button", "input", "textarea", "link", "image":
 		default:
@@ -397,7 +584,7 @@ func validateNodes(nodes []Node, ids map[string]bool) error {
 				return err
 			}
 		}
-		if err := validateNodes(n.Children, ids); err != nil {
+		if err := validateNodes(n.Children, ids, identities); err != nil {
 			return err
 		}
 	}
@@ -449,6 +636,7 @@ func finite(v float32) bool { return !math.IsNaN(float64(v)) && !math.IsInf(floa
 func visualState(nodes []Node) string {
 	type stateNode struct {
 		ID, Kind, Text, Value, Placeholder, Href, Variant, Size string
+		CaptureSignature                                        string
 		ImageHash                                               string
 		Disabled                                                bool
 		Style                                                   Style
@@ -464,7 +652,8 @@ func visualState(nodes []Node) string {
 			}
 			out[i] = stateNode{ID: n.ID, Kind: n.Kind, Text: n.Text, Value: n.Value,
 				Placeholder: n.Placeholder, Href: n.Href, Variant: n.Variant, Size: n.Size,
-				ImageHash: imageHash, Disabled: n.Disabled, Style: n.Style, Children: state(n.Children)}
+				CaptureSignature: n.CaptureSignature,
+				ImageHash:        imageHash, Disabled: n.Disabled, Style: n.Style, Children: state(n.Children)}
 		}
 		return out
 	}
@@ -514,7 +703,7 @@ func (r *viewRenderer) Refresh() {
 		r.objects = append(r.objects, e.object)
 	}
 	r.Layout(r.view.Size())
-	canvas.Refresh(r.view)
+	canvas.Refresh(r.view.owner)
 }
 
 type element struct {
