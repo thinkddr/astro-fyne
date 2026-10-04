@@ -33,6 +33,63 @@ function elements(nodes: Node[]): Extract<Node, { kind: "element" }>[] {
   });
 }
 
+test("type-changing branches cannot steal an unkeyed sibling's component state", async () => {
+  const counter = `function Counter({ label }) {
+    const [count, setCount] = useState(0);
+    return <section><p id={label}>{count}</p></section>;
+  }`;
+  const entry = await source(
+    "Ambiguous.tsx",
+    `import { useState } from 'preact/hooks'; ${counter}
+    export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main>{visible ? <Counter label="a"/> : <p id="empty">empty</p>}<Counter label="b"/></main>;
+    }`,
+  );
+  await expect(compile(entry)).rejects.toThrow(/otro hermano sin key/);
+
+  const compatible = await source(
+    "Compatible.tsx",
+    `import { useState } from 'preact/hooks'; ${counter}
+    export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main>{visible ? <Counter label="a"/> : <Counter label="alternate"/>}<Counter label="b"/></main>;
+    }`,
+  );
+  await expect(compile(compatible)).resolves.toBeDefined();
+  const isolated = await source(
+    "Isolated.tsx",
+    `import { useState } from 'preact/hooks'; ${counter}
+    export function Page() {
+      const [visible, setVisible] = useState(false);
+      return <main>{visible ? <Counter label="a"/> : <p id="empty">empty</p>}<button id="next">Next</button></main>;
+    }`,
+  );
+  await expect(compile(isolated)).resolves.toBeDefined();
+});
+
+test("keyed component groups require one physical root through component indirection", async () => {
+  for (const body of [
+    `return <><section/><input/></>;`,
+    `return item ? <section/> : null;`,
+    `return ['a', 'b'].map(value => <p>{value}</p>);`,
+  ]) {
+    const entry = await source(
+      "Keyed.tsx",
+      `function Row({ item }) { ${body} }
+      function Alias({ item }) { return <Row item={item}/>; }
+      export function Page() { return <main>{['a', 'b'].map(item => <Alias key={item} item={item}/>)}</main>; }`,
+    );
+    await expect(compile(entry)).rejects.toThrow(/raíz física única/);
+  }
+  const entry = await source(
+    "Single.tsx",
+    `function Row({ item }) { return item ? <section/> : <article/>; }
+    export function Page() { return <main>{['a', 'b'].map(item => <Row key={item} item={item}/>)}</main>; }`,
+  );
+  await expect(compile(entry)).resolves.toBeDefined();
+});
+
 test("Astro imports a Preact component, preserving props, state, events and list branches", async () => {
   const entry = await source(
     "Page.astro",

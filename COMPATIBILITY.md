@@ -68,6 +68,10 @@ roots have the same component type or a matching fixed element structure. Compon
 change while its hooks, native objects and focus remain mounted. Ambiguous fragment roots,
 changing child structure and dynamic nested sibling matching require a broader virtual-node
 reconciliation contract and produce diagnostics.
+Type-changing conditional roots that could reuse another unkeyed sibling also produce a
+diagnostic; Preact can transfer that sibling's instance into the changed position. Keyed
+component rows must resolve to one physical element root through component aliases in every
+branch. Returning a fragment, list or empty root requires virtual group metadata.
 
 The programmatic compiler API supports explicit package adapters. The initial CLI
 configuration only exposes entries and measurement files. Adapters must preserve a component's

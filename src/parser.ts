@@ -170,6 +170,7 @@ class Compiler {
   private hasStyles = false;
   private resources = new Map<string, BitmapResource>();
   private jsxReferences = new Map<string, string>();
+  private reconciliationSources = new WeakMap<Node, ts.Node>();
 
   constructor(private readonly options: CompileOptions) {}
 
@@ -593,6 +594,7 @@ class Compiler {
           this.fail(source, body, "Componente sin return declarativo.");
       } else component.body = await this.render(body, scope);
     }
+    this.validateSiblingIdentity(component.body, scope);
     this.components.set(name, component);
     this.active.delete(name);
     return name;
@@ -1113,7 +1115,10 @@ class Compiler {
     if (left.kind === "conditional" || right.kind === "conditional")
       unsupported();
     if (left.kind === "each" && right.kind === "each") unsupported();
-    if (!sameType(left, right)) return; // Different virtual types really remount.
+    // A different type may search other unkeyed siblings for an old instance.
+    // validateSiblingIdentity rejects those ambiguous matches until the IR
+    // carries a full virtual child list, rather than assigning state by source.
+    if (!sameType(left, right)) return;
     const share = (left: Node, right: Node): void => {
       if (!sameType(left, right)) unsupported();
       if (
@@ -1139,6 +1144,63 @@ class Compiler {
       }
     };
     share(left, right);
+  }
+
+  private virtualTypes(nodes: Node[]): Set<string> {
+    return new Set(
+      nodes.flatMap((node) =>
+        node.kind === "conditional"
+          ? [...this.virtualTypes(node.yes), ...this.virtualTypes(node.no)]
+          : node.kind === "component"
+            ? [`component:${node.name}`]
+            : node.kind === "element"
+              ? [`element:${node.tag}`]
+              : node.kind === "each"
+                ? ["fragment"]
+                : ["text"],
+      ),
+    );
+  }
+
+  private validateSiblingIdentity(nodes: Node[], scope: Scope): void {
+    for (const [index, node] of nodes.entries()) {
+      if (node.kind !== "conditional") continue;
+      const yes = this.virtualTypes(node.yes);
+      const no = this.virtualTypes(node.no);
+      if (!yes.size || !no.size) continue;
+      if (yes.size === no.size && [...yes].every((type) => no.has(type)))
+        continue;
+      const choices = new Set([...yes, ...no]);
+      if (
+        nodes.some(
+          (sibling, siblingIndex) =>
+            siblingIndex !== index &&
+            [...this.virtualTypes([sibling])].some((type) => choices.has(type)),
+        )
+      )
+        this.fail(
+          scope.source,
+          this.reconciliationSources.get(node) ?? scope.source.ts,
+          "Una rama que cambia de tipo puede reutilizar otro hermano sin key en Preact; requiere reconciliación virtual de hermanos explícita.",
+          scope,
+        );
+    }
+  }
+
+  private hasSinglePhysicalRoot(nodes: Node[]): boolean {
+    if (nodes.length !== 1) return false;
+    const node = nodes[0]!;
+    if (node.kind === "element") return true;
+    if (node.kind === "component") {
+      const component = this.components.get(node.name);
+      return !!component && this.hasSinglePhysicalRoot(component.body);
+    }
+    if (node.kind === "conditional")
+      return (
+        this.hasSinglePhysicalRoot(node.yes) &&
+        this.hasSinglePhysicalRoot(node.no)
+      );
+    return false;
   }
 
   private async render(
@@ -1172,27 +1234,27 @@ class Compiler {
       const yes = await this.render(node.whenTrue, scope);
       const no = await this.render(node.whenFalse, scope);
       this.conditionalIdentity(yes, no, scope, node);
-      return [
-        {
-          kind: "conditional",
-          test: this.expr(node.condition, scope),
-          yes,
-          no,
-        },
-      ];
+      const result: Node = {
+        kind: "conditional",
+        test: this.expr(node.condition, scope),
+        yes,
+        no,
+      };
+      this.reconciliationSources.set(result, node);
+      return [result];
     }
     if (
       ts.isBinaryExpression(node) &&
       node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
     ) {
-      return [
-        {
-          kind: "conditional",
-          test: this.expr(node.left, scope),
-          yes: await this.render(node.right, scope),
-          no: [{ kind: "text", value: this.expr(node.left, scope) }],
-        },
-      ];
+      const result: Node = {
+        kind: "conditional",
+        test: this.expr(node.left, scope),
+        yes: await this.render(node.right, scope),
+        no: [{ kind: "text", value: this.expr(node.left, scope) }],
+      };
+      this.reconciliationSources.set(result, node);
+      return [result];
     }
     if (
       ts.isCallExpression(node) &&
@@ -1345,15 +1407,24 @@ class Compiler {
             );
         }
       }
+      const id = `${scope.component.name}_each${++this.nextID}`;
+      const rendered = await this.render(body, childScope);
+      if (key && !this.hasSinglePhysicalRoot(rendered))
+        this.fail(
+          scope.source,
+          body,
+          "El componente keyed debe producir una raíz física única en cada rama; fragmentos, listas y raíces vacías requieren grupos virtuales explícitos.",
+          scope,
+        );
       return [
         {
           kind: "each",
-          id: `${scope.component.name}_each${++this.nextID}`,
+          id,
           items: this.expr(node.expression.expression, scope),
           item,
           index,
           ...(key ? { key } : {}),
-          children: await this.render(body, childScope),
+          children: rendered,
         },
       ];
     }
@@ -1381,6 +1452,7 @@ class Compiler {
           nodes.push(...(await this.render(child.expression, scope)));
       } else nodes.push(...(await this.render(child, scope)));
     }
+    this.validateSiblingIdentity(nodes, scope);
     return nodes;
   }
 
@@ -2130,6 +2202,7 @@ class Compiler {
           located,
         );
     }
+    this.validateSiblingIdentity(nodes, scope);
     return nodes;
   }
 
