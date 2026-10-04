@@ -472,7 +472,11 @@ func (e *exporter) bitmap(resource fyne.Resource) (string, error) {
 	if resource == nil || (reflect.ValueOf(resource).Kind() == reflect.Pointer && reflect.ValueOf(resource).IsNil()) {
 		return "", fmt.Errorf("reverse: bitmap resource is missing")
 	}
-	content := append([]byte(nil), resource.Content()...)
+	content := resource.Content()
+	if len(content) == 0 || len(content) > 20*1024*1024 {
+		return "", fmt.Errorf("reverse: bitmap resource must contain 1..20 MiB of bytes")
+	}
+	content = append([]byte(nil), content...)
 	frozen := fyne.NewStaticResource(resource.Name(), content)
 	size, err := webui.ValidateBitmap(frozen)
 	if err != nil {
@@ -526,7 +530,11 @@ func imageResource(o *canvas.Image) (fyne.Resource, error) {
 		if reflect.ValueOf(source).Kind() == reflect.Pointer && reflect.ValueOf(source).IsNil() {
 			return nil, fmt.Errorf("bitmap resource is nil")
 		}
-		source = fyne.NewStaticResource(source.Name(), append([]byte(nil), source.Content()...))
+		content := source.Content()
+		if len(content) == 0 || len(content) > 20*1024*1024 {
+			return nil, fmt.Errorf("bitmap resource must contain 1..20 MiB of bytes")
+		}
+		source = fyne.NewStaticResource(source.Name(), append([]byte(nil), content...))
 		if _, err := webui.ValidateBitmap(source); err != nil {
 			return nil, err
 		}

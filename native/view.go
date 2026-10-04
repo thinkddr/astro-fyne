@@ -180,8 +180,21 @@ func (v *View) Snapshot() (ViewSnapshot, error) {
 	target := v.boundCanvas
 	if target == nil && fyne.CurrentApp() != nil && fyne.CurrentApp().Driver() != nil {
 		target = fyne.CurrentApp().Driver().CanvasForObject(v)
+		if target == nil {
+			for _, e := range v.elements {
+				target = fyne.CurrentApp().Driver().CanvasForObject(e.object)
+				if target != nil {
+					break
+				}
+			}
+		}
 	}
 	hasFocus := target != nil && target.Focused() != nil
+	for _, e := range v.elements {
+		if editor, ok := e.input.(*primitiveEditor); ok && editor.active {
+			hasFocus = true
+		}
+	}
 	return ViewSnapshot{Roots: freeze(v.roots), Size: v.Size(), CaptureScale: v.captureScale, Measured: len(v.measurements) != 0, HasFocus: hasFocus}, nil
 }
 
