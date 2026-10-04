@@ -11,9 +11,10 @@ import "container/list"
 // B remains attached. Moving a DOM ancestor removes its descendant's focus in
 // Chromium, even though the keyed object and component state survive.
 //
-// This contract covers the compiler's single-root keyed elements/components.
-// Flattened groups with multiple DOM roots, suspended children and hydration
-// comment anchors need VNode-group metadata and are outside this model.
+// This contract covers one direct-child array/Fragment of the compiler's
+// single-root keyed elements/components. Nested virtual groups with multiple
+// roots, suspended children and hydration comment anchors need more VNode
+// metadata and are outside this model.
 func movedSiblings(previous, current []*element) []*element {
 	previousIndex := make(map[*element]int, len(previous))
 	for i, e := range previous {
@@ -87,7 +88,32 @@ func movedSiblings(previous, current []*element) []*element {
 	return moved
 }
 
-func (v *View) clearMovedFocus(previousRoots []*element, previousChildren map[*element][]*element) {
+// movedSiblingGroups keeps direct-child arrays separate, just as Preact's
+// Fragment diffs do. Group source sites must stay in the same source order;
+// conditional or moving Fragment groups require a virtual parent model.
+func movedSiblingGroups(previous, current []*element, previousGroups map[*element]string) []*element {
+	old := make(map[string][]*element)
+	for _, e := range previous {
+		group := previousGroups[e]
+		old[group] = append(old[group], e)
+	}
+	next := make(map[string][]*element)
+	order := make([]string, 0)
+	for _, e := range current {
+		group := e.node.ListGroup
+		if _, seen := next[group]; !seen {
+			order = append(order, group)
+		}
+		next[group] = append(next[group], e)
+	}
+	var moved []*element
+	for _, group := range order {
+		moved = append(moved, movedSiblings(old[group], next[group])...)
+	}
+	return moved
+}
+
+func (v *View) clearMovedFocus(previousRoots []*element, previousChildren map[*element][]*element, previousGroups map[*element]string) {
 	var clearSubtree func(*element)
 	clearSubtree = func(e *element) {
 		v.clearDetachedFocus(e)
@@ -97,7 +123,7 @@ func (v *View) clearMovedFocus(previousRoots []*element, previousChildren map[*e
 	}
 	var visit func([]*element, []*element)
 	visit = func(previous, current []*element) {
-		for _, moved := range movedSiblings(previous, current) {
+		for _, moved := range movedSiblingGroups(previous, current, previousGroups) {
 			clearSubtree(moved)
 		}
 		for _, e := range current {

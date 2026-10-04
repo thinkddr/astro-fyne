@@ -26,6 +26,9 @@ type Node struct {
 	ID, Kind, Text, Value, Placeholder, Href, Variant, Size string
 	// Identity distinguishes keyed source instances which share a DOM ID.
 	Identity string
+	// ListGroup identifies one stable direct-child array/Fragment source site.
+	// It belongs to the list's physical roots, not their descendants or DOM IDs.
+	ListGroup string
 	// CaptureSignature records evaluated source attributes that affect browser
 	// paint even when native geometry and colors come from a captured profile.
 	CaptureSignature          string
@@ -418,10 +421,12 @@ func (v *View) reconcile() {
 	// an anchor whose index changed only because another sibling moved.
 	previousRoots := append([]*element(nil), v.roots...)
 	previousChildren := make(map[*element][]*element, len(v.elements))
+	previousGroups := make(map[*element]string, len(v.elements))
 	current := make(map[string]*element, len(ids))
 	previousByIdentity := make(map[string]*element, len(v.elements))
 	for _, previous := range v.elements {
 		previousChildren[previous] = append([]*element(nil), previous.children...)
+		previousGroups[previous] = previous.node.ListGroup
 		if previous.node.Identity != "" {
 			previousByIdentity[previous.node.Identity] = previous
 		}
@@ -440,7 +445,7 @@ func (v *View) reconcile() {
 					e = nil
 				}
 			}
-			if e == nil || e.node.Kind != n.Kind || retained[e] {
+			if e == nil || e.node.Kind != n.Kind || e.node.ListGroup != n.ListGroup || retained[e] {
 				e = newElement(v, n)
 			}
 			retained[e] = true
@@ -459,7 +464,7 @@ func (v *View) reconcile() {
 		return out
 	}
 	v.roots = build(nodes, Style{})
-	v.clearMovedFocus(previousRoots, previousChildren)
+	v.clearMovedFocus(previousRoots, previousChildren, previousGroups)
 	visible := make(map[*element]bool, len(current))
 	var visibility func([]*element, bool)
 	visibility = func(elements []*element, parentVisible bool) {
