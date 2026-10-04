@@ -39,12 +39,16 @@ try {
           a: Element | null;
           b: Element | null;
           branch: Element | null;
+          x: Element | null;
+          z: Element | null;
         };
       }
     ).keyedOriginal = {
       a: document.getElementById("a-input"),
       b: document.getElementById("b-input"),
       branch: document.getElementById("a-branch-input"),
+      x: document.getElementById("side-X-input"),
+      z: document.getElementById("side-Z-input"),
     };
   });
   const frames: BehaviorFrame[] = [];
@@ -65,6 +69,8 @@ try {
               a: Element | null;
               b: Element | null;
               branch: Element | null;
+              x: Element | null;
+              z: Element | null;
             };
           }
         ).keyedOriginal;
@@ -73,12 +79,17 @@ try {
             document.getElementById("a-input"),
           b = document.getElementById("b-input");
         const branch = document.getElementById("a-branch-input");
+        const x = document.getElementById("side-X-input");
+        const z = document.getElementById("side-Z-input");
         const order = [...document.getElementById("keyed-list")!.children]
           .map((element) => element.id)
           .join(",");
         const primitiveOrder = [
           ...document.getElementById("primitive-list")!.children,
         ]
+          .map((element) => element.id)
+          .join(",");
+        const sideOrder = [...document.getElementById("side-lists")!.children]
           .map((element) => element.id)
           .join(",");
         const code =
@@ -101,7 +112,13 @@ try {
             : primitiveOrder === "y-primitive,x-primitive"
               ? 21
               : -1;
-        if (code < 0 || primitiveCode < 0)
+        const sideCode =
+          sideOrder === "side-X-row,side-Y-row,side-Z-row"
+            ? 234
+            : sideOrder === "side-A-row,side-Z-row,side-X-row"
+              ? 142
+              : -1;
+        if (code < 0 || primitiveCode < 0 || sideCode < 0)
           throw new Error("Unexpected keyed DOM order");
         const focus =
           document.activeElement === a
@@ -110,9 +127,13 @@ try {
               ? 2
               : branch !== null && document.activeElement === branch
                 ? 4
-                : document.activeElement === document.body
-                  ? 0
-                  : 3;
+                : x !== null && document.activeElement === x
+                  ? 5
+                  : z !== null && document.activeElement === z
+                    ? 6
+                    : document.activeElement === document.body
+                      ? 0
+                      : 3;
         return {
           action,
           nodes,
@@ -123,6 +144,9 @@ try {
             code,
             primitiveCode,
             Number(branch !== null && branch === original.branch),
+            Number(x !== null && x === original.x),
+            Number(z !== null && z === original.z),
+            sideCode,
           ],
         };
       },
@@ -131,13 +155,17 @@ try {
     frames.push({ action: frame.action, nodes: frame.nodes });
     for (const [index, value] of frame.measurements.entries())
       observations.push({
-        prefix: `${frames.length - 1}:${["focus", "same-a", "same-b", "order", "primitive-order", "same-branch-a"][index]}`,
+        prefix: `${frames.length - 1}:${["focus", "same-a", "same-b", "order", "primitive-order", "same-branch-a", "same-x", "same-z", "side-order"][index]}`,
         previous: value,
       });
   }
   await snapshot("initial");
   for (const action of scenario.actions) {
-    if (
+    if (action === "focus-x" || action === "focus-z") {
+      await page
+        .locator(action === "focus-x" ? "#side-X-input" : "#side-Z-input")
+        .focus();
+    } else if (
       action === "edit-a" ||
       action === "edit-branch-a" ||
       action === "edit-b"
@@ -154,7 +182,7 @@ try {
       await input.pressSequentially("!");
     } else {
       // Programmatic click preserves input focus, like native Tappable.Tapped.
-      // focus transfer is a different event scenario and is not silently mixed in.
+      // Pointer focus transfer is a different scenario and is not mixed in.
       await page
         .locator(`[id="${action}"]`)
         .evaluate((element) => (element as HTMLElement).click());

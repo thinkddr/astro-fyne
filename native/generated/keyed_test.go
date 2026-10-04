@@ -69,7 +69,7 @@ func activateKeyed(t *testing.T, view *KeyedConformanceWidget, id string) {
 	}
 }
 
-func typeKeyed(t *testing.T, view *KeyedConformanceWidget, window fyne.Window, id string) fyne.Focusable {
+func focusKeyed(t *testing.T, view *KeyedConformanceWidget, window fyne.Window, id string) fyne.Focusable {
 	t.Helper()
 	input, ok := view.Object(id).(fyne.Focusable)
 	if !ok {
@@ -79,6 +79,12 @@ func typeKeyed(t *testing.T, view *KeyedConformanceWidget, window fyne.Window, i
 	if window.Canvas().Focused() != input {
 		t.Fatalf("initial focus %q: got %T (%p), want %p", id, window.Canvas().Focused(), window.Canvas().Focused(), input)
 	}
+	return input
+}
+
+func typeKeyed(t *testing.T, view *KeyedConformanceWidget, window fyne.Window, id string) fyne.Focusable {
+	t.Helper()
+	input := focusKeyed(t, view, window, id)
 	input.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEnd})
 	if window.Canvas().Focused() != input {
 		t.Fatalf("End lost focus for %q", id)
@@ -114,6 +120,7 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 	view, window := keyedView(t)
 	originalA, originalB := view.Object("a-input"), view.Object("b-input")
 	originalBranch := view.Object("a-branch-input")
+	originalX, originalZ := view.Object("side-X-input"), view.Object("side-Z-input")
 	type frame struct {
 		Action string         `json:"action"`
 		Nodes  map[string]any `json:"nodes"`
@@ -149,6 +156,10 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 				focus = 2
 			} else if branch := view.Object("a-branch-input"); branch != nil && window.Canvas().Focused() == branch.(fyne.Focusable) {
 				focus = 4
+			} else if x := view.Object("side-X-input"); x != nil && window.Canvas().Focused() == x.(fyne.Focusable) {
+				focus = 5
+			} else if z := view.Object("side-Z-input"); z != nil && window.Canvas().Focused() == z.(fyne.Focusable) {
+				focus = 6
 			} else {
 				focus = 3
 			}
@@ -166,20 +177,25 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 			digit int
 			y     float32
 		}
-		rows := []row{}
-		for index, id := range []string{"a-row", "b-row", "c-row"} {
-			if object := view.Object(id); object != nil {
-				rows = append(rows, row{digit: index + 1, y: object.Position().Y})
+		orderOf := func(ids []string) int {
+			rows := []row{}
+			for index, id := range ids {
+				if object := view.Object(id); object != nil {
+					rows = append(rows, row{digit: index + 1, y: object.Position().Y})
+				}
 			}
-		}
-		sort.Slice(rows, func(i, j int) bool { return rows[i].y < rows[j].y })
-		order := 0
-		for index, item := range rows {
-			if index > 0 && rows[index-1].y == item.y {
-				t.Fatalf("keyed native rows overlap at y=%v after %q", item.y, action)
+			sort.Slice(rows, func(i, j int) bool { return rows[i].y < rows[j].y })
+			order := 0
+			for index, item := range rows {
+				if index > 0 && rows[index-1].y == item.y {
+					t.Fatalf("keyed native rows overlap at y=%v after %q", item.y, action)
+				}
+				order = order*10 + item.digit
 			}
-			order = order*10 + item.digit
+			return order
 		}
+		order := orderOf([]string{"a-row", "b-row", "c-row"})
+		sideOrder := orderOf([]string{"side-A-row", "side-X-row", "side-Y-row", "side-Z-row"})
 		primitiveOrder := 12
 		if view.Object("y-primitive").Position().Y < view.Object("x-primitive").Position().Y {
 			primitiveOrder = 21
@@ -188,13 +204,26 @@ func TestExportBrowserComparableKeyedBehavior(t *testing.T) {
 		if branch := view.Object("a-branch-input"); branch != nil && branch == originalBranch {
 			sameBranch = 1
 		}
-		for index, value := range []int{focus, sameA, sameB, order, primitiveOrder, sameBranch} {
-			trace.Observations = append(trace.Observations, observation{fmt.Sprintf("%d:%s", len(trace.Frames)-1, []string{"focus", "same-a", "same-b", "order", "primitive-order", "same-branch-a"}[index]), value})
+		sameX, sameZ := 0, 0
+		if x := view.Object("side-X-input"); x != nil && x == originalX {
+			sameX = 1
+		}
+		if z := view.Object("side-Z-input"); z != nil && z == originalZ {
+			sameZ = 1
+		}
+		for index, value := range []int{focus, sameA, sameB, order, primitiveOrder, sameBranch, sameX, sameZ, sideOrder} {
+			trace.Observations = append(trace.Observations, observation{fmt.Sprintf("%d:%s", len(trace.Frames)-1, []string{"focus", "same-a", "same-b", "order", "primitive-order", "same-branch-a", "same-x", "same-z", "side-order"}[index]), value})
 		}
 	}
 	snapshot("initial")
 	for _, action := range scenario.Actions {
-		if action == "edit-a" || action == "edit-branch-a" || action == "edit-b" {
+		if action == "focus-x" || action == "focus-z" {
+			id := "side-X-input"
+			if action == "focus-z" {
+				id = "side-Z-input"
+			}
+			focusKeyed(t, view, window, id)
+		} else if action == "edit-a" || action == "edit-branch-a" || action == "edit-b" {
 			id := "a-input"
 			if action == "edit-branch-a" {
 				id = "a-branch-input"

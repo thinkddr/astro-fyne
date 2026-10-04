@@ -10,7 +10,11 @@
     "c-value",
     "c-text",
     "x-primitive",
-    "y-primitive"
+    "y-primitive",
+    "side-A-value",
+    "side-X-value",
+    "side-Y-value",
+    "side-Z-value"
   ],
   "actions": [
     "edit-a",
@@ -33,6 +37,11 @@
     "edit-a",
     "prepend-row",
     "prepend-row",
-    "edit-b"
+    "edit-b",
+    "focus-x",
+    "update-side-lists",
+    "reset-side-lists",
+    "focus-z",
+    "update-side-lists"
   ]
 }

@@ -91,6 +91,23 @@ test("Boolean JSX short circuit evaluates once without a falsy text node", async
   expect(go).not.toContain("webui.ChildText(left)");
 });
 
+test("each array keeps its source-site group in the enclosing component namespace", async () => {
+  const source = await program(`export function Page() {
+    return <main>{['a'].map(item => <input key={item} id={item}/>)}{['b'].map(item => <input key={item} id={item}/>)}</main>;
+  }`);
+  const root = source.components.find((item) => item.name === source.entry)!
+    .body[0]!;
+  if (root.kind !== "element") throw new Error("missing main");
+  const groups = root.children.filter((node) => node.kind === "each");
+  expect(groups).toHaveLength(2);
+  expect(groups[0]!.id).not.toBe(groups[1]!.id);
+  const go = emitGo(source, options);
+  for (const group of groups)
+    expect(go).toContain(
+      `}; return webui.GroupList(result, prefix + ${JSON.stringify("/" + group.id)})`,
+    );
+});
+
 test("invalid capture metadata or wrong style types never produce invalid Go", async () => {
   const source = await program(
     `export function Page() { return <div id="panel" />; }`,

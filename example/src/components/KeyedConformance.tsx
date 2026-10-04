@@ -83,6 +83,8 @@ export function KeyedConformance() {
       ? [c, b]
       : [b];
   const [primitives, setPrimitives] = useState(["x", "y"]);
+  const [sideLeft, setSideLeft] = useState<string[]>([]);
+  const [sideRight, setSideRight] = useState(["X", "Y", "Z"]);
   return (
     <main id="keyed-conformance">
       <button
@@ -147,6 +149,40 @@ export function KeyedConformance() {
           <p key={item} id={`${item}-primitive`}>
             {item}
           </p>
+        ))}
+      </div>
+      <button
+        id="update-side-lists"
+        type="button"
+        onClick={() => {
+          setSideLeft(["A"]);
+          setSideRight(["Z", "X"]);
+        }}
+      >
+        Update sibling lists
+      </button>
+      <button
+        id="reset-side-lists"
+        type="button"
+        onClick={() => {
+          setSideLeft([]);
+          setSideRight(["X", "Y", "Z"]);
+        }}
+      >
+        Reset sibling lists
+      </button>
+      <div id="side-lists">
+        {sideLeft.map((item) => (
+          <section key={item} id={`side-${item}-row`}>
+            <p id={`side-${item}-value`}>{item}</p>
+            <input id={`side-${item}-input`} value={item} />
+          </section>
+        ))}
+        {sideRight.map((item) => (
+          <section key={item} id={`side-${item}-row`}>
+            <p id={`side-${item}-value`}>{item}</p>
+            <input id={`side-${item}-input`} value={item} />
+          </section>
         ))}
       </div>
     </main>
