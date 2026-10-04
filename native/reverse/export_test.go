@@ -409,3 +409,58 @@ func TestExportDetectsBoundViewFocusWithoutOptionalCanvas(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExportAfterNativePaintPreservesResourceAndFreezesChangedDecodedCache(t *testing.T) {
+	app(t)
+	r := bitmap(t)
+	object := canvas.NewImageFromResource(r)
+	place(object, 20, 30, 2, 2)
+	root := container.NewWithoutLayout(object)
+	place(root, 0, 0, 320, 240)
+	c := software.NewCanvas()
+	c.SetPadded(false)
+	c.Resize(fyne.NewSize(320, 240))
+	c.SetContent(root)
+	c.Capture()
+	if object.Image == nil {
+		t.Fatal("native render did not materialize its bitmap cache")
+	}
+	opts := options()
+	opts.Canvas = c
+	doc, err := Export(root, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Resources[0].Hash != fmtHash(r.Content()) || !bytes.Equal(doc.Resources[0].Content, r.Content()) {
+		t.Fatal("unchanged native decoded cache replaced original resource bytes")
+	}
+	changed := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	changed.SetNRGBA(0, 0, color.NRGBA{R: 8, G: 16, B: 32, A: 255})
+	object.Image = changed
+	doc, err = Export(root, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(doc.Resources[0].Content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Resources[0].Hash == fmtHash(r.Content()) || color.NRGBAModel.Convert(decoded.At(0, 0)) != (color.NRGBA{R: 8, G: 16, B: 32, A: 255}) {
+		t.Fatal("explicitly changed painted cache exported stale original bytes")
+	}
+	object.Image = image.NewNRGBA64(image.Rect(0, 0, 2, 2))
+	if _, err := Export(root, opts); err == nil || !strings.Contains(err.Error(), "8-bit") {
+		t.Fatalf("16-bit cached bitmap was silently quantized: %v", err)
+	}
+}
+
+func TestDecoded16BitImagesCannotBecomeAn8BitSceneSilently(t *testing.T) {
+	app(t)
+	for _, pixels := range []image.Image{image.NewNRGBA64(image.Rect(0, 0, 2, 2)), image.NewRGBA64(image.Rect(0, 0, 2, 2)), image.NewGray16(image.Rect(0, 0, 2, 2)), image.NewAlpha16(image.Rect(0, 0, 2, 2))} {
+		object := canvas.NewImageFromImage(pixels)
+		place(object, 0, 0, 2, 2)
+		if _, err := Export(object, options()); err == nil || !strings.Contains(err.Error(), "8-bit") {
+			t.Fatalf("%T quantized without diagnostics: %v", pixels, err)
+		}
+	}
+}
