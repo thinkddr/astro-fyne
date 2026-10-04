@@ -29,12 +29,13 @@ func NewGeometry(props webui.Scope, actions webui.Actions, backends ...webui.Bac
 	}
 	state := webui.Scope{}
 	var view *webui.View
+	var generated *GeometryWidget
 	refresh := func() {
 		if view != nil {
 			view.Refresh()
 		}
 	}
-	view = webui.NewView(func() []webui.Node {
+	view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &GeometryWidget{View: v}; return generated }, func() []webui.Node {
 		active := map[string]bool{}
 		nodes := buildGeometry_geometry_871e0d70(props, actions, refresh, state, active, "")
 		for key := range state {
@@ -55,7 +56,7 @@ func NewGeometry(props webui.Scope, actions webui.Actions, backends ...webui.Bac
 	if err := view.ApplyMeasurements(map[string]webui.Style{"fyne-root": {X: 0, Y: 0, Width: 320, Height: 240, PaddingTop: 0, PaddingRight: 0, PaddingBottom: 0, PaddingLeft: 0, Gap: 0, Direction: "row", Background: "rgb(255, 255, 255)", Color: "rgb(0, 0, 0)", BorderColor: "rgb(0, 0, 0)", BorderWidth: 0, Radius: 0, FontFamily: "", FontStyle: "normal", FontWeight: 400, FontSize: 0, LineHeight: 0, TextAlign: "left", WhiteSpace: "normal", Display: "block", Opacity: 1, Measured: true}, "panel": {X: 12, Y: 16, Width: 280, Height: 180, PaddingTop: 0, PaddingRight: 0, PaddingBottom: 0, PaddingLeft: 0, Gap: 0, Direction: "row", Background: "rgb(18, 52, 86)", Color: "rgb(0, 0, 0)", BorderColor: "rgb(0, 0, 0)", BorderWidth: 0, Radius: 0, FontFamily: "", FontStyle: "normal", FontWeight: 400, FontSize: 0, LineHeight: 0, TextAlign: "left", WhiteSpace: "normal", Display: "block", Opacity: 1, Measured: true}, "first": {X: 8, Y: 12, Width: 100, Height: 50, PaddingTop: 0, PaddingRight: 0, PaddingBottom: 0, PaddingLeft: 0, Gap: 0, Direction: "row", Background: "rgb(171, 205, 239)", Color: "rgb(0, 0, 0)", BorderColor: "rgb(0, 0, 0)", BorderWidth: 0, Radius: 0, FontFamily: "", FontStyle: "normal", FontWeight: 400, FontSize: 0, LineHeight: 0, TextAlign: "left", WhiteSpace: "normal", Display: "block", Opacity: 1, Measured: true}, "second": {X: 128, Y: 92, Width: 80, Height: 40, PaddingTop: 0, PaddingRight: 0, PaddingBottom: 0, PaddingLeft: 0, Gap: 0, Direction: "row", Background: "rgb(254, 220, 186)", Color: "rgb(0, 0, 0)", BorderColor: "rgb(0, 0, 0)", BorderWidth: 0, Radius: 0, FontFamily: "", FontStyle: "normal", FontWeight: 400, FontSize: 0, LineHeight: 0, TextAlign: "left", WhiteSpace: "normal", Display: "block", Opacity: 1, Measured: true}}); err != nil {
 		return nil, err
 	}
-	return &GeometryWidget{View: view}, nil
+	return generated, nil
 }
 
 func buildGeometry_geometry_871e0d70(props webui.Scope, actions webui.Actions, refresh func(), state webui.Scope, active map[string]bool, prefix string) []webui.Node {
@@ -66,16 +67,28 @@ func buildGeometry_geometry_871e0d70(props webui.Scope, actions webui.Actions, r
 
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("fyne-root"), Identity: prefix + "/fyne-root", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
-			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("panel"), Identity: prefix + "/panel", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, func() []webui.Node {
+			capturedAttrs := webui.Scope{"id": "fyne-root"}
+			return []webui.Node{{ID: webui.String(webui.Get(capturedAttrs, "id")), Identity: prefix + "/fyne-root", Kind: "container", Style: webui.Style{}, CaptureSignature: webui.SnapshotAttributes("main", capturedAttrs), Children: func() []webui.Node {
 				var nodes []webui.Node
-				nodes = append(nodes, []webui.Node{{ID: webui.String("first"), Identity: prefix + "/first", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node { var nodes []webui.Node; ; return nodes }()}}...)
-				nodes = append(nodes, []webui.Node{{ID: webui.String("second"), Identity: prefix + "/second", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node { var nodes []webui.Node; ; return nodes }()}}...)
+				nodes = append(nodes, func() []webui.Node {
+					capturedAttrs := webui.Scope{"id": "panel"}
+					return []webui.Node{{ID: webui.String(webui.Get(capturedAttrs, "id")), Identity: prefix + "/panel", Kind: "container", Style: webui.Style{}, CaptureSignature: webui.SnapshotAttributes("div", capturedAttrs), Children: func() []webui.Node {
+						var nodes []webui.Node
+						nodes = append(nodes, func() []webui.Node {
+							capturedAttrs := webui.Scope{"id": "first"}
+							return []webui.Node{{ID: webui.String(webui.Get(capturedAttrs, "id")), Identity: prefix + "/first", Kind: "container", Style: webui.Style{}, CaptureSignature: webui.SnapshotAttributes("div", capturedAttrs), Children: func() []webui.Node { var nodes []webui.Node; ; return nodes }()}}
+						}()...)
+						nodes = append(nodes, func() []webui.Node {
+							capturedAttrs := webui.Scope{"id": "second"}
+							return []webui.Node{{ID: webui.String(webui.Get(capturedAttrs, "id")), Identity: prefix + "/second", Kind: "container", Style: webui.Style{}, CaptureSignature: webui.SnapshotAttributes("div", capturedAttrs), Children: func() []webui.Node { var nodes []webui.Node; ; return nodes }()}}
+						}()...)
+						return nodes
+					}()}}
+				}()...)
 				return nodes
-			}()}}...)
-			return nodes
-		}()}}...)
+			}()}}
+		}()...)
 		return nodes
 	}()
 }
