@@ -35,6 +35,21 @@ test("HTML input and change events keep distinct immediate and commit callbacks"
   expect(go).toContain("view.SetAutoRefreshEvents(false)");
 });
 
+test("native identities use source sites even when public DOM IDs change", async () => {
+  const source = await program(
+    `export function Page({domID,value}) { return <main>{value}<input id={domID} /></main>; }`,
+  );
+  const root = source.components.find((item) => item.name === source.entry)!
+    .body[0]!;
+  if (root.kind !== "element") throw new Error("missing main");
+  const input = root.children.find((item) => item.kind === "element")!;
+  if (input.kind !== "element") throw new Error("missing input");
+  const go = emitGo(source, options);
+  expect(go).toContain(`Identity: prefix + ${JSON.stringify("/" + input.id)}`);
+  expect(go).toContain('ID: webui.String(webui.Get(scope, "domID"))');
+  expect(go).toContain('Identity: prefix + "/text_0"');
+});
+
 test("invalid capture metadata or wrong style types never produce invalid Go", async () => {
   const source = await program(
     `export function Page() { return <div id="panel" />; }`,

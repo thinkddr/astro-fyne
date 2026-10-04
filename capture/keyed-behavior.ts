@@ -59,7 +59,9 @@ try {
             keyedOriginal: { a: Element | null; b: Element | null };
           }
         ).keyedOriginal;
-        const a = document.getElementById("a-input"),
+        const a =
+            document.getElementById("a-renamed-input") ??
+            document.getElementById("a-input"),
           b = document.getElementById("b-input");
         const order = [...document.getElementById("keyed-list")!.children]
           .map((element) => element.id)
