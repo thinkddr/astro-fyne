@@ -114,24 +114,15 @@ func buildConformance_Conformance_17a88bbb(props webui.Scope, actions webui.Acti
 				refresh()
 			}, Text: webui.ChildText("Toggle ephemeral component")}}...)
 			nodes = append(nodes, func() []webui.Node {
-				if webui.Truth(webui.Get(scope, "visible")) {
+				left := webui.Get(scope, "visible")
+				if webui.Truth(left) {
 					return func() []webui.Node {
 						var nodes []webui.Node
 						nodes = append(nodes, buildConformance_StatefulUnit_17a88bbb(webui.Scope{"prefix": "ephemeral", "initial": float64(20), "observe": webui.Get(scope, "observe")}, actions, refresh, state, active, prefix+"/Conformance_17a88bbb_c7")...)
 						return nodes
 					}()
 				}
-				return func() []webui.Node {
-					var nodes []webui.Node
-					nodes = append(nodes, func() []webui.Node {
-						text := webui.ChildText(webui.Get(scope, "visible"))
-						if text == "" {
-							return nil
-						}
-						return []webui.Node{{ID: prefix + "/text_0", Identity: prefix + "/text_0", Kind: "text", Text: text}}
-					}()...)
-					return nodes
-				}()
+				return nil
 			}()...)
 			nodes = append(nodes, buildConformance_DestructuredProperties_17a88bbb(webui.Scope{"explicitNull": nil}, actions, refresh, state, active, prefix+"/Conformance_17a88bbb_c8")...)
 			nodes = append(nodes, buildConformance_ObjectProperties_17a88bbb(webui.Scope{"explicitNull": nil}, actions, refresh, state, active, prefix+"/Conformance_17a88bbb_c9")...)

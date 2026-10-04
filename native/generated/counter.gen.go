@@ -96,24 +96,15 @@ func buildCounter_Counter_fd415ca4(props webui.Scope, actions webui.Actions, ref
 			}, Children: func() []webui.Node { var nodes []webui.Node; ; return nodes }()}}...)
 			nodes = append(nodes, []webui.Node{{ID: webui.String("greeting"), Identity: prefix + "/greeting", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String("Hola, ") + webui.String(webui.Get(scope, "name")) + webui.String(""))}}...)
 			nodes = append(nodes, func() []webui.Node {
-				if webui.Truth(webui.Binary(">", webui.Get(scope, "count"), float64(0))) {
+				left := webui.Binary(">", webui.Get(scope, "count"), float64(0))
+				if webui.Truth(left) {
 					return func() []webui.Node {
 						var nodes []webui.Node
 						nodes = append(nodes, []webui.Node{{ID: webui.String("changed"), Identity: prefix + "/changed", Kind: "text", Style: webui.Style{}, Text: webui.ChildText("El mismo estado funciona en las dos interfaces.")}}...)
 						return nodes
 					}()
 				}
-				return func() []webui.Node {
-					var nodes []webui.Node
-					nodes = append(nodes, func() []webui.Node {
-						text := webui.ChildText(webui.Binary(">", webui.Get(scope, "count"), float64(0)))
-						if text == "" {
-							return nil
-						}
-						return []webui.Node{{ID: prefix + "/text_0", Identity: prefix + "/text_0", Kind: "text", Text: text}}
-					}()...)
-					return nodes
-				}()
+				return nil
 			}()...)
 			return nodes
 		}()}}...)

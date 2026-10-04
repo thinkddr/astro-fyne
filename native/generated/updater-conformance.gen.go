@@ -164,7 +164,7 @@ func buildUpdaterConformance_MappedUnit_cc5f4c8c(props webui.Scope, actions webu
 						return nodes
 					}(), prefix)...)
 				}
-				return result
+				return webui.GroupList(result, prefix+"/MappedUnit_cc5f4c8c_each12")
 			}()...)
 			return nodes
 		}()}}...)
@@ -212,7 +212,7 @@ func buildUpdaterConformance_NormalMappedUnit_cc5f4c8c(props webui.Scope, action
 						return nodes
 					}(), prefix)...)
 				}
-				return result
+				return webui.GroupList(result, prefix+"/NormalMappedUnit_cc5f4c8c_each15")
 			}()...)
 			return nodes
 		}()}}...)
