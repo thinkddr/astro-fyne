@@ -14,6 +14,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"github.com/go-text/typesetting/font"
 )
 
 // Backend supplies font shaping, boxes and editing to the generated native tree.
@@ -60,10 +61,13 @@ type Font struct {
 
 // FyneBackend is the independent public backend. Fonts belong to the host, which
 // must supply licensed resources matching its browser font files. The default theme
-// font is used for unmeasured prototypes only. Upstream Fyne's painter is not assumed
-// to match Chromium; the visual gate decides whether a captured state passes.
+// font is used for legacy unmeasured prototypes only. Responsive source text
+// requires a real matching resource and glyph validation. Upstream Fyne's painter
+// is not assumed to match Chromium; the visual gate decides whether a state passes.
 type FyneBackend struct {
-	Fonts map[string]map[Font]fyne.Resource
+	Fonts       map[string]map[Font]fyne.Resource
+	fontsFrozen bool
+	fontFaces   map[fyne.Resource]*font.Face
 }
 
 func (b FyneBackend) Defaults(n Node) Style {
@@ -106,6 +110,14 @@ func (b FyneBackend) font(s Style) fyne.Resource {
 	return nil
 }
 func (b FyneBackend) Validate(s Style, text bool) error {
+	if s.Flex != nil && s.Flex.BoxSizing == "border-box" && text {
+		if err := validateResponsiveTextStyle(s); err != nil {
+			return err
+		}
+		if _, err := b.parsedFont(s); err != nil {
+			return err
+		}
+	}
 	if s.Measured && text && (s.FontSize <= 0 || s.LineHeight <= 0) {
 		return fmt.Errorf("measured text requires explicit positive font size and line height")
 	}

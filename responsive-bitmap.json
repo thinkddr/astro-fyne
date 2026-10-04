@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "package": "generated",
+  "entries": [
+    {
+      "name": "ResponsiveBitmap",
+      "source": "example/src/components/ResponsiveBitmapConformance.tsx",
+      "export": "ResponsiveBitmapConformance",
+      "output": "native/generated/responsive_bitmap.gen.go"
+    }
+  ]
+}

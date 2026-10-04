@@ -15,7 +15,7 @@ bun src/cli.ts reverse --scene artifacts/reverse-controls/scene.json --out examp
 cp example/src/pages/reverse-controls/ReverseControls.* artifacts/reverse-controls/
 bun run typecheck
 bun test src
-bunx --no-install prettier --check src capture example astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json package.json tsconfig.json
+bunx --no-install prettier --check src capture example astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json package.json tsconfig.json
 bun src/cli.ts generate --config astro-fyne.json
 bun src/cli.ts check --config astro-fyne.json
 bun src/cli.ts generate --config conformance.json
@@ -28,6 +28,17 @@ bun src/cli.ts generate --config primitive-conformance.json
 bun src/cli.ts check --config primitive-conformance.json
 bun src/cli.ts generate --config responsive-flex.json
 bun src/cli.ts check --config responsive-flex.json
+bun src/cli.ts generate --config responsive-controls.json
+bun src/cli.ts check --config responsive-controls.json
+export ASTRO_FYNE_RESPONSIVE_CONTROLS_SOURCE_HASH="$(bun -e 'console.log((await Bun.file("native/generated/responsive_controls.gen.report.json").json()).sourceHash)')"
+task_controls_cases="$(bun -e 'import {validateBehaviorScenario} from "./src/behavior-contract.ts"; const scenario = validateBehaviorScenario(await Bun.file("responsive-controls-scenario.json").json()); console.log(["initial",...scenario.actions].map((action,index) => `${String(index).padStart(2,"0")}-${action}`).join("\n"));')"
+test -n "$task_controls_cases"
+bun src/cli.ts generate --config responsive-bitmap.json
+bun src/cli.ts check --config responsive-bitmap.json
+bun src/cli.ts analyze --config responsive-bitmap.json > artifacts-responsive-bitmap-analysis.json
+export ASTRO_FYNE_RESPONSIVE_BITMAP_SOURCE_HASH="$(bun -e 'console.log((await Bun.file("artifacts-responsive-bitmap-analysis.json").json()).sourceHash)')"
+task_bitmap_cases="$(bun -e 'const scenario = await Bun.file("responsive-bitmap-scenario.json").json(); if (scenario.schema !== 1 || !Array.isArray(scenario.cases) || !scenario.cases.length) throw new Error("Missing bitmap cases"); const names = scenario.cases.map(item => item.name); if (new Set(names).size !== names.length || names.some(name => typeof name !== "string" || !/^[A-Za-z0-9_-]+$/.test(name))) throw new Error("Invalid bitmap case names"); console.log(names.join("\n"));')"
+test -n "$task_bitmap_cases"
 bun src/cli.ts analyze --config conformance.json > artifacts-conformance-analysis.json
 export ASTRO_FYNE_CONFORMANCE_SOURCE_HASH="$(bun -e 'console.log((await Bun.file("artifacts-conformance-analysis.json").json()).sourceHash)')"
 bun src/cli.ts analyze --config visual.json > artifacts-analysis.json
@@ -70,6 +81,8 @@ bun capture/behavior.ts http://127.0.0.1:4321/conformance conformance-scenario.j
 bun capture/keyed-behavior.ts http://127.0.0.1:4321/keyed keyed-scenario.json artifacts/web-keyed-behavior.json "$task_keyed_source_hash"
 bun capture/behavior.ts http://127.0.0.1:4321/primitives primitive-scenario.json artifacts/web-primitive-behavior.json "$ASTRO_FYNE_PRIMITIVE_SOURCE_HASH"
 bun capture/responsive-flex.ts --url http://127.0.0.1:4321/responsive-flex --out artifacts/responsive-flex --source-hash "$ASTRO_FYNE_RESPONSIVE_FLEX_SOURCE_HASH"
+bun capture/responsive-controls.ts --url http://127.0.0.1:4321/responsive-controls --out artifacts/responsive-controls --report native/generated/responsive_controls.gen.report.json
+bun capture/responsive-bitmap.ts --url http://127.0.0.1:4321/responsive-bitmap --out artifacts/responsive-bitmap --analysis artifacts-responsive-bitmap-analysis.json
 bun capture/reverse-behavior.ts http://127.0.0.1:4321/reverse-controls/ReverseControls artifacts/reverse-controls/scene.json artifacts/reverse-controls/web-behavior.json
 bun capture/compare-reverse-behavior.ts artifacts/reverse-controls/web-behavior.json artifacts/reverse-controls/native-behavior.json artifacts/reverse-controls/scene.json | tee artifacts/reverse-controls/comparison.json
 bun src/cli.ts generate --config visual.json --entry Geometry --measurements artifacts/measurements.json
@@ -89,6 +102,8 @@ export ASTRO_FYNE_IMAGE_ARTIFACTS="$(pwd)/artifacts/images"
 export ASTRO_FYNE_REVERSE_ARTIFACTS="$(pwd)/artifacts/reverse"
 export ASTRO_FYNE_SCALE2_ARTIFACTS="$(pwd)/artifacts/scale2"
 export ASTRO_FYNE_RESPONSIVE_FLEX_ARTIFACTS="$(pwd)/artifacts/responsive-flex"
+export ASTRO_FYNE_RESPONSIVE_CONTROLS_ARTIFACTS="$(pwd)/artifacts/responsive-controls"
+export ASTRO_FYNE_RESPONSIVE_BITMAP_ARTIFACTS="$(pwd)/artifacts/responsive-bitmap"
 cd native
 go mod tidy
 git diff --exit-code HEAD -- go.mod go.sum
@@ -106,6 +121,11 @@ if [[ "$task_native_test_status" -eq 0 ]]; then
     bun src/cli.ts reverse --scene "artifacts/responsive-flex/$task_flex_case/scene.json" --out "example/src/pages/flex-reverse/$task_flex_case" --name FlexReverse --public-dir example/public --check
     cp "example/src/pages/flex-reverse/$task_flex_case/"FlexReverse.* "artifacts/responsive-flex/$task_flex_case/"
   done <<< "$task_flex_cases"
+  while IFS= read -r task_bitmap_case; do
+    bun src/cli.ts reverse --scene "artifacts/responsive-bitmap/$task_bitmap_case/scene.json" --out "example/src/pages/bitmap-reverse/$task_bitmap_case" --name BitmapReverse --public-dir example/public
+    bun src/cli.ts reverse --scene "artifacts/responsive-bitmap/$task_bitmap_case/scene.json" --out "example/src/pages/bitmap-reverse/$task_bitmap_case" --name BitmapReverse --public-dir example/public --check
+    cp "example/src/pages/bitmap-reverse/$task_bitmap_case/"BitmapReverse.* "artifacts/responsive-bitmap/$task_bitmap_case/"
+  done <<< "$task_bitmap_cases"
   kill "$task_preview_pid"
   wait "$task_preview_pid" 2>/dev/null || true
   bunx --no-install astro build --root example
@@ -129,6 +149,7 @@ if [[ "$task_native_test_status" -eq 0 ]]; then
     exit 1
   fi
   bun capture/responsive-flex-reverse.ts --base-url http://127.0.0.1:4321 --out artifacts/responsive-flex
+  bun capture/responsive-flex-reverse.ts --base-url http://127.0.0.1:4321 --out artifacts/responsive-bitmap --preset bitmap
   cd native
 fi
 task_comparison_status=0
@@ -149,11 +170,38 @@ run_comparison ../artifacts/reverse/roundtrip-comparison.json go run ./visual/cm
 run_comparison ../artifacts/behavior-comparison.json bun ../capture/compare-behavior.ts ../artifacts/web-behavior.json ../artifacts/native-behavior.json ../conformance-scenario.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH"
 run_comparison ../artifacts/keyed-behavior-comparison.json bun ../capture/compare-behavior.ts ../artifacts/web-keyed-behavior.json ../artifacts/native-keyed-behavior.json ../keyed-scenario.json "$task_keyed_source_hash"
 run_comparison ../artifacts/primitive-behavior-comparison.json bun ../capture/compare-behavior.ts ../artifacts/web-primitive-behavior.json ../artifacts/native-primitive-behavior.json ../primitive-scenario.json "$ASTRO_FYNE_PRIMITIVE_SOURCE_HASH"
+run_comparison ../artifacts/responsive-controls/behavior-comparison.json bun ../capture/compare-behavior.ts ../artifacts/responsive-controls/web-behavior.json ../artifacts/responsive-controls/native-behavior.json ../responsive-controls-scenario.json "$ASTRO_FYNE_RESPONSIVE_CONTROLS_SOURCE_HASH"
 while IFS= read -r task_flex_case; do
   task_flex_directory="../artifacts/responsive-flex/$task_flex_case"
   run_comparison "$task_flex_directory/comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_flex_directory/web.png" --native "$task_flex_directory/native.png" --out "$task_flex_directory/diff.png"
   run_comparison "$task_flex_directory/reverse-comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_flex_directory/native.png" --native "$task_flex_directory/reverse-web.png" --out "$task_flex_directory/reverse-diff.png"
 done <<< "$task_flex_cases"
+while IFS= read -r task_bitmap_case; do
+  task_bitmap_directory="../artifacts/responsive-bitmap/$task_bitmap_case"
+  run_comparison "$task_bitmap_directory/comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_bitmap_directory/web.png" --native "$task_bitmap_directory/native.png" --out "$task_bitmap_directory/diff.png"
+  run_comparison "$task_bitmap_directory/reverse-comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_bitmap_directory/native.png" --native "$task_bitmap_directory/reverse-web.png" --out "$task_bitmap_directory/reverse-diff.png"
+done <<< "$task_bitmap_cases"
+# Typography is an explicitly uncertified diagnostic, separate from the exact
+# rectangle/bitmap gates. Keep every strict comparator result and fail if an
+# input, process, result or zero-tolerance invariant is invalid. A reported
+# pixel delta remains accepted:false; successful measurement is not pixel parity.
+task_controls_different=0
+task_controls_exact=0
+while IFS= read -r task_controls_case; do
+  task_controls_directory="../artifacts/responsive-controls/$task_controls_case"
+  task_controls_pixel_status=0
+  go run ./visual/cmd/astro-fyne-compare --reference "$task_controls_directory/web.png" --native "$task_controls_directory/native.png" --out "$task_controls_directory/diff.png" > "$task_controls_directory/pixel-diagnostic.json" || task_controls_pixel_status=$?
+  bun -e 'const [path,status]=process.argv.slice(1); const result=await Bun.file(path).json(); const expected=Number(status); if (!result || result.tolerance?.channel !== 0 || result.tolerance?.pixels !== 0 || !Number.isSafeInteger(result.changedPixels) || result.changedPixels < 0 || typeof result.exact !== "boolean" || typeof result.accepted !== "boolean" || result.exact !== (result.changedPixels === 0) || result.accepted !== result.exact || expected !== (result.exact ? 0 : 1)) throw new Error("Invalid strict typography diagnostic");' "$task_controls_directory/pixel-diagnostic.json" "$task_controls_pixel_status"
+  if [[ "$task_controls_pixel_status" -eq 0 ]]; then
+    task_controls_exact=$((task_controls_exact + 1))
+  else
+    task_controls_different=$((task_controls_different + 1))
+  fi
+done <<< "$task_controls_cases"
+bun -e 'const [path,exact,different]=process.argv.slice(1); await Bun.write(path,JSON.stringify({schema:1,diagnosticOnly:true,pixelPerfectVerified:false,exactFrames:Number(exact),differentFrames:Number(different),tolerance:{channel:0,pixels:0}},null,2)+"\n");' ../artifacts/responsive-controls/pixel-diagnostic-summary.json "$task_controls_exact" "$task_controls_different"
+if [[ "$task_controls_different" -gt 0 ]]; then
+  echo "::warning::Responsive control typography remains uncertified: $task_controls_different frames differ at zero RGBA tolerance. See pixel-diagnostic-summary.json and per-frame diffs."
+fi
 test "$task_native_test_status" -eq 0
 test "$task_comparison_status" -eq 0
 test -z "$(gofmt -l .)"
