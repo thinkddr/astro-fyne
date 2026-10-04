@@ -47,6 +47,9 @@ Array coercion is bounded and rejects cycles rather than recursing without limit
 Known inherited prototype properties cannot be read as a fabricated `undefined` value;
 reading them requires a prototype adapter. Ordinary absent data properties still yield
 `undefined`. Prototype-mutating `__proto__` literals receive a source diagnostic.
+Object initializer values retain their source evaluation order, including integer-like
+keys. Duplicate literal keys require a diagnostic until ordered overwrite semantics are
+represented in the intermediate form; their earlier expressions must never disappear.
 
 Callback names bound to state, constants or shadowing list/event/updater parameters do not
 authorize host actions. Calls to shadowed `String`, `Number` or `Boolean` require an explicit
@@ -162,8 +165,9 @@ and requires the comparator to fail. A release should report which scenarios act
 in CI and which remain untested, rather than applying a general fidelity badge to generated
 code. Failed or missing comparisons leave a profile uncertified.
 
-A separate primitive scenario compares 33 text fields over four real component states
-in Chromium and generated Go. Its coercion checks establish behavior rather than font
+A separate primitive scenario compares 33 text fields across four real component states
+and eight observation frames in Chromium and generated Go. Its event callbacks also
+compare object initializer evaluation order. These checks establish behavior rather than font
 pixel parity. The scale 2 geometry scenario captures the actual 320 × 240 logical canvas
 as 640 × 480 pixels in both renderers and checks the same zero-difference policy. It
 also verifies that a scale 1 canvas cannot validate or export a scale 2 profile. This

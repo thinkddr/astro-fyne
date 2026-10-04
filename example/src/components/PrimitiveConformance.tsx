@@ -4,12 +4,26 @@
 import { useState } from "preact/hooks";
 
 /** Real source expressions; type assertions leave JavaScript coercion unchanged. */
-export function PrimitiveConformance() {
+interface PrimitiveProps {
+  t: (key: string) => string;
+  observeObject: (value: Record<string, string>) => void;
+}
+
+export function PrimitiveConformance({ t, observeObject }: PrimitiveProps) {
   const [phase, setPhase] = useState(0);
   return (
     <main id="primitive-conformance">
       <button id="next-phase" type="button" onClick={() => setPhase(phase + 1)}>
         Next phase
+      </button>
+      <button
+        id="observe-order"
+        type="button"
+        onClick={() =>
+          observeObject({ z: t("first"), "2": t("second"), "1": t("third") })
+        }
+      >
+        Observe object initializer order
       </button>
       <p id="phase">{phase}</p>
       <p id="number-empty">{String(Number([]))}</p>

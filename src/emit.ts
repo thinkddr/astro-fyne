@@ -109,7 +109,19 @@ function expression(value: Expr, scope = "scope"): string {
     case "array":
       return `[]any{${value.items.map((item) => expression(item, scope)).join(", ")}}`;
     case "object":
-      return `webui.Scope{${Object.entries(value.entries)
+      if (
+        value.order !== undefined &&
+        (!Array.isArray(value.order) ||
+          value.order.length !== Object.keys(value.entries).length ||
+          new Set(value.order).size !== value.order.length ||
+          value.order.some(
+            (key) =>
+              typeof key !== "string" || !Object.hasOwn(value.entries, key),
+          ))
+      )
+        throw new Error("El orden de inicialización del objeto es inválido.");
+      return `webui.Scope{${(value.order ?? Object.keys(value.entries))
+        .map((key) => [key, value.entries[key]!] as const)
         .map(([key, item]) => `${quote(key)}: ${expression(item, scope)}`)
         .join(", ")}}`;
     case "template":

@@ -34,5 +34,13 @@
     "utf16-length",
     "utf16-order"
   ],
-  "actions": ["next-phase", "next-phase", "next-phase"]
+  "actions": [
+    "observe-order",
+    "next-phase",
+    "observe-order",
+    "next-phase",
+    "observe-order",
+    "next-phase",
+    "observe-order"
+  ]
 }
