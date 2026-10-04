@@ -73,6 +73,8 @@ interface Scope {
   names: Set<string>;
   /** Includes declarations not initialized yet, so calls respect lexical shadowing. */
   bindings: Set<string>;
+  /** List parameters that shadow the component's enclosing lexical bindings. */
+  listShadows: Set<string>;
   /** Only explicit props can authorize an ordinary host callback call. */
   hostBindings: Set<string>;
   setters: Map<string, string>;
@@ -503,6 +505,7 @@ class Compiler {
           this.bindingNames(declaration.name),
         ),
       ),
+      listShadows: new Set(),
       hostBindings: new Set(),
       setters: new Map(),
       handlers: new Map(),
@@ -1140,8 +1143,17 @@ class Compiler {
         hostBindings: new Set(scope.hostBindings),
         setters: new Map(scope.setters),
         handlers: new Map(scope.handlers),
+        listShadows: new Set(scope.listShadows),
       };
       for (const parameter of index ? [item, index] : [item]) {
+        if (
+          scope.bindings.has(parameter) ||
+          scope.component.props.includes(parameter) ||
+          scope.component.propsObject === parameter ||
+          scope.source.imports.has(parameter) ||
+          scope.source.definitions.has(parameter)
+        )
+          childScope.listShadows.add(parameter);
         childScope.names.add(parameter);
         childScope.hostBindings.delete(parameter);
         childScope.setters.delete(parameter);
@@ -1584,8 +1596,16 @@ class Compiler {
     let node = this.unwrap(expression);
     if (ts.isIdentifier(node)) {
       const known = scope.handlers.get(node.text);
-      if (known) node = known;
-      else if (scope.setters.has(node.text)) {
+      if (known) {
+        if (scope.listShadows.size)
+          this.fail(
+            scope.source,
+            node,
+            `El handler nombrado ${node.text} se usa bajo map con bindings externos sombreados (${[...scope.listShadows].sort().join(", ")}); requiere capturas lexicales cualificadas.`,
+            scope,
+          );
+        node = known;
+      } else if (scope.setters.has(node.text)) {
         this.fail(
           scope.source,
           node,
