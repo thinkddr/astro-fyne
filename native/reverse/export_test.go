@@ -351,3 +351,39 @@ func TestKeyedRemountAndRemovalReleaseTheDetachedEditorFocus(t *testing.T) {
 		t.Fatal("removed editor remains focused")
 	}
 }
+
+func TestStableSourceIdentitySurvivesDOMIDChangesAndRejectsDuplicates(t *testing.T) {
+	app(t)
+	id, value, duplicate := "first-id", "", false
+	v := webui.NewView(func() []webui.Node {
+		nodes := []webui.Node{{ID: id, Identity: "component/field-site", Kind: "input", Value: value, OnChange: func(text string) { value = text }}}
+		if duplicate {
+			nodes = append(nodes, webui.Node{ID: "another-id", Identity: "component/field-site", Kind: "input"})
+		}
+		return nodes
+	})
+	c := software.NewCanvas()
+	c.SetPadded(false)
+	c.Resize(fyne.NewSize(320, 240))
+	c.SetContent(v)
+	if err := v.BindCanvas(c); err != nil {
+		t.Fatal(err)
+	}
+	first := v.Object(id)
+	focused := first.(fyne.Focusable)
+	c.Focus(focused)
+	focused.TypedRune('a')
+	id = "renamed-id"
+	v.Refresh()
+	if v.Object(id) != first || v.Object("first-id") != nil || c.Focused() != focused || value != "a" {
+		t.Fatal("DOM ID rename remounted an unchanged source identity")
+	}
+	duplicate = true
+	v.Refresh()
+	if v.Error() == nil || !strings.Contains(v.Error().Error(), "identity") {
+		t.Fatalf("duplicate source identity accepted: %v", v.Error())
+	}
+	if v.Object(id) != first || c.Focused() != focused {
+		t.Fatal("invalid tree partially mutated the previously valid frame")
+	}
+}

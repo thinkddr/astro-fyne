@@ -364,7 +364,7 @@ func (v *View) reconcile() {
 		return
 	}
 	ids := make(map[string]bool)
-	if err := validateNodes(nodes, ids); err != nil {
+	if err := validateNodes(nodes, ids, make(map[string]bool)); err != nil {
 		v.err = err
 		return // Keep the last valid native tree rather than partly mutating it.
 	}
@@ -392,14 +392,30 @@ func (v *View) reconcile() {
 	v.err = profileError
 	v.nodes = nodes
 	current := make(map[string]*element, len(ids))
+	previousByIdentity := make(map[string]*element, len(v.elements))
+	for _, previous := range v.elements {
+		if previous.node.Identity != "" {
+			previousByIdentity[previous.node.Identity] = previous
+		}
+	}
+	retained := make(map[*element]bool, len(ids))
 	var build func([]Node, Style) []*element
 	build = func(nodes []Node, inherited Style) []*element {
 		out := make([]*element, 0, len(nodes))
 		for _, n := range nodes {
-			e := v.elements[n.ID]
-			if e == nil || e.node.Kind != n.Kind || e.node.Identity != n.Identity {
+			var e *element
+			if n.Identity != "" {
+				e = previousByIdentity[n.Identity]
+			} else {
+				e = v.elements[n.ID]
+				if e != nil && e.node.Identity != "" {
+					e = nil
+				}
+			}
+			if e == nil || e.node.Kind != n.Kind || retained[e] {
 				e = newElement(v, n)
 			}
+			retained[e] = true
 			e.node = n
 			e.label = n.AccessibleLabel
 			style := n.Style
@@ -415,9 +431,8 @@ func (v *View) reconcile() {
 		return out
 	}
 	v.roots = build(nodes, Style{})
-	for id, previous := range v.elements {
-		replacement := current[id]
-		if replacement == previous && !replacement.node.Disabled && replacement.style.Display != "none" {
+	for _, previous := range v.elements {
+		if retained[previous] && !previous.node.Disabled && previous.style.Display != "none" {
 			continue
 		}
 		v.clearDetachedFocus(previous)
@@ -467,12 +482,18 @@ func buildSafely(build func() []Node) (nodes []Node, err error) {
 	return build(), nil
 }
 
-func validateNodes(nodes []Node, ids map[string]bool) error {
+func validateNodes(nodes []Node, ids, identities map[string]bool) error {
 	for _, n := range nodes {
 		if n.ID == "" || ids[n.ID] {
 			return fmt.Errorf("webui: node ID %q must be nonempty and unique", n.ID)
 		}
 		ids[n.ID] = true
+		if n.Identity != "" {
+			if identities[n.Identity] {
+				return fmt.Errorf("webui: source identity %q must be unique", n.Identity)
+			}
+			identities[n.Identity] = true
+		}
 		switch n.Kind {
 		case "container", "text", "button", "input", "textarea", "link", "image":
 		default:
@@ -492,7 +513,7 @@ func validateNodes(nodes []Node, ids map[string]bool) error {
 				return err
 			}
 		}
-		if err := validateNodes(n.Children, ids); err != nil {
+		if err := validateNodes(n.Children, ids, identities); err != nil {
 			return err
 		}
 	}
