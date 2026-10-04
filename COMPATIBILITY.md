@@ -72,6 +72,12 @@ Type-changing conditional roots that could reuse another unkeyed sibling also pr
 diagnostic; Preact can transfer that sibling's instance into the changed position. Keyed
 component rows must resolve to one physical element root through component aliases in every
 branch. Returning a fragment, list or empty root requires virtual group metadata.
+Each direct array keeps its own source group, including when multiple arrays share a DOM
+parent. Nested arrays require a physical containing element until hierarchical virtual groups
+are implemented. Unkeyed callbacks that change their virtual row type produce diagnostics.
+JSX `&&` evaluates its left operand once. Boolean conditions leave an empty false slot; a
+Boolean hook requires a Boolean initializer and Boolean results from every reachable setter.
+Unknown values keep JavaScript's falsy child value, such as the rendered number `0`.
 
 The programmatic compiler API supports explicit package adapters. The initial CLI
 configuration only exposes entries and measurement files. Adapters must preserve a component's
@@ -106,6 +112,11 @@ incomplete or extra node measurements,
 viewport stretching and changes to a measured visual tree. The state label is scenario
 metadata; it does not establish that the correct application state was reached. Scenario
 assertions and the final image comparison establish that correspondence.
+
+PNG source and scene assets validate chunk order and CRCs, the complete bounded zlib stream,
+scanline lengths and filters, including Adam7 passes. RGB8 `tRNS` samples require canonical
+0..255 values until decoder masking behavior is certified across both renderers. JPEG input
+receives structural and metadata inspection in the compiler and complete decoding in Go.
 
 Measured nodes also retain a typed signature of their evaluated source attributes, including
 classes and inline styles. A change to those values invalidates the frozen profile even when

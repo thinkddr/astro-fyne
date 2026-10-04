@@ -20,8 +20,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// Node is generated Go, not interpreted markup. ID is stable across reevaluation
-// so changing state preserves the object which owns the keyboard focus and cursor.
+// Node describes generated native objects. ID is the public lookup identifier;
+// Identity and ListGroup preserve the supported source lifetime and child order.
 type Node struct {
 	ID, Kind, Text, Value, Placeholder, Href, Variant, Size string
 	// Identity distinguishes keyed source instances which share a DOM ID.
