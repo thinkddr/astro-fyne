@@ -17,7 +17,16 @@ if err != nil {
     return err
 }
 window.SetContent(view)
+if err := view.BindCanvas(window.Canvas()); err != nil {
+    return err
+}
+if err := view.Error(); err != nil {
+    return err
+}
 ```
+
+See the runnable [native demo](../native/cmd/astro-fyne-demo/main.go) for window creation,
+theme setup and responsive rendering.
 
 The repository includes generated Go and reports for its conformance examples in
 `native/generated`. They are snapshots produced and tested by remote CI, so the native

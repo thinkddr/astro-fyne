@@ -62,6 +62,12 @@ func newDemoWindow(a fyne.App, example string) (*webui.View, fyne.Window, error)
 	var generatedTheme fyne.Theme
 	var err error
 	size, title := fyne.NewSize(520, 320), "Astro Fyne — Counter"
+	if example == "responsive" {
+	} else if example != "counter" {
+		return nil, nil, fmt.Errorf("unknown example %q", example)
+	}
+	window := a.NewWindow(title)
+	window.SetPadded(false)
 	switch example {
 	case "counter":
 		generatedTheme, err = generated.NewCounterTheme(theme.DefaultTheme())
@@ -83,15 +89,11 @@ func newDemoWindow(a fyne.App, example string) (*webui.View, fyne.Window, error)
 				view, content = widget.View, widget
 			}
 		}
-		size, title = fyne.NewSize(480, 320), "Astro Fyne — Responsive controls"
-	default:
-		return nil, nil, fmt.Errorf("unknown example %q", example)
 	}
 	if err != nil {
+		window.Close()
 		return nil, nil, fmt.Errorf("create generated %s example: %w", example, err)
 	}
-	window := a.NewWindow(title)
-	window.SetPadded(false)
 	window.SetContent(content)
 	window.Resize(size)
 	if err := view.BindCanvas(window.Canvas()); err != nil {

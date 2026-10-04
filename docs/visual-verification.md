@@ -60,7 +60,7 @@ Capture the generated native geometry and compare the actual images:
 
 ```sh
 cd native
-ASTRO_FYNE_ARTIFACTS=/tmp/astro-fyne-geometry go test ./generated -run TestCaptureMeasuredGeometry
+ASTRO_FYNE_ARTIFACTS=/tmp/astro-fyne-geometry go test -count=1 ./generated -run '^TestCaptureMeasuredGeometry$'
 go run ./visual/cmd/astro-fyne-compare \
   --reference /tmp/astro-fyne-geometry/web.png \
   --native /tmp/astro-fyne-geometry/native.png \

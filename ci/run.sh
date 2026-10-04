@@ -111,7 +111,7 @@ go vet ./...
 # Keep independent comparisons as failure evidence even when another native test
 # fails. Every failure remains fatal; a missing capture also fails its own gate.
 task_native_test_status=0
-GOMAXPROCS=2 go test -p=2 -race ./... || task_native_test_status=$?
+GOMAXPROCS=2 go test -count=1 -p=2 -race ./... || task_native_test_status=$?
 # Exported scenes come from the already resized native widget. Generate their web
 # pages only after the native tests have retained the actual frames and scenes.
 if [[ "$task_native_test_status" -eq 0 ]]; then
