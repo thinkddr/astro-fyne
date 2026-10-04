@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "generator": "astro-fyne",
+  "name": "ReverseGeometry",
+  "sourceHash": "9c2e19d1411236353055ddf9d6c5cd2ebb9ef42c2fccc02b066308ae0241f6ee",
+  "sources": [
+    {
+      "path": "example/public/assets/d7f19c4c4ae4062e6b171fc50ac8cf7a7afba78c2408ff3262cb2fc29e057171.png",
+      "hash": "d7f19c4c4ae4062e6b171fc50ac8cf7a7afba78c2408ff3262cb2fc29e057171"
+    },
+    {
+      "path": "example/src/pages/reverse-generated/ReverseGeometry.css",
+      "hash": "de855025b5b5ef3e4a2c4447f8c824314c5bfd19c9755510b1d07e5b3b19b9b2"
+    },
+    {
+      "path": "example/src/pages/reverse-generated/ReverseGeometry.tsx",
+      "hash": "ebb0dc38e98f426e5ad1a2835f4d981d96487b47ece40b7a08e9a2c93fee0ef9"
+    }
+  ],
+  "resources": [
+    {
+      "name": "bitmap_6851044222b298db64531b30",
+      "path": "example/public/assets/d7f19c4c4ae4062e6b171fc50ac8cf7a7afba78c2408ff3262cb2fc29e057171.png",
+      "hash": "d7f19c4c4ae4062e6b171fc50ac8cf7a7afba78c2408ff3262cb2fc29e057171",
+      "srcs": [
+        "/assets/d7f19c4c4ae4062e6b171fc50ac8cf7a7afba78c2408ff3262cb2fc29e057171.png"
+      ],
+      "mediaType": "image/png",
+      "width": 16,
+      "height": 16
+    }
+  ],
+  "actions": [],
+  "components": [
+    "ReverseGeometry_b5167e17"
+  ],
+  "compatibility": "declarative-stage-1",
+  "visual": {
+    "measured": true,
+    "pixelPerfectVerified": false,
+    "state": "default",
+    "viewport": {
+      "width": 320,
+      "height": 240,
+      "scale": 1
+    }
+  }
+}

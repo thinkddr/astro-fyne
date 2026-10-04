@@ -66,12 +66,12 @@ func buildGeometry_geometry_871e0d70(props webui.Scope, actions webui.Actions, r
 
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("fyne-root"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("fyne-root"), Identity: prefix + "/fyne-root", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("panel"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+			nodes = append(nodes, []webui.Node{{ID: webui.String("panel"), Identity: prefix + "/panel", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 				var nodes []webui.Node
-				nodes = append(nodes, []webui.Node{{ID: webui.String("first"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node { var nodes []webui.Node; ; return nodes }()}}...)
-				nodes = append(nodes, []webui.Node{{ID: webui.String("second"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node { var nodes []webui.Node; ; return nodes }()}}...)
+				nodes = append(nodes, []webui.Node{{ID: webui.String("first"), Identity: prefix + "/first", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node { var nodes []webui.Node; ; return nodes }()}}...)
+				nodes = append(nodes, []webui.Node{{ID: webui.String("second"), Identity: prefix + "/second", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node { var nodes []webui.Node; ; return nodes }()}}...)
 				return nodes
 			}()}}...)
 			return nodes
