@@ -206,17 +206,26 @@ Export the actual Fyne object tree after layout on its UI goroutine. The exporte
 the declared native scene contract and rejects widgets or rendering features outside it:
 
 ```go
-import "github.com/thinkddr/astro-fyne/native/reverse"
+import (
+    "fyne.io/fyne/v2/theme"
+    "github.com/thinkddr/astro-fyne/native/reverse"
+)
 
 document, err := reverse.Export(root, reverse.Options{
     Viewport: reverse.Viewport{Width: 320, Height: 240, Scale: 1},
     Canvas: window.Canvas(),
+    CanvasBackground: theme.Color(theme.ColorNameBackground), // Standard opaque Fyne window.
 })
 if err != nil {
     return err
 }
 // Encode document using encoding/json and save it as scene.json.
 ```
+
+Supply the actual background of the canvas; a transparent canvas uses `color.Transparent`.
+`CanvasBackground` may be omitted only when the exported tree itself guarantees opaque,
+unrounded and borderless coverage of the full viewport. Fyne's public canvas interface does
+not expose transparency, so the exporter requires this host assertion instead of guessing.
 
 Convert the scene into web source files, placing bitmap assets in the Astro public directory:
 

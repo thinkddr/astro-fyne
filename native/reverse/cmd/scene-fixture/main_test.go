@@ -26,7 +26,10 @@ func TestControlFixtureExportsBeforeDrivingActualNativeCallbacks(t *testing.T) {
 	if err := json.Unmarshal(sceneBytes, &scene); err != nil {
 		t.Fatal(err)
 	}
-	nodes := scene.Roots[0].Children
+	if len(scene.Roots) != 2 || scene.Roots[0].ID != "native-canvas-background" || scene.Roots[0].Style.Width != 320 || scene.Roots[0].Style.Height != 240 {
+		t.Fatalf("native canvas background omitted: %+v", scene.Roots)
+	}
+	nodes := scene.Roots[len(scene.Roots)-1].Children
 	if len(nodes) != 2 || nodes[0].ID != "edit" || nodes[0].Value != "" || nodes[1].ID != "save" || nodes[0].Events.Input != "input" || nodes[0].Events.Change != "commit" || nodes[1].Events.Tap != "tap" {
 		t.Fatalf("initial unfocused scene/explicit bindings incorrect: %+v", nodes)
 	}

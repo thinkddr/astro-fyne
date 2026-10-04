@@ -25,8 +25,11 @@ import (
 	webui "github.com/thinkddr/astro-fyne/native"
 )
 
-func options() Options { return Options{Viewport: Viewport{320, 240, 1}} }
-func app(t *testing.T) { t.Helper(); a := test.NewApp(); t.Cleanup(a.Quit) }
+func options() Options {
+	return Options{Viewport: Viewport{320, 240, 1}, CanvasBackground: theme.Color(theme.ColorNameBackground)}
+}
+func content(doc Document) Node { return doc.Roots[len(doc.Roots)-1] }
+func app(t *testing.T)          { t.Helper(); a := test.NewApp(); t.Cleanup(a.Quit) }
 func place(object fyne.CanvasObject, x, y, width, height float32) {
 	object.Move(fyne.NewPos(x, y))
 	object.Resize(fyne.NewSize(width, height))
@@ -63,7 +66,7 @@ func TestExportFreezesActualParentGeometryAndBitmaps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n := doc.Roots[0].Children[0]
+	n := content(doc).Children[0]
 	if n.Style.X != 12.5 || n.Style.Y != 9.25 || n.Children[0].Style.X != 1.25 || n.Children[0].Style.Width != 100.5 {
 		t.Fatalf("local fractional geometry lost: %+v", n)
 	}
@@ -107,6 +110,96 @@ func fmtHash(content []byte) string {
 	return string(out)
 }
 
+func TestOpaqueTreeCoverageDoesNotRequireAnInferredCanvasBackground(t *testing.T) {
+	app(t)
+	fill := canvas.NewRectangle(color.White)
+	place(fill, 0, 0, 320, 240)
+	opts := options()
+	opts.CanvasBackground = nil
+	doc, err := Export(fill, opts)
+	if err != nil || len(doc.Roots) != 1 {
+		t.Fatalf("opaque viewport rectangle should suffice without a canvas assertion: %+v %v", doc.Roots, err)
+	}
+	// Child coordinates are native parent-relative border boxes. The negative
+	// child offset compensates the parent's offset and covers the entire viewport.
+	place(fill, -12, -9, 320, 240)
+	root := container.NewWithoutLayout(fill)
+	place(root, 12, 9, 320, 240)
+	doc, err = Export(root, opts)
+	if err != nil || len(doc.Roots) != 1 {
+		t.Fatalf("nested opaque coverage was not recognized: %+v %v", doc.Roots, err)
+	}
+}
+
+func TestCanvasPaintMustBeExplicitWhenViewportCoverageIsNotGuaranteed(t *testing.T) {
+	app(t)
+	for name, configure := range map[string]func(*canvas.Rectangle){
+		"transparent": func(r *canvas.Rectangle) { r.FillColor = color.Transparent },
+		"translucent": func(r *canvas.Rectangle) { r.FillColor = color.NRGBA{R: 255, A: 127} },
+		"rounded":     func(r *canvas.Rectangle) { r.CornerRadius = 4 },
+		"hidden":      func(r *canvas.Rectangle) { r.Hide() },
+		"too small":   func(r *canvas.Rectangle) { r.Resize(fyne.NewSize(319, 240)) },
+		"offset gap":  func(r *canvas.Rectangle) { r.Move(fyne.NewPos(1, 0)) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := canvas.NewRectangle(color.White)
+			place(r, 0, 0, 320, 240)
+			configure(r)
+			opts := options()
+			opts.CanvasBackground = nil
+			if _, err := Export(r, opts); err == nil || !strings.Contains(err.Error(), "CanvasBackground") {
+				t.Fatalf("canvas paint was silently invented: %v", err)
+			}
+			opts.CanvasBackground = color.Transparent
+			doc, err := Export(r, opts)
+			if err != nil || len(doc.Roots) != 2 || doc.Roots[0].Style.Background != "rgba(0, 0, 0, 0)" {
+				t.Fatalf("explicit transparent canvas assertion not preserved: %+v %v", doc.Roots, err)
+			}
+		})
+	}
+	button := widget.NewButton("Save", func() { t.Fatal("export executed callback") })
+	place(button, 0, 0, 80, 32)
+	opts := options()
+	opts.CanvasBackground = nil
+	opts.NodeFontFamilies = map[string]string{"native-root": "HostFont"}
+	if _, err := Export(button, opts); err == nil || !strings.Contains(err.Error(), "tap") {
+		t.Fatalf("background guard masked the missing native action binding: %v", err)
+	}
+}
+
+func TestCanvasBackgroundNodeFreezesActualNativePaintWithoutIDCollisions(t *testing.T) {
+	app(t)
+	actual := color.NRGBA{R: 17, G: 34, B: 51, A: 255}
+	fyne.CurrentApp().Settings().SetTheme(&webui.CapturedTheme{Base: theme.Current(), Colors: map[fyne.ThemeColorName]color.Color{theme.ColorNameBackground: actual}})
+	fill := canvas.NewRectangle(color.White)
+	place(fill, 10, 10, 40, 40)
+	root := container.NewWithoutLayout(fill)
+	place(root, 0, 0, 320, 240)
+	c := software.NewCanvas()
+	c.SetPadded(false)
+	c.Resize(fyne.NewSize(320, 240))
+	c.SetContent(root)
+	frame := c.Capture()
+	opts := options()
+	opts.Canvas = c
+	opts.IDs = map[fyne.CanvasObject]string{root: "native-canvas-background"}
+	doc, err := Export(root, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Roots) != 2 || doc.Roots[0].ID != "native-canvas-background-1" || content(doc).ID != "native-canvas-background" {
+		t.Fatalf("synthetic canvas paint collided with source IDs or paint order: %+v", doc.Roots)
+	}
+	background := doc.Roots[0]
+	paint, err := webui.ParseColor(background.Style.Background)
+	if err != nil || paint != color.NRGBAModel.Convert(frame.At(310, 230)).(color.NRGBA) || paint != actual {
+		t.Fatalf("exported background differs from real native canvas paint: %v %+v", err, background)
+	}
+	if background.Style.X != 0 || background.Style.Y != 0 || background.Style.Width != 320 || background.Style.Height != 240 || background.Kind != "container" || len(background.Children) != 0 {
+		t.Fatalf("incorrect native canvas background geometry: %+v", background)
+	}
+}
+
 func TestExportRecognizesTextAndControlsWithExplicitActions(t *testing.T) {
 	app(t)
 	th := theme.Current()
@@ -134,7 +227,7 @@ func TestExportRecognizesTextAndControlsWithExplicitActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes := doc.Roots[0].Children
+	nodes := content(doc).Children
 	if nodes[0].Kind != "text" || nodes[0].Style.FontFamily != "HostRegular" || nodes[1].Kind != "button" || nodes[2].Kind != "input" || nodes[3].Text != "World" {
 		t.Fatalf("wrong semantic tree: %+v", nodes)
 	}
@@ -153,7 +246,7 @@ func TestExportRecognizesTextAndControlsWithExplicitActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Roots[0].Children[2].Events != nil {
+	if content(doc).Children[2].Events != nil {
 		t.Fatal("local editing requires no fake action")
 	}
 }
@@ -184,7 +277,7 @@ func TestViewSnapshotNeverReevaluatesAndUsesResolvedCurrentFrame(t *testing.T) {
 	if builds != before {
 		t.Fatalf("export executed builder: %d -> %d", before, builds)
 	}
-	p := doc.Roots[0].Children[0]
+	p := content(doc).Children[0]
 	n := p.Children[0]
 	if p.ID != "panel" || p.Style.X != 3.5 || n.Style.X != 9.25 || n.Style.Width != 140 || n.Style.FontSize != 14 || n.Style.BorderWidth != 1 || n.Value == "start" {
 		t.Fatalf("snapshot omitted actual/resolved frame: %+v", n)

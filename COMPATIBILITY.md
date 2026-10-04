@@ -149,6 +149,14 @@ profiles and missing action bindings produce errors. The scene contains viewport
 parent-relative border-box coordinates, resolved styles, native control values, theme tokens,
 explicit action IDs and embedded PNG/JPEG bytes with SHA-256 digests.
 
+The export also preserves the canvas paint behind the object tree. If no visible, opaque,
+unrounded and borderless solid rectangle in the tree covers the entire viewport, the host
+must supply `Options.CanvasBackground` with its actual background color, or
+`color.Transparent` for a transparent canvas. This requirement applies even without
+`Options.Canvas`: Fyne's public canvas interface does not reveal transparency. The asserted
+paint becomes a viewport-sized background node behind the exported root; it is never inferred
+from the current theme.
+
 The web emitter validates the complete scene before generating literal JSX and scoped CSS.
 It escapes scene strings, rejects unsupported style values and verifies bitmap bytes, MIME
 types and dimensions. Text controls use browser input/textarea elements and local state;
