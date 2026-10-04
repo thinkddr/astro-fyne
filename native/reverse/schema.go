@@ -6,6 +6,8 @@
 package reverse
 
 import (
+	"image/color"
+
 	"fyne.io/fyne/v2"
 	webui "github.com/thinkddr/astro-fyne/native"
 )
@@ -76,11 +78,17 @@ type Options struct {
 	Viewport Viewport
 	// Canvas, when supplied, verifies the declared viewport and scale against
 	// the actual native canvas. A focused frame has no portable focus contract yet.
-	Canvas     fyne.Canvas
-	IDs        map[fyne.CanvasObject]string
-	Bindings   map[fyne.CanvasObject]Events
-	IDBindings map[string]Events
-	Tokens     map[string]string
+	Canvas fyne.Canvas
+	// CanvasBackground asserts the actual painted canvas background, including
+	// color.Transparent for transparent canvases. Fyne's public Canvas interface
+	// cannot reveal transparency. It is required unless the exported tree already
+	// guarantees opaque coverage of the entire viewport, and becomes a background
+	// node behind that tree when needed. Export never infers it from the theme.
+	CanvasBackground color.Color
+	IDs              map[fyne.CanvasObject]string
+	Bindings         map[fyne.CanvasObject]Events
+	IDBindings       map[string]Events
+	Tokens           map[string]string
 	// FontFamilies identifies a licensed browser font equivalent to a native font
 	// resource. It is an assertion supplied by the host, not an inferred match.
 	FontFamilies map[fyne.Resource]string

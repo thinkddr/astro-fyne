@@ -22,6 +22,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/software"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	webui "github.com/thinkddr/astro-fyne/native"
 	"github.com/thinkddr/astro-fyne/native/reverse"
 )
@@ -81,7 +82,7 @@ func runControls(out string) error {
 	if err := v.BindCanvas(c); err != nil {
 		return err
 	}
-	scene, err := reverse.Export(v, reverse.Options{Viewport: reverse.Viewport{Width: 320, Height: 240, Scale: 1}, Canvas: c, IDBindings: map[string]reverse.Events{"edit": {Input: "input", Change: "commit"}, "save": {Tap: "tap"}}, NodeFontFamilies: map[string]string{"edit": "sans-serif", "save": "sans-serif"}})
+	scene, err := reverse.Export(v, reverse.Options{Viewport: reverse.Viewport{Width: 320, Height: 240, Scale: 1}, Canvas: c, CanvasBackground: theme.Color(theme.ColorNameBackground), IDBindings: map[string]reverse.Events{"edit": {Input: "input", Change: "commit"}, "save": {Tap: "tap"}}, NodeFontFamilies: map[string]string{"edit": "sans-serif", "save": "sans-serif"}})
 	if err != nil {
 		return err
 	}

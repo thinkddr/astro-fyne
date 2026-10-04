@@ -93,11 +93,51 @@ func Export(root fyne.CanvasObject, opts Options) (Document, error) {
 			return Document{}, fmt.Errorf("reverse: font-family assertion targets an absent or non-text ID %q", id)
 		}
 	}
+	if opts.CanvasBackground != nil && reflect.ValueOf(opts.CanvasBackground).Kind() == reflect.Pointer && reflect.ValueOf(opts.CanvasBackground).IsNil() {
+		return Document{}, fmt.Errorf("reverse: CanvasBackground is a nil color")
+	}
+	if !coversViewport(e.doc.Roots, opts.Viewport, 0, 0) {
+		if opts.CanvasBackground == nil {
+			return Document{}, fmt.Errorf("reverse: tree does not guarantee opaque viewport coverage; CanvasBackground must explicitly assert the actual canvas background or color.Transparent")
+		}
+		id := "native-canvas-background"
+		for suffix := 1; e.ids[id]; suffix++ {
+			id = fmt.Sprintf("native-canvas-background-%d", suffix)
+		}
+		style := webui.Style{Width: opts.Viewport.Width, Height: opts.Viewport.Height, Background: cssColor(opts.CanvasBackground), Color: "transparent", BorderColor: "transparent", FontWeight: 400, FontStyle: "normal", TextAlign: "left", WhiteSpace: "normal", Opacity: 1, Measured: true}
+		if err := validateStyle(style); err != nil {
+			return Document{}, fmt.Errorf("reverse: invalid CanvasBackground: %w", err)
+		}
+		background := Node{ID: id, Kind: "container", Style: style, Children: []Node{}}
+		e.doc.Roots = append([]Node{background}, e.doc.Roots...)
+	}
 	for action := range e.actions {
 		e.doc.RequiredActions = append(e.doc.RequiredActions, action)
 	}
 	sort.Strings(e.doc.RequiredActions)
 	return e.doc, nil
+}
+
+// A solid, visible, square background rectangle covering the viewport is enough
+// to prove the canvas cannot show through. Coordinates remain native parent-local
+// border-box coordinates; padding and CSS containing-block rules do not apply.
+// Images, rounded edges and borders are deliberately not used as coverage proofs.
+func coversViewport(nodes []Node, viewport Viewport, parentX, parentY float64) bool {
+	for _, n := range nodes {
+		s := n.Style
+		if s.Display == "none" {
+			continue
+		}
+		x, y := parentX+float64(s.X), parentY+float64(s.Y)
+		fill, err := webui.ParseColor(s.Background)
+		if n.Kind != "image" && err == nil && fill.A == 255 && s.Opacity == 1 && s.Radius == 0 && s.BorderWidth == 0 && x <= 0 && y <= 0 && x+float64(s.Width) >= float64(viewport.Width) && y+float64(s.Height) >= float64(viewport.Height) {
+			return true
+		}
+		if coversViewport(n.Children, viewport, x, y) {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *exporter) identify(object fyne.CanvasObject, fallback string) (string, error) {
