@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "package": "generated",
+  "entries": [
+    {
+      "name": "GeometryScale2",
+      "source": "example/src/pages/geometry.astro",
+      "output": "native/generated/geometry-scale2.gen.go",
+      "profile": { "state": "default", "width": 320, "height": 240, "scale": 2 }
+    }
+  ]
+}

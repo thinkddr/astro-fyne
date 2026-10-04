@@ -992,26 +992,52 @@ class Compiler {
       };
     }
     if (ts.isObjectLiteralExpression(node)) {
-      const entries: Record<string, Expr> = {};
+      const entries: Record<string, Expr> = Object.create(null);
+      const order: string[] = [];
       for (const property of node.properties) {
+        let key: string;
+        let initializer: ts.Expression;
         if (ts.isShorthandPropertyAssignment(property)) {
-          entries[property.name.text] = this.expr(property.name, scope);
+          key = property.name.text;
+          initializer = property.name;
         } else if (
           ts.isPropertyAssignment(property) &&
           (ts.isIdentifier(property.name) ||
             ts.isStringLiteral(property.name) ||
             ts.isNumericLiteral(property.name))
         ) {
-          entries[property.name.text] = this.expr(property.initializer, scope);
-        } else
+          key = ts.isNumericLiteral(property.name)
+            ? String(Number(property.name.text))
+            : property.name.text;
+          initializer = property.initializer;
+        } else {
           this.fail(
             scope.source,
             property,
             "Propiedad dinámica, método o spread no soportado.",
             scope,
           );
+        }
+        if (key === "__proto__") {
+          this.fail(
+            scope.source,
+            property.name,
+            "La propiedad __proto__ en literales de objeto está fuera del contrato de stage 01; usa una prop o un adaptador nativo explícito.",
+            scope,
+          );
+        }
+        if (Object.hasOwn(entries, key)) {
+          this.fail(
+            scope.source,
+            property.name,
+            `La propiedad duplicada ${JSON.stringify(key)} requiere conservar la evaluación de todos sus valores; los literales con claves repetidas están fuera del contrato de stage 01.`,
+            scope,
+          );
+        }
+        order.push(key);
+        entries[key] = this.expr(initializer, scope);
       }
-      return { kind: "object", entries };
+      return { kind: "object", entries, order };
     }
     if (ts.isTemplateExpression(node)) {
       const parts: Expr[] = [literal(node.head.text)];
