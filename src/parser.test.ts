@@ -90,6 +90,39 @@ test("keyed component groups require one physical root through component indirec
   await expect(compile(entry)).resolves.toBeDefined();
 });
 
+test("unkeyed maps retain their own child-type boundary", async () => {
+  const entry = await source(
+    "Heterogeneous.tsx",
+    `function CounterA({ label }) { return <section>{label}</section>; }
+    function CounterB({ label }) { return <article>{label}</article>; }
+    export function Page() { return <main>{['a','b'].map(item => item === 'a' ? <CounterA label={item}/> : <CounterB label={item}/>)}</main>; }`,
+  );
+  await expect(compile(entry)).rejects.toThrow(/map sin key.*tipo/);
+  const stable = await source(
+    "Stable.tsx",
+    `function Switch({ label }) { return label === 'a' ? <section>{label}</section> : <article>{label}</article>; }
+    export function Page() { return <main>{['a','b'].map(item => <Switch label={item}/>)}</main>; }`,
+  );
+  await expect(compile(stable)).resolves.toBeDefined();
+});
+
+test("intrinsically Boolean JSX conditions leave an empty virtual slot", async () => {
+  const entry = await source(
+    "Boolean.tsx",
+    `export function Page({ count }) { return <main><p>Stable sibling</p>{count > 0 && <p>Conditional sibling</p>}</main>; }`,
+  );
+  const program = await compile(entry);
+  const root = program.components.find((value) => value.name === program.entry)!
+    .body[0]!;
+  expect(root.kind).toBe("element");
+  if (root.kind !== "element") throw new Error("missing root");
+  const conditional = root.children[1]!;
+  expect(conditional.kind).toBe("conditional");
+  if (conditional.kind !== "conditional") throw new Error("missing condition");
+  expect(conditional.no).toEqual([]);
+  expect(conditional.shortCircuit).toBe(true);
+});
+
 test("Astro imports a Preact component, preserving props, state, events and list branches", async () => {
   const entry = await source(
     "Page.astro",
