@@ -137,12 +137,15 @@ Astro CSS → browser measurement → generated Go → native capture → zero-d
 
 CI runs browser captures, native tests and builds in a pinned environment and keeps the evidence.
 
-Start the example web preview in a separate terminal:
+Start the example web preview in a separate terminal. From the project root,
+generate the source manifests consumed by the behavior example pages before building:
 
 ```sh
-cd example
-bunx astro build
-bunx astro preview --host 127.0.0.1 --port 4321
+bun src/cli.ts analyze --config conformance.json > artifacts-conformance-analysis.json
+bun src/cli.ts analyze --config keyed-conformance.json > artifacts-keyed-analysis.json
+bun src/cli.ts analyze --config primitive-conformance.json > artifacts-primitive-analysis.json
+bunx astro build --root example
+bunx astro preview --root example --host 127.0.0.1 --port 4321
 ```
 
 From the project directory, while that preview is running:
