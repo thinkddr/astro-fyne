@@ -29,12 +29,13 @@ func NewConformance(props webui.Scope, actions webui.Actions, backends ...webui.
 	}
 	state := webui.Scope{}
 	var view *webui.View
+	var generated *ConformanceWidget
 	refresh := func() {
 		if view != nil {
 			view.Refresh()
 		}
 	}
-	view = webui.NewView(func() []webui.Node {
+	view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &ConformanceWidget{View: v}; return generated }, func() []webui.Node {
 		active := map[string]bool{}
 		nodes := buildConformance_Conformance_17a88bbb(props, actions, refresh, state, active, "")
 		for key := range state {
@@ -49,7 +50,7 @@ func NewConformance(props webui.Scope, actions webui.Actions, backends ...webui.
 		return nil, err
 	}
 
-	return &ConformanceWidget{View: view}, nil
+	return generated, nil
 }
 
 func buildConformance_Conformance_17a88bbb(props webui.Scope, actions webui.Actions, refresh func(), state webui.Scope, active map[string]bool, prefix string) []webui.Node {
@@ -100,11 +101,11 @@ func buildConformance_Conformance_17a88bbb(props webui.Scope, actions webui.Acti
 	}()
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("conformance"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("conformance"), Identity: prefix + "/conformance", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
 			nodes = append(nodes, buildConformance_StatefulUnit_17a88bbb(webui.Scope{"prefix": "left", "initial": float64(2), "observe": webui.Get(scope, "observe")}, actions, refresh, state, active, prefix+"/Conformance_17a88bbb_c1")...)
 			nodes = append(nodes, buildConformance_StatefulUnit_17a88bbb(webui.Scope{"prefix": "right", "initial": float64(10), "observe": webui.Get(scope, "observe")}, actions, refresh, state, active, prefix+"/Conformance_17a88bbb_c6")...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("toggle-ephemeral"), Kind: "button", Style: webui.Style{}, OnTap: func() {
+			nodes = append(nodes, []webui.Node{{ID: webui.String("toggle-ephemeral"), Identity: prefix + "/toggle-ephemeral", Kind: "button", Style: webui.Style{}, OnTap: func() {
 				eventScope := cloneScope(scope)
 				_ = eventScope
 				pending := cloneScope(scope)
@@ -114,33 +115,24 @@ func buildConformance_Conformance_17a88bbb(props webui.Scope, actions webui.Acti
 				refresh()
 			}, Text: webui.ChildText("Toggle ephemeral component")}}...)
 			nodes = append(nodes, func() []webui.Node {
-				if webui.Truth(webui.Get(scope, "visible")) {
+				left := webui.Get(scope, "visible")
+				if webui.Truth(left) {
 					return func() []webui.Node {
 						var nodes []webui.Node
 						nodes = append(nodes, buildConformance_StatefulUnit_17a88bbb(webui.Scope{"prefix": "ephemeral", "initial": float64(20), "observe": webui.Get(scope, "observe")}, actions, refresh, state, active, prefix+"/Conformance_17a88bbb_c7")...)
 						return nodes
 					}()
 				}
-				return func() []webui.Node {
-					var nodes []webui.Node
-					nodes = append(nodes, func() []webui.Node {
-						text := webui.ChildText(webui.Get(scope, "visible"))
-						if text == "" {
-							return nil
-						}
-						return []webui.Node{{ID: prefix + "/text_0", Kind: "text", Text: text}}
-					}()...)
-					return nodes
-				}()
+				return nil
 			}()...)
 			nodes = append(nodes, buildConformance_DestructuredProperties_17a88bbb(webui.Scope{"explicitNull": nil}, actions, refresh, state, active, prefix+"/Conformance_17a88bbb_c8")...)
 			nodes = append(nodes, buildConformance_ObjectProperties_17a88bbb(webui.Scope{"explicitNull": nil}, actions, refresh, state, active, prefix+"/Conformance_17a88bbb_c9")...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("short-and"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Get(scope, "skippedAnd")))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("short-or"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Get(scope, "skippedOr")))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("short-nullish"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Get(scope, "skippedNullish")))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("selected-null"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "selectedNullish"))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("selected-missing"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "selectedMissing"))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("entity-conformance"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText("A & B 🙂 ©") + webui.ChildText(" &amp;")}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("short-and"), Identity: prefix + "/short-and", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Get(scope, "skippedAnd")))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("short-or"), Identity: prefix + "/short-or", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Get(scope, "skippedOr")))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("short-nullish"), Identity: prefix + "/short-nullish", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Get(scope, "skippedNullish")))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("selected-null"), Identity: prefix + "/selected-null", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "selectedNullish"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("selected-missing"), Identity: prefix + "/selected-missing", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "selectedMissing"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("entity-conformance"), Identity: prefix + "/entity-conformance", Kind: "text", Style: webui.Style{}, Text: webui.ChildText("A & B 🙂 ©") + webui.ChildText(" &amp;")}}...)
 			return nodes
 		}()}}...)
 		return nodes
@@ -155,12 +147,12 @@ func buildConformance_DestructuredProperties_17a88bbb(props webui.Scope, actions
 
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("destructured-properties"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("destructured-properties"), Identity: prefix + "/destructured-properties", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("destructured-missing-undefined"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(scope, "missing"), webui.Undefined)))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("destructured-missing-null"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(scope, "missing"), nil)))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("destructured-null-undefined"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(scope, "explicitNull"), webui.Undefined)))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("destructured-null-null"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(scope, "explicitNull"), nil)))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("destructured-missing-undefined"), Identity: prefix + "/destructured-missing-undefined", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(scope, "missing"), webui.Undefined)))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("destructured-missing-null"), Identity: prefix + "/destructured-missing-null", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(scope, "missing"), nil)))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("destructured-null-undefined"), Identity: prefix + "/destructured-null-undefined", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(scope, "explicitNull"), webui.Undefined)))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("destructured-null-null"), Identity: prefix + "/destructured-null-null", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(scope, "explicitNull"), nil)))}}...)
 			return nodes
 		}()}}...)
 		return nodes
@@ -176,12 +168,12 @@ func buildConformance_ObjectProperties_17a88bbb(props webui.Scope, actions webui
 
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String("object-properties"), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String("object-properties"), Identity: prefix + "/object-properties", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String("object-missing-undefined"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(webui.Get(scope, "props"), "missing"), webui.Undefined)))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("object-missing-null"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(webui.Get(scope, "props"), "missing"), nil)))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("object-null-undefined"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(webui.Get(scope, "props"), "explicitNull"), webui.Undefined)))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String("object-null-null"), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(webui.Get(scope, "props"), "explicitNull"), nil)))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("object-missing-undefined"), Identity: prefix + "/object-missing-undefined", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(webui.Get(scope, "props"), "missing"), webui.Undefined)))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("object-missing-null"), Identity: prefix + "/object-missing-null", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(webui.Get(scope, "props"), "missing"), nil)))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("object-null-undefined"), Identity: prefix + "/object-null-undefined", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(webui.Get(scope, "props"), "explicitNull"), webui.Undefined)))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String("object-null-null"), Identity: prefix + "/object-null-null", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.String(webui.Binary("===", webui.Get(webui.Get(scope, "props"), "explicitNull"), nil)))}}...)
 			return nodes
 		}()}}...)
 		return nodes
@@ -202,10 +194,10 @@ func buildConformance_StatefulUnit_17a88bbb(props webui.Scope, actions webui.Act
 	scope["count"] = state[prefix+"/StatefulUnit_17a88bbb/count"]
 	return func() []webui.Node {
 		var nodes []webui.Node
-		nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-unit")), Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
+		nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-unit")), Identity: prefix + "/StatefulUnit_17a88bbb_n5", Kind: "container", Style: webui.Style{}, Children: func() []webui.Node {
 			var nodes []webui.Node
-			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-value")), Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "count"))}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-increment")), Kind: "button", Style: webui.Style{}, OnTap: func() {
+			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-value")), Identity: prefix + "/StatefulUnit_17a88bbb_n2", Kind: "text", Style: webui.Style{}, Text: webui.ChildText(webui.Get(scope, "count"))}}...)
+			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-increment")), Identity: prefix + "/StatefulUnit_17a88bbb_n3", Kind: "button", Style: webui.Style{}, OnTap: func() {
 				eventScope := cloneScope(scope)
 				_ = eventScope
 				pending := cloneScope(scope)
@@ -214,7 +206,7 @@ func buildConformance_StatefulUnit_17a88bbb(props webui.Scope, actions webui.Act
 				state[componentPrefix+"/StatefulUnit_17a88bbb/count"] = pending["count"]
 				refresh()
 			}, Text: webui.ChildText("Increment")}}...)
-			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-batch")), Kind: "button", Style: webui.Style{}, OnTap: func() {
+			nodes = append(nodes, []webui.Node{{ID: webui.String(webui.String("") + webui.String(webui.Get(scope, "prefix")) + webui.String("-batch")), Identity: prefix + "/StatefulUnit_17a88bbb_n4", Kind: "button", Style: webui.Style{}, OnTap: func() {
 				eventScope := cloneScope(scope)
 				_ = eventScope
 				pending := cloneScope(scope)

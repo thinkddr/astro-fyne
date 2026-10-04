@@ -35,6 +35,79 @@ test("HTML input and change events keep distinct immediate and commit callbacks"
   expect(go).toContain("view.SetAutoRefreshEvents(false)");
 });
 
+test("native identities use source sites even when public DOM IDs change", async () => {
+  const source = await program(
+    `export function Page({domID,value}) { return <main>{value}<input id={domID} /></main>; }`,
+  );
+  const root = source.components.find((item) => item.name === source.entry)!
+    .body[0]!;
+  if (root.kind !== "element") throw new Error("missing main");
+  const input = root.children.find((item) => item.kind === "element")!;
+  if (input.kind !== "element") throw new Error("missing input");
+  const go = emitGo(source, options);
+  expect(go).toContain(`Identity: prefix + ${JSON.stringify("/" + input.id)}`);
+  expect(go).toContain('ID: webui.String(webui.Get(scope, "domID"))');
+  expect(go).toContain('Identity: prefix + "/text_0"');
+});
+
+test("compatible component branches share the same hook-state prefix", async () => {
+  const source = await program(`import {useState} from "preact/hooks";
+function Counter({seed}) { const [count,setCount] = useState(seed); return <p>{count}</p>; }
+export function Page({active}) { return <main>{active ? <Counter seed={1}/> : <Counter seed={2}/>}</main>; }`);
+  const root = source.components.find((item) => item.name === source.entry)!
+    .body[0]!;
+  if (root.kind !== "element") throw new Error("missing main");
+  const branch = root.children[0]!;
+  if (branch.kind !== "conditional") throw new Error("missing branch");
+  const component = branch.yes[0]!;
+  if (component.kind !== "component") throw new Error("missing Counter");
+  const expected = `prefix + ${JSON.stringify("/" + component.identity)}`;
+  expect(emitGo(source, options).split(expected)).toHaveLength(3);
+});
+
+test("JSX short circuit evaluates its host action once for either result", async () => {
+  for (const result of ["truthy", "falsy"]) {
+    const source = await program(
+      `export function Page() { return <main>{t("${result}") && <section id="child" />}</main>; }`,
+    );
+    const go = emitGo(source, options);
+    const call = `actions["t"]("${result}")`;
+    expect(go.split(call)).toHaveLength(2);
+    expect(go).toContain(`left := ${call}; if webui.Truth(left)`);
+    expect(go).toContain("webui.ChildText(left)");
+    expect(go).toContain('Identity: prefix + "/text_0"');
+  }
+});
+
+test("Boolean JSX short circuit evaluates once without a falsy text node", async () => {
+  const source = await program(
+    `export function Page() { return <main>{Boolean(t("condition")) && <section id="child" />}</main>; }`,
+  );
+  const go = emitGo(source, options);
+  expect(go.split('actions["t"]("condition")')).toHaveLength(2);
+  expect(go).toContain(
+    'left := webui.Truth(actions["t"]("condition")); if webui.Truth(left)',
+  );
+  expect(go).not.toContain("webui.ChildText(left)");
+});
+
+test("each array keeps its source-site group in the enclosing component namespace", async () => {
+  const source = await program(`export function Page() {
+    return <main>{['a'].map(item => <input key={item} id={item}/>)}{['b'].map(item => <input key={item} id={item}/>)}</main>;
+  }`);
+  const root = source.components.find((item) => item.name === source.entry)!
+    .body[0]!;
+  if (root.kind !== "element") throw new Error("missing main");
+  const groups = root.children.filter((node) => node.kind === "each");
+  expect(groups).toHaveLength(2);
+  expect(groups[0]!.id).not.toBe(groups[1]!.id);
+  const go = emitGo(source, options);
+  for (const group of groups)
+    expect(go).toContain(
+      `}; return webui.GroupList(result, prefix + ${JSON.stringify("/" + group.id)})`,
+    );
+});
+
 test("invalid capture metadata or wrong style types never produce invalid Go", async () => {
   const source = await program(
     `export function Page() { return <div id="panel" />; }`,
@@ -67,6 +140,55 @@ test("invalid capture metadata or wrong style types never produce invalid Go", a
     ).toThrow();
 });
 
+test("measured CSS attributes stay state-bound instead of disappearing into a stale profile", async () => {
+  const source = await program(`export function Page({active}) {
+    return <main id="root"><div id="panel" className={active ? "red" : "blue"}
+      style={{backgroundColor: active ? "#ff0000" : "#0000ff"}} aria-label={active}/></main>;
+  }`);
+  const go = emitGo(source, {
+    ...options,
+    measurements: {
+      schema: 1,
+      sourceHash: sourceHash(source),
+      state: "default",
+      viewport: { width: 100, height: 30, scale: 1 },
+      nodes: {
+        root: { measured: true, width: 100, height: 30, opacity: 1 },
+        panel: { measured: true, width: 100, height: 30, opacity: 1 },
+      },
+    },
+  });
+  expect(go).toContain("capturedAttrs := webui.Scope{");
+  expect(go).toContain(
+    'CaptureSignature: webui.SnapshotAttributes("div", capturedAttrs)',
+  );
+  expect(go).toContain(
+    '"className": func() any { if webui.Truth(webui.Get(scope, "active"))',
+  );
+  expect(go).toContain('"style": webui.Scope{"backgroundColor": func() any');
+  expect(go).toContain('"aria-label": webui.Get(scope, "active")');
+});
+
+test("capture signatures reuse evaluated attributes without extra host calls", async () => {
+  const source = await program(
+    `export function Page() { return <input id="field" value={t("seed")}/>; }`,
+  );
+  const go = emitGo(source, {
+    ...options,
+    measurements: {
+      schema: 1,
+      sourceHash: sourceHash(source),
+      state: "default",
+      viewport: { width: 100, height: 30, scale: 1 },
+      nodes: { field: { measured: true, width: 100, height: 30, opacity: 1 } },
+    },
+  });
+  expect(go.split('actions["t"]("seed")')).toHaveLength(2);
+  expect(go).toContain(
+    'Value: webui.String(webui.Get(capturedAttrs, "value"))',
+  );
+});
+
 test("missing scalar props keep undefined semantics in emitted Go", async () => {
   const source = await program(`export function Page({ missing }) {
     return <p>{String(missing)}{missing === null}{missing === undefined}</p>;
@@ -84,18 +206,28 @@ test("the generated constructor reports invalid native trees before returning a 
     `export function Page() { return <p>Hola</p>; }`,
   );
   const go = emitGo(source, options);
-  const construction = go.indexOf("view = webui.NewView(");
+  const construction = go.indexOf("view = webui.NewViewForWidget(");
   const errorCheck = go.indexOf(
     "if err := view.Error(); err != nil { return nil, err }",
     construction,
   );
-  const success = go.indexOf(
-    "return &PageWidget{View:view}, nil",
-    construction,
-  );
+  const success = go.indexOf("return generated, nil", construction);
   expect(construction).toBeGreaterThan(-1);
   expect(errorCheck).toBeGreaterThan(construction);
   expect(success).toBeGreaterThan(errorCheck);
+});
+
+test("the generated wrapper owns Fyne's renderer before the initial render", async () => {
+  const source = await program(
+    `export function Page() { return <input id="field" />; }`,
+  );
+  const go = emitGo(source, options);
+  expect(go).toContain("var generated *PageWidget");
+  expect(go).toContain(
+    "webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &PageWidget{View:v}; return generated }, func() []webui.Node",
+  );
+  expect(go).toContain("return generated, nil");
+  expect(go).not.toContain("return &PageWidget{View:view}, nil");
 });
 
 test("display flex defaults to row without overriding an explicit column", async () => {

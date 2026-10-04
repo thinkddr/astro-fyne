@@ -448,6 +448,15 @@ interface EmitContext {
   textCounter: number;
   resources: Map<string, BitmapResource>;
 }
+function textNodeCode(
+  node: Extract<Node, { kind: "text" }>,
+  value: string,
+  context: EmitContext,
+): string {
+  const sourceID = quote("/text_" + context.textCounter++);
+  const identity = node.identity ? quote("/" + node.identity) : sourceID;
+  return `func() []webui.Node { text := webui.ChildText(${value}); if text == "" { return nil }; return []webui.Node{{ID: prefix + ${sourceID}, Identity: prefix + ${identity},Kind:"text", Text:text}} }()`;
+}
 function nodeCode(
   node: Node,
   component: Component,
@@ -455,11 +464,27 @@ function nodeCode(
 ): string {
   const measured = context.measured;
   if (node.kind === "text")
-    return `func() []webui.Node { text := webui.ChildText(${expression(node.value)}); if text == "" { return nil }; return []webui.Node{{ID: prefix + ${quote("/text_" + context.textCounter++)},Kind:"text", Text:text}} }()`;
-  if (node.kind === "conditional")
+    return textNodeCode(node, expression(node.value), context);
+  if (node.kind === "conditional") {
+    if (node.shortCircuit) {
+      const yes = nodesCode(node.yes, component, context);
+      let no = "nil";
+      if (node.no.length) {
+        if (node.no.length !== 1 || node.no[0]!.kind !== "text")
+          throw new Error("JSX && necesita una rama falsa de texto o vacía.");
+        no = textNodeCode(node.no[0]!, "left", context);
+      }
+      return `func() []webui.Node { left := ${expression(node.test)}; if webui.Truth(left) { return ${yes} }; return ${no} }()`;
+    }
     return `func() []webui.Node { if webui.Truth(${expression(node.test)}) { return ${nodesCode(node.yes, component, context)} }; return ${nodesCode(node.no, component, context)} }()`;
-  if (node.kind === "each")
-    return `func() []webui.Node { var result []webui.Node; for index, item := range webui.Values(${expression(node.items)}) { scope := cloneScope(scope); scope[${quote(node.item)}] = item; ${node.index ? `scope[${quote(node.index)}] = float64(index);` : ""} prefix := prefix + "/" + webui.String(index); _ = prefix; result = append(result, ${nodesCode(node.children, component, context)}...) }; return result }()`;
+  }
+  if (node.kind === "each") {
+    const bindings = `scope := cloneScope(scope); scope[${quote(node.item)}] = item; ${node.index ? `scope[${quote(node.index)}] = float64(index);` : ""}`;
+    const validateKeys = node.key
+      ? `keys := webui.NewListKeys(); identities := make([]string, len(items)); for index, item := range items { ${bindings} identities[index] = keys.Add(${expression(node.key)}); }; webui.RememberListKeyKind(state, active, prefix + ${quote("/" + node.id)}, keys);`
+      : "";
+    return `func() []webui.Node { var result []webui.Node; items := webui.Values(${expression(node.items)}); ${validateKeys} for index, item := range items { ${bindings} prefix := prefix + ${quote("/" + node.id + "/")} + ${node.key ? "identities[index]" : `"i" + webui.String(index)`}; _ = prefix; result = append(result, webui.KeyedIdentity(${nodesCode(node.children, component, context)}, prefix)...) }; return webui.GroupList(result, prefix + ${quote("/" + node.id)}) }()`;
+  }
   if (node.kind === "component") {
     if (node.name.startsWith("$ui.")) {
       const name = node.name.slice(4);
@@ -477,6 +502,7 @@ function nodeCode(
         {
           kind: "element",
           id: node.id,
+          ...(node.identity ? { identity: node.identity } : {}),
           tag,
           attrs: node.props,
           events: {},
@@ -493,7 +519,7 @@ function nodeCode(
     const props = Object.entries(node.props)
       .map(([key, value]) => `${quote(key)}: ${expression(value)}`)
       .join(", ");
-    return `build${context.name}_${node.name}(webui.Scope{${props}}, actions, refresh, state, active, prefix + ${quote("/" + node.id)})`;
+    return `build${context.name}_${node.name}(webui.Scope{${props}}, actions, refresh, state, active, prefix + ${quote("/" + (node.identity ?? node.id))})`;
   }
   const tag = node.tag;
   if (tag === "form")
@@ -535,13 +561,31 @@ function nodeCode(
                   : undefined;
   if (!kind)
     throw new Error(`${node.id}: etiqueta ${tag} sin renderer nativo.`);
+  const attributeValue = (key: string) =>
+    measured
+      ? `webui.Get(capturedAttrs, ${quote(key)})`
+      : expression(node.attrs[key]!);
   const fields = [
-    `ID: ${node.attrs.id ? `webui.String(${expression(node.attrs.id)})` : `prefix + ${quote("/" + node.id)}`}`,
+    `ID: ${node.attrs.id ? `webui.String(${attributeValue("id")})` : `prefix + ${quote("/" + node.id)}`}`,
+    `Identity: prefix + ${quote("/" + (node.identity ?? node.id))}`,
     `Kind: ${quote(kind)}`,
     `Style: ${style(node, measured, bitmap)}`,
   ];
+  let capturedAttributes = "";
+  if (measured) {
+    // The captured CSS can depend on every ordinary source attribute, not only
+    // the fields implemented by the native widget. Preserve those evaluated
+    // values so a class/style/selector change invalidates the frozen profile.
+    capturedAttributes = Object.entries(node.attrs)
+      .filter(([key]) => key !== "key" && !key.startsWith("client:"))
+      .map(([key, value]) => `${quote(key)}: ${expression(value)}`)
+      .join(", ");
+    fields.push(
+      `CaptureSignature: webui.SnapshotAttributes(${quote(tag)}, capturedAttrs)`,
+    );
+  }
   if (bitmap) fields.push(`ImageResource: image${context.name}_${bitmap.name}`);
-  for (const [key, value] of Object.entries(node.attrs)) {
+  for (const key of Object.keys(node.attrs)) {
     if (ignoredAttrs.has(key)) continue;
     if (bitmap && ["src", "width", "height"].includes(key)) continue;
     if (bitmap && key === "alt") {
@@ -549,16 +593,16 @@ function nodeCode(
         throw new Error(
           `${node.id}: img alt y aria-label simultáneos necesitan prioridad accesible explícita.`,
         );
-      fields.push(`AccessibleLabel: webui.String(${expression(value)})`);
+      fields.push(`AccessibleLabel: webui.String(${attributeValue(key)})`);
       continue;
     }
     if (key === "disabled") {
-      fields.push(`Disabled: webui.Truth(${expression(value)})`);
+      fields.push(`Disabled: webui.Truth(${attributeValue(key)})`);
       continue;
     }
     if (key.startsWith("client:")) continue;
     if (fieldAttrs[key]) {
-      fields.push(`${fieldAttrs[key]}: webui.String(${expression(value)})`);
+      fields.push(`${fieldAttrs[key]}: webui.String(${attributeValue(key)})`);
       continue;
     }
     throw new Error(`${node.id}: atributo ${key} sin conversión.`);
@@ -596,7 +640,10 @@ function nodeCode(
     );
   } else if (kind !== "image")
     fields.push(`Children: ${nodesCode(node.children, component, context)}`);
-  return `[]webui.Node{{${fields.join(", ")}}}`;
+  const result = `[]webui.Node{{${fields.join(", ")}}}`;
+  return measured
+    ? `func() []webui.Node { capturedAttrs := webui.Scope{${capturedAttributes}}; return ${result} }()`
+    : result;
 }
 
 function nodesCode(
@@ -709,7 +756,7 @@ export function emitGo(
     .sort(([a], [b]) => a.localeCompare(b, "en"))
     .map(([key, value]) => `${quote(key)}: ${quote(value)}`)
     .join(", ");
-  return `// Code generated by astro-fyne. DO NOT EDIT.\n// Source SHA-256: ${sourceHash(program)}\n// SPDX-License-Identifier: Apache-2.0\npackage ${options.packageName}\n\nimport (webui "${runtime}"; "fyne.io/fyne/v2")\n\nconst ${options.name}SourceHash = ${quote(sourceHash(program))}\n\n${embedded}\n${resourceFactory}\n\ntype ${options.name}Widget struct { *webui.View }\ntype ${options.name}Theme struct { *webui.CapturedTheme }\nfunc New${options.name}Theme(base fyne.Theme) (*${options.name}Theme,error) { generated,err := webui.NewCapturedTheme(map[string]string{${tokens}},base); if err != nil { return nil,err }; return &${options.name}Theme{CapturedTheme:generated},nil }\n\nfunc New${options.name}(props webui.Scope, actions webui.Actions, backends ...webui.Backend) (*${options.name}Widget, error) {\n if err := webui.Require(actions, []string{${program.actions.map(quote).join(", ")}}); err != nil { return nil, err }\n state := webui.Scope{}\n var view *webui.View\n refresh := func() { if view != nil { view.Refresh() } }\n view = webui.NewView(func() []webui.Node { active := map[string]bool{}; nodes := build${options.name}_${program.entry}(props, actions, refresh, state, active, ""); for key := range state { if !active[key] { delete(state,key) } }; return nodes }, backends...)\n view.SetAutoRefreshEvents(false)\n if err := view.Error(); err != nil { return nil, err }\n ${measurementSetup}\n return &${options.name}Widget{View:view}, nil\n}\n\n${components.join("\n\n")}\n`;
+  return `// Code generated by astro-fyne. DO NOT EDIT.\n// Source SHA-256: ${sourceHash(program)}\n// SPDX-License-Identifier: Apache-2.0\npackage ${options.packageName}\n\nimport (webui "${runtime}"; "fyne.io/fyne/v2")\n\nconst ${options.name}SourceHash = ${quote(sourceHash(program))}\n\n${embedded}\n${resourceFactory}\n\ntype ${options.name}Widget struct { *webui.View }\ntype ${options.name}Theme struct { *webui.CapturedTheme }\nfunc New${options.name}Theme(base fyne.Theme) (*${options.name}Theme,error) { generated,err := webui.NewCapturedTheme(map[string]string{${tokens}},base); if err != nil { return nil,err }; return &${options.name}Theme{CapturedTheme:generated},nil }\n\nfunc New${options.name}(props webui.Scope, actions webui.Actions, backends ...webui.Backend) (*${options.name}Widget, error) {\n if err := webui.Require(actions, []string{${program.actions.map(quote).join(", ")}}); err != nil { return nil, err }\n state := webui.Scope{}\n var view *webui.View\n var generated *${options.name}Widget\n refresh := func() { if view != nil { view.Refresh() } }\n view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &${options.name}Widget{View:v}; return generated }, func() []webui.Node { active := map[string]bool{}; nodes := build${options.name}_${program.entry}(props, actions, refresh, state, active, ""); for key := range state { if !active[key] { delete(state,key) } }; return nodes }, backends...)\n view.SetAutoRefreshEvents(false)\n if err := view.Error(); err != nil { return nil, err }\n ${measurementSetup}\n return generated, nil\n}\n\n${components.join("\n\n")}\n`;
 }
 
 const measuredFields = new Set([

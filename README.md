@@ -9,6 +9,10 @@ events. Browser measurements can supply the geometry and computed styles for a d
 visual profile. Native widgets remain interactive; browser screenshots are verification
 artifacts.
 
+The reverse pipeline exports supported, already laid out Fyne widgets into a versioned scene
+and generates an Astro page, Preact components, CSS and bitmap assets. Native and web hosts
+provide explicit action implementations; export preserves their event bindings.
+
 **Status: stage 01, a strict declarative subset.** The long-term goal is broad Astro + Preact
 compatibility with identical appearance and behavior. This version does not yet convert
 arbitrary applications or guarantee universal pixel parity. Unsupported constructs produce
@@ -85,13 +89,14 @@ if err != nil {
 window.SetContent(view)
 ```
 
-The repository includes generated Go and reports for its five conformance examples in
+The repository includes generated Go and reports for its conformance examples in
 `native/generated`. They are snapshots produced and tested by remote CI, so the native
 module can be used and tested without first rebuilding Astro. CI regenerates them and fails
 if committed snapshots or resolved Go dependencies change unexpectedly.
 
 The example contains a stateful counter, a controlled input and conditional content. State
-updates reuse objects by identifier so the input can retain focus. Hosts should surface
+updates reuse objects by source position and supported list keys so the input can retain focus.
+Public HTML IDs can change while the same source instance stays mounted. Hosts should surface
 `view.Error()` when a runtime contract fails and perform UI mutations on Fyne's event
 goroutine. Background service work returns to the UI through `fyne.Do`.
 
@@ -130,8 +135,7 @@ font resources and rendering environment. The initial geometry scenario uses **3
 CSS pixels at scale 1**, with solid rectangular boxes and no text. It exercises the complete
 Astro CSS → browser measurement → generated Go → native capture → zero-difference path.
 
-Run browser captures, native tests and builds in a suitable remote environment. In the Sytue
-repository, this means CI or the Scaleway development environment, as required by `AGENTS.md`.
+CI runs browser captures, native tests and builds in a pinned environment and keeps the evidence.
 
 Start the example web preview in a separate terminal:
 
@@ -196,6 +200,64 @@ Measured constructors declare the captured device scale. After assigning the wid
 canvas, hosts must call `view.BindCanvas(window.Canvas())` and check `view.ValidateCanvas()`
 before certifying or exporting it. A measured profile requires its exact logical viewport and
 device scale; the runtime reports changes to either as errors.
+
+## Export Fyne to Astro + Preact
+
+Export the actual Fyne object tree after layout on its UI goroutine. The exporter supports
+the declared native scene contract and rejects widgets or rendering features outside it:
+
+```go
+import (
+    "fyne.io/fyne/v2/theme"
+    "github.com/thinkddr/astro-fyne/native/reverse"
+)
+
+document, err := reverse.Export(root, reverse.Options{
+    Viewport: reverse.Viewport{Width: 320, Height: 240, Scale: 1},
+    Canvas: window.Canvas(),
+    CanvasBackground: theme.Color(theme.ColorNameBackground), // Standard opaque Fyne window.
+})
+if err != nil {
+    return err
+}
+// Encode document using encoding/json and save it as scene.json.
+```
+
+Supply the actual background of the canvas; a transparent canvas uses `color.Transparent`.
+`CanvasBackground` may be omitted only when the exported tree itself guarantees opaque,
+unrounded and borderless coverage of the full viewport. Fyne's public canvas interface does
+not expose transparency, so the exporter requires this host assertion instead of guessing.
+
+Convert the scene into web source files, placing bitmap assets in the Astro public directory:
+
+```sh
+bun src/cli.ts reverse --scene scene.json \
+  --out example/src/pages/native-page --name NativePage \
+  --public-dir example/public
+bun src/cli.ts reverse --scene scene.json \
+  --out example/src/pages/native-page --name NativePage \
+  --public-dir example/public --check
+```
+
+This creates `NativePage.astro`, `NativePage.tsx`, `NativePage.css` and
+`NativePage.reverse.report.json`. Without `--public-dir`, assets go into `OUT/public`;
+configure Astro to serve that directory. Existing files must carry the generator marker;
+existing bitmap bytes must match exactly. The complete scene and destinations are validated
+before writing, so unsupported input preserves previous outputs. `--check` compares source
+files, reports and bitmap bytes.
+
+Callbacks require named actions in `reverse.Options.Bindings` or `IDBindings`. Export reports
+a callback without its binding as an error. Use `--actions-module ./actions` for an explicit
+client module exporting `actions`. Astro loads that module in the browser; SSR props do not
+serialize Go or JavaScript functions. The generated Preact component also accepts an `actions`
+prop for direct embedding. Text fields preserve local editing, immediate input and deduplicated
+blur/Return commits. A single-line native `Entry.OnSubmitted` binds a separate `submit` action.
+
+The scene freezes the current geometry, styles, values, theme tokens and resources. It does
+not translate arbitrary Go callback bodies or reconstruct the original responsive layout.
+Font-family mappings are supplied explicitly by the native host and need corresponding
+licensed web font resources. Reports contain a scene digest and leave visual verification
+false until the images pass the comparison gate.
 
 ## License
 
