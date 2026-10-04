@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"hash/crc32"
 	"image"
 	"image/png"
 	"io"
@@ -106,6 +107,12 @@ func readPNG(path string) (image.Image, error) {
 	if config.Width <= 0 || config.Height <= 0 || uint64(config.Width)*uint64(config.Height) > 100_000_000 {
 		return nil, fmt.Errorf("PNG %s fuera del límite de 100 megapíxeles", path)
 	}
+	if _, err := f.Seek(8, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("leer %s: %w", path, err)
+	}
+	if err := validatePNGChunks(f, path); err != nil {
+		return nil, err
+	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return nil, fmt.Errorf("leer %s: %w", path, err)
 	}
@@ -114,6 +121,53 @@ func readPNG(path string) (image.Image, error) {
 		return nil, fmt.Errorf("decodificar %s: %w", path, err)
 	}
 	return img, nil
+}
+
+// image/png decodifica muestras, pero ignora APNG y la gestión de color. El
+// contrato del gate es un PNG estático sin transformaciones de interpretación:
+// https://www.w3.org/TR/png-3/#4Concepts.ColorSpaces
+// La lista permitida es cerrada: un futuro chunk de color no se ignora por ser
+// ancillary. tRNS sí participa en los píxeles y lo interpreta image/png.
+func validatePNGChunks(reader io.Reader, path string) error {
+	for {
+		var header [8]byte
+		if _, err := io.ReadFull(reader, header[:]); err != nil {
+			return fmt.Errorf("leer chunks PNG %s: %w", path, err)
+		}
+		length := int64(binary.BigEndian.Uint32(header[:4]))
+		kind := string(header[4:])
+		switch kind {
+		case "IHDR", "PLTE", "tRNS", "IDAT", "IEND", "tEXt", "zTXt", "iTXt", "tIME", "pHYs":
+		case "acTL", "fcTL", "fdAT":
+			return fmt.Errorf("PNG %s contiene %s: el gate exige una captura estática, no APNG", path, kind)
+		case "gAMA", "iCCP", "cHRM", "sRGB", "cICP", "mDCV", "cLLI", "eXIf", "sBIT", "bKGD":
+			return fmt.Errorf("PNG %s contiene %s: interpretación de color, precisión, fondo u orientación no soportada", path, kind)
+		default:
+			return fmt.Errorf("PNG %s contiene un chunk no soportado: %s", path, kind)
+		}
+		if kind == "IEND" && length != 0 {
+			return fmt.Errorf("PNG %s contiene IEND no vacío", path)
+		}
+		checksum := crc32.NewIEEE()
+		_, _ = checksum.Write(header[4:])
+		if _, err := io.CopyN(checksum, reader, length); err != nil {
+			return fmt.Errorf("leer chunk PNG %s en %s: %w", kind, path, err)
+		}
+		var crc [4]byte
+		if _, err := io.ReadFull(reader, crc[:]); err != nil {
+			return fmt.Errorf("leer CRC PNG %s en %s: %w", kind, path, err)
+		}
+		if checksum.Sum32() != binary.BigEndian.Uint32(crc[:]) {
+			return fmt.Errorf("CRC PNG inválida de %s en %s", kind, path)
+		}
+		if kind == "IEND" {
+			var trailing [1]byte
+			if count, err := io.ReadFull(reader, trailing[:]); count != 0 || err != io.EOF {
+				return fmt.Errorf("PNG %s contiene datos adicionales tras IEND", path)
+			}
+			return nil
+		}
+	}
 }
 
 func writePNG(path string, img image.Image) error {

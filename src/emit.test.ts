@@ -231,3 +231,31 @@ export function Page() { const [count,setCount] = useState(0); const items=[10,2
     'webui.Binary("+", webui.Get(pending, "count"), webui.Get(eventScope, "count"))',
   );
 });
+
+test("action-only handlers do not force a source render without a state update", async () => {
+  const compiled = await program(
+    `export function Page({observe}) { return <button onClick={() => observe()}>Observe</button>; }`,
+  );
+  const go = emitGo(compiled, options);
+  const tap = go.slice(go.indexOf("OnTap: func()"));
+  expect(tap).toContain('actions["observe"]()');
+  expect(tap).not.toContain("refresh()");
+});
+
+test("HTML forms require native submission behavior rather than a silent container", async () => {
+  for (const body of [
+    `<form><input /><button>Submit</button></form>`,
+    `<form><button type="button">Click</button></form>`,
+  ]) {
+    const compiled = await program(
+      `export function Page() { return ${body}; }`,
+    );
+    expect(() => emitGo(compiled, options)).toThrow(
+      "semántica submit requiere binding nativo",
+    );
+  }
+  const supported = await program(
+    `export function Page({save}) { return <section><button type="button" onClick={()=>save()}>Save</button></section>; }`,
+  );
+  expect(emitGo(supported, options)).toContain('actions["save"]()');
+});

@@ -117,6 +117,7 @@ export function Conformance({
       <p id="short-nullish">{String(skippedNullish)}</p>
       <p id="selected-null">{selectedNullish}</p>
       <p id="selected-missing">{selectedMissing}</p>
+      <p id="entity-conformance">A &amp; B &#x1F642; &copy;{" &amp;"}</p>
     </main>
   );
 }

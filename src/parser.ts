@@ -11,6 +11,7 @@ import {
   resolve,
 } from "node:path";
 import ts from "typescript";
+import { decodeHTML, decodeHTMLAttribute } from "entities";
 import type {
   CompileOptions,
   Component,
@@ -70,6 +71,10 @@ interface Scope {
   source: Source;
   component: Component;
   names: Set<string>;
+  /** Includes declarations not initialized yet, so calls respect lexical shadowing. */
+  bindings: Set<string>;
+  /** Only explicit props can authorize an ordinary host callback call. */
+  hostBindings: Set<string>;
   setters: Map<string, string>;
   handlers: Map<string, ts.ArrowFunction | ts.FunctionExpression>;
   substitutions: Map<string, Expr>;
@@ -160,6 +165,7 @@ class Compiler {
   private styles = new Map<string, string>();
   private hasStyles = false;
   private resources = new Map<string, BitmapResource>();
+  private jsxReferences = new Map<string, string>();
 
   constructor(private readonly options: CompileOptions) {}
 
@@ -492,6 +498,12 @@ class Compiler {
       source,
       component,
       names: new Set(),
+      bindings: new Set(
+        source.globals.flatMap((declaration) =>
+          this.bindingNames(declaration.name),
+        ),
+      ),
+      hostBindings: new Set(),
       setters: new Map(),
       handlers: new Map(),
       substitutions: new Map(),
@@ -531,12 +543,17 @@ class Compiler {
           "Los componentes async/SSR requieren datos del host nativo.",
         );
       }
-      this.props(definition.node.parameters, scope);
       for (const declaration of source.globals)
         this.declare(declaration, scope, true);
+      this.props(definition.node.parameters, scope);
       const body = definition.node.body;
       if (!body) this.fail(source, definition.node, "Componente sin cuerpo.");
       if (ts.isBlock(body)) {
+        for (const statement of body.statements)
+          if (ts.isVariableStatement(statement))
+            for (const declaration of statement.declarationList.declarations)
+              for (const binding of this.bindingNames(declaration.name))
+                scope.bindings.add(binding);
         let returned = false;
         for (const statement of body.statements) {
           if (returned)
@@ -622,7 +639,15 @@ class Compiler {
       }
       scope.component.props.push(binding.name.text);
       scope.names.add(binding.name.text);
+      scope.hostBindings.add(binding.name.text);
     }
+  }
+
+  private bindingNames(name: ts.BindingName): string[] {
+    if (ts.isIdentifier(name)) return [name.text];
+    return name.elements.flatMap((element) =>
+      ts.isBindingElement(element) ? this.bindingNames(element.name) : [],
+    );
   }
 
   private declare(
@@ -679,6 +704,8 @@ class Compiler {
       scope.component.initializers.push({ kind: "state", name });
       scope.names.add(name);
       scope.setters.set(setter, name);
+      scope.hostBindings.delete(name);
+      scope.hostBindings.delete(setter);
       return;
     }
     if (
@@ -718,6 +745,7 @@ class Compiler {
           scope,
         );
       scope.handlers.set(name, expression);
+      scope.hostBindings.delete(name);
       return;
     }
     if (
@@ -735,9 +763,62 @@ class Compiler {
     )
       return;
     const value = this.expr(expression, scope);
+    if (global && this.hasHostCall(value))
+      this.fail(
+        scope.source,
+        declaration,
+        "Una constante de módulo con llamadas al host requiere un ciclo de vida de inicialización nativo; no se reejecuta al renderizar en stage 01.",
+        scope,
+      );
     scope.component.constants.push({ name, value });
     scope.component.initializers.push({ kind: "constant", name });
     scope.names.add(name);
+    scope.hostBindings.delete(name);
+  }
+
+  private hasHostCall(value: Expr): boolean {
+    switch (value.kind) {
+      case "call":
+        return (
+          !["String", "Number", "Boolean"].includes(value.name) ||
+          value.args.some((argument) => this.hasHostCall(argument))
+        );
+      case "get":
+        return this.hasHostCall(value.object) || this.hasHostCall(value.key);
+      case "binary":
+        return this.hasHostCall(value.left) || this.hasHostCall(value.right);
+      case "unary":
+        return this.hasHostCall(value.value);
+      case "conditional":
+        return (
+          this.hasHostCall(value.test) ||
+          this.hasHostCall(value.yes) ||
+          this.hasHostCall(value.no)
+        );
+      case "array":
+        return value.items.some((item) => this.hasHostCall(item));
+      case "object":
+        return Object.values(value.entries).some((item) =>
+          this.hasHostCall(item),
+        );
+      case "template":
+        return value.parts.some((part) => this.hasHostCall(part));
+      default:
+        return false;
+    }
+  }
+
+  private isHostAction(name: string, scope: Scope): boolean {
+    if (scope.hostBindings.has(name)) return true;
+    return (
+      name === "t" &&
+      !scope.names.has(name) &&
+      !scope.bindings.has(name) &&
+      !scope.handlers.has(name) &&
+      !scope.setters.has(name) &&
+      !scope.source.definitions.has(name) &&
+      !scope.substitutions.has(name)
+    );
   }
 
   private unwrap(expression: ts.Expression): ts.Expression {
@@ -917,6 +998,37 @@ class Compiler {
       ts.isIdentifier(node.expression) &&
       PURE_CALLS.has(node.expression.text)
     ) {
+      const name = node.expression.text;
+      const shadowed =
+        scope.names.has(name) ||
+        scope.bindings.has(name) ||
+        scope.handlers.has(name) ||
+        scope.setters.has(name) ||
+        scope.source.definitions.has(name) ||
+        scope.source.imports.has(name) ||
+        scope.substitutions.has(name);
+      if (name !== "t" && shadowed)
+        this.fail(
+          scope.source,
+          node,
+          `Builtin ${name} sombreado por un binding de la fuente; su llamada requiere un adaptador nativo explícito.`,
+          scope,
+        );
+      if (
+        name === "t" &&
+        (((scope.names.has(name) || scope.bindings.has(name)) &&
+          !scope.hostBindings.has(name)) ||
+          scope.handlers.has(name) ||
+          scope.setters.has(name) ||
+          scope.source.definitions.has(name) ||
+          scope.substitutions.has(name))
+      )
+        this.fail(
+          scope.source,
+          node,
+          "t sombreado por un binding local; la traducción requiere el binding host explícito.",
+          scope,
+        );
       if (node.questionDotToken || node.arguments.some(ts.isSpreadElement)) {
         this.fail(
           scope.source,
@@ -1022,9 +1134,19 @@ class Compiler {
       const item = (callback.parameters[0]!.name as ts.Identifier).text;
       const index = (callback.parameters[1]?.name as ts.Identifier | undefined)
         ?.text;
-      const childScope = { ...scope, names: new Set(scope.names) };
-      childScope.names.add(item);
-      if (index) childScope.names.add(index);
+      const childScope = {
+        ...scope,
+        names: new Set(scope.names),
+        hostBindings: new Set(scope.hostBindings),
+        setters: new Map(scope.setters),
+        handlers: new Map(scope.handlers),
+      };
+      for (const parameter of index ? [item, index] : [item]) {
+        childScope.names.add(parameter);
+        childScope.hostBindings.delete(parameter);
+        childScope.setters.delete(parameter);
+        childScope.handlers.delete(parameter);
+      }
       let body: ts.Expression;
       if (ts.isBlock(callback.body)) {
         if (
@@ -1061,7 +1183,7 @@ class Compiler {
     const nodes: Node[] = [];
     for (const child of children) {
       if (ts.isJsxText(child)) {
-        const text = this.jsxText(child.text);
+        const text = this.decodeJSX(this.jsxText(child.text), scope, child);
         if (text) nodes.push({ kind: "text", value: literal(text) });
       } else if (ts.isJsxExpression(child)) {
         if (child.dotDotDotToken)
@@ -1091,6 +1213,59 @@ class Compiler {
       })
       .filter((line) => line.length > 0)
       .join(" ");
+  }
+
+  private decodeJSX(text: string, scope: Scope, node: ts.Node): string {
+    // JSX follows its HTML4 reference table and numeric rules, not HTML5's
+    // replacement-character/Windows-1252 recovery. Reuse our existing public
+    // TypeScript dependency as the oracle; the emitted JavaScript is only parsed.
+    // This also preserves unknown and semicolonless references without a copied
+    // entity table or evaluating any JavaScript from the user's source.
+    return text.replace(
+      /&(?:#[xX][\da-fA-F]+|#\d+|[A-Za-z]\w*);/g,
+      (reference) => {
+        const cached = this.jsxReferences.get(reference);
+        if (cached !== undefined) return cached;
+        const compiled = ts.transpileModule(
+          `const value = <p>${reference}</p>;`,
+          {
+            fileName: "entity.tsx",
+            compilerOptions: {
+              target: ts.ScriptTarget.ESNext,
+              module: ts.ModuleKind.ESNext,
+              jsx: ts.JsxEmit.React,
+              jsxFactory: "__astroFyneEntity",
+            },
+          },
+        );
+        const output = ts.createSourceFile(
+          "entity.js",
+          compiled.outputText,
+          ts.ScriptTarget.ESNext,
+          true,
+          ts.ScriptKind.JS,
+        );
+        const value = output.statements.find(ts.isVariableStatement)
+          ?.declarationList.declarations[0]?.initializer;
+        if (!value || !ts.isCallExpression(value))
+          this.fail(
+            scope.source,
+            node,
+            `No se puede decodificar la referencia JSX ${reference}.`,
+            scope,
+          );
+        const decoded = value.arguments[2];
+        if (!decoded || !ts.isStringLiteral(decoded))
+          this.fail(
+            scope.source,
+            node,
+            `TypeScript no produjo una cadena para ${reference}.`,
+            scope,
+          );
+        this.jsxReferences.set(reference, decoded.text);
+        return decoded.text;
+      },
+    );
   }
 
   private async jsx(
@@ -1157,7 +1332,9 @@ class Compiler {
         }
         if (!attribute.initializer) attrs[name] = literal(true);
         else if (ts.isStringLiteral(attribute.initializer))
-          attrs[name] = literal(attribute.initializer.text);
+          attrs[name] = literal(
+            this.decodeJSX(attribute.initializer.text, scope, attribute),
+          );
         else if (
           ts.isJsxExpression(attribute.initializer) &&
           attribute.initializer.expression
@@ -1415,9 +1592,16 @@ class Compiler {
           "Envuelve el setter en e => setter(e.currentTarget.value).",
           scope,
         );
-      } else if (scope.names.has(node.text)) {
+      } else if (this.isHostAction(node.text, scope)) {
         this.actions.add(node.text);
         return { steps: [{ kind: "call", name: node.text, args: [] }] };
+      } else if (scope.names.has(node.text)) {
+        this.fail(
+          scope.source,
+          node,
+          `Handler ${node.text} no declarado en props; estados, constantes y bindings locales no autorizan acciones host.`,
+          scope,
+        );
       } else
         this.fail(
           scope.source,
@@ -1450,8 +1634,20 @@ class Compiler {
     }
     const parameter = (node.parameters[0]?.name as ts.Identifier | undefined)
       ?.text;
-    const eventScope = { ...scope, names: new Set(scope.names) };
+    if (parameter && scope.setters.has(parameter))
+      this.fail(
+        scope.source,
+        node,
+        `El parámetro de evento ${parameter} sombrea un setter; requiere un binding nativo explícito.`,
+        scope,
+      );
+    const eventScope = {
+      ...scope,
+      names: new Set(scope.names),
+      hostBindings: new Set(scope.hostBindings),
+    };
     if (parameter) eventScope.names.add(parameter);
+    if (parameter) eventScope.hostBindings.delete(parameter);
     const expressions: ts.Expression[] = [];
     if (ts.isBlock(node.body)) {
       let returned = false;
@@ -1520,7 +1716,9 @@ class Compiler {
           setterScope = {
             ...eventScope,
             substitutions: new Map(eventScope.substitutions),
+            hostBindings: new Set(eventScope.hostBindings),
           };
+          setterScope.hostBindings.delete(value.parameters[0]!.name.text);
           setterScope.substitutions.set(value.parameters[0]!.name.text, {
             kind: "current",
             name: state,
@@ -1535,7 +1733,7 @@ class Compiler {
           ...(updater ? { updater } : {}),
         });
       } else {
-        if (!scope.names.has(name)) {
+        if (!this.isHostAction(name, eventScope)) {
           this.fail(
             scope.source,
             call,
@@ -1606,7 +1804,7 @@ class Compiler {
         continue;
       }
       if (child.type === "text") {
-        const text = this.jsxText(child.value ?? "");
+        const text = decodeHTML(this.jsxText(child.value ?? ""));
         if (text) nodes.push({ kind: "text", value: literal(text) });
       } else if (child.type === "expression") {
         nodes.push(
@@ -1695,7 +1893,7 @@ class Compiler {
               located,
             );
           } else if (attribute.kind === "quoted")
-            attrs[name] = literal(attribute.value);
+            attrs[name] = literal(decodeHTMLAttribute(attribute.value));
           else if (attribute.kind === "empty") attrs[name] = literal(true);
           else if (
             attribute.kind === "expression" ||

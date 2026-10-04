@@ -172,7 +172,9 @@ go run ./visual/cmd/astro-fyne-compare \
 The default gate permits **zero channel difference and zero changed pixels**, including
 alpha. It refuses different image dimensions and returns a failing exit code when pixels
 differ. It rejects 16-bit PNGs instead of losing their low channel bits during comparison;
-the gate compares channels represented at up to 8 bits. Its JSON result includes
+the gate compares channels represented at up to 8 bits. Animated PNGs and unsupported
+color, precision, background or orientation metadata also fail instead of being ignored.
+Its JSON result includes
 `changedPixels`, `maxChannelDelta`, `bounds`, `exact` and
 `accepted`. Optional tolerances must be selected explicitly; accepted images with differences
 still report `exact: false`. Passing the geometry scenario certifies that scenario only.

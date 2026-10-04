@@ -4,11 +4,14 @@
 package webui
 
 import (
+	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"reflect"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf16"
 )
 
@@ -215,7 +218,7 @@ func Number(value any) float64 {
 		}
 		return 0
 	case string:
-		v = strings.TrimSpace(v)
+		v = strings.TrimFunc(v, numericWhitespace)
 		if v == "" {
 			return 0
 		}
@@ -227,17 +230,29 @@ func Number(value any) float64 {
 			case 'o', 'O':
 				base = 8
 			}
-			n, err := strconv.ParseUint(v[2:], base, 64)
-			if err != nil {
+			if !radixDigits(v[2:], base) {
 				return math.NaN()
 			}
-			return float64(n)
+			// JavaScript Number has no uint64 parsing bound. Parse the entire
+			// unsigned integer, then round once to IEEE-754 (including +Infinity).
+			n, ok := new(big.Int).SetString(v[2:], base)
+			if !ok {
+				return math.NaN()
+			}
+			result, _ := n.Float64()
+			return result
 		}
-		if v == "Inf" || v == "+Inf" || v == "-Inf" || strings.ContainsRune(v, '_') {
+		if v == "Infinity" || v == "+Infinity" {
+			return math.Inf(1)
+		}
+		if v == "-Infinity" {
+			return math.Inf(-1)
+		}
+		if !decimalNumberLiteral(v) {
 			return math.NaN()
 		}
 		n, err := strconv.ParseFloat(v, 64)
-		if err != nil {
+		if err != nil && !errors.Is(err, strconv.ErrRange) {
 			return math.NaN()
 		}
 		return n
@@ -258,6 +273,66 @@ func Number(value any) float64 {
 	default:
 		panic(fmt.Sprintf("webui: %T is not a numeric expression", value))
 	}
+}
+
+// ECMAScript StringNumericLiteral uses WhiteSpace and LineTerminator, which differ
+// from Go's Unicode TrimSpace (for example BOM is whitespace, NEL is not).
+func numericWhitespace(r rune) bool {
+	return r == '\t' || r == '\v' || r == '\f' || r == '\n' || r == '\r' ||
+		r == '\ufeff' || r == '\u2028' || r == '\u2029' || unicode.Is(unicode.Zs, r)
+}
+
+func radixDigits(digits string, base int) bool {
+	if digits == "" {
+		return false
+	}
+	for _, digit := range digits {
+		value := -1
+		switch {
+		case digit >= '0' && digit <= '9':
+			value = int(digit - '0')
+		case digit >= 'a' && digit <= 'f':
+			value = int(digit-'a') + 10
+		case digit >= 'A' && digit <= 'F':
+			value = int(digit-'A') + 10
+		}
+		if value < 0 || value >= base {
+			return false
+		}
+	}
+	return true
+}
+
+func decimalNumberLiteral(value string) bool {
+	position := 0
+	if value[0] == '+' || value[0] == '-' {
+		position++
+	}
+	consumeDigits := func() int {
+		start := position
+		for position < len(value) && value[position] >= '0' && value[position] <= '9' {
+			position++
+		}
+		return position - start
+	}
+	digits := consumeDigits()
+	if position < len(value) && value[position] == '.' {
+		position++
+		digits += consumeDigits()
+	}
+	if digits == 0 {
+		return false
+	}
+	if position < len(value) && (value[position] == 'e' || value[position] == 'E') {
+		position++
+		if position < len(value) && (value[position] == '+' || value[position] == '-') {
+			position++
+		}
+		if consumeDigits() == 0 {
+			return false
+		}
+	}
+	return position == len(value)
 }
 
 // Truth is JavaScript truthiness for the supported scalar and collection values.
@@ -317,15 +392,16 @@ func Binary(op string, a, b any) any {
 	case "<", "<=", ">", ">=":
 		if sa, ok := a.(string); ok {
 			if sb, isString := b.(string); isString {
+				order := compareUTF16(sa, sb)
 				switch op {
 				case "<":
-					return sa < sb
+					return order < 0
 				case "<=":
-					return sa <= sb
+					return order <= 0
 				case ">":
-					return sa > sb
+					return order > 0
 				default:
-					return sa >= sb
+					return order >= 0
 				}
 			}
 		}
@@ -343,6 +419,27 @@ func Binary(op string, a, b any) any {
 	default:
 		panic(fmt.Sprintf("webui: unsupported binary operator %q", op))
 	}
+}
+
+// Relational string operators compare UTF-16 code units, not UTF-8 bytes or
+// Unicode code points. Supplementary characters can sort before BMP characters.
+func compareUTF16(a, b string) int {
+	x, y := utf16.Encode([]rune(a)), utf16.Encode([]rune(b))
+	for i := range min(len(x), len(y)) {
+		if x[i] < y[i] {
+			return -1
+		}
+		if x[i] > y[i] {
+			return 1
+		}
+	}
+	if len(x) < len(y) {
+		return -1
+	}
+	if len(x) > len(y) {
+		return 1
+	}
+	return 0
 }
 
 func scalarEqual(a, b any) bool {
