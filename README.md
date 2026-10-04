@@ -97,6 +97,10 @@ and editing. The default `webui.FyneBackend` uses public Fyne primitives. Measur
 explicit font resources matching the browser's loaded font family, weight and style; supplying
 the same font file is necessary but does not by itself prove matching rasterization.
 
+A custom backend can delegate its `Editor` method to `webui.NewEditor(backend, multiline,
+style, onChange)`. This shares the native editing engine while using that backend's text
+measurement and placement; the generated view owns keyboard focus and commit events.
+
 Generation also emits an entry-specific theme type and constructor, such as
 `GeometryTheme` and `NewGeometryTheme(base fyne.Theme)`. The theme receives the CSS custom
 properties recorded by capture; the native theme adapter handles the supported token mapping

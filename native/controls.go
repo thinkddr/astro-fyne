@@ -109,7 +109,7 @@ func (w *actionWidget) AccessibilityLabel() string {
 // need a host editor adapter and are not claimed by this initial backend.
 type primitiveEditor struct {
 	canvas                      *editorCanvas
-	backend                     FyneBackend
+	backend                     Backend
 	style                       Style
 	text, placeholder           string
 	cursor, anchor              int
@@ -118,7 +118,18 @@ type primitiveEditor struct {
 }
 
 func (b FyneBackend) Editor(multiline bool, style Style, onChange func(string)) Editor {
-	e := &primitiveEditor{backend: b, style: style, multiline: multiline, onChange: onChange}
+	return NewEditor(b, multiline, style, onChange)
+}
+
+// NewEditor reuses the public editing engine with the host's text measurement and
+// placement. Its canvas owns drawing only: View owns focus, keyboard events and
+// HTML commit callbacks. This factory never calls Backend.Editor, so a backend's
+// Editor implementation may safely delegate here without recursive construction.
+func NewEditor(backend Backend, multiline bool, style Style, onChange func(string)) Editor {
+	if backend == nil {
+		backend = FyneBackend{}
+	}
+	e := &primitiveEditor{backend: backend, style: style, multiline: multiline, onChange: onChange}
 	e.canvas = &editorCanvas{editor: e}
 	e.canvas.ExtendBaseWidget(e.canvas)
 	return e

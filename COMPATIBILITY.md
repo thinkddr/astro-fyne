@@ -42,6 +42,9 @@ authorize host actions. Calls to shadowed `String`, `Number` or `Boolean` requir
 native adapter. A component-local constant may call the host translator `t`; a module-level
 constant may not, because its initialization lifecycle is not implemented. HTML `form` nodes
 are rejected during Go generation until native submit and implicit submit behavior are defined.
+Named handlers used under a `map` that shadows a component or module binding are conservatively
+rejected until lexical captures are qualified. Inline handlers retain their list-local bindings;
+named handlers outside those shadows remain supported.
 
 The programmatic compiler API supports explicit package adapters. The initial CLI
 configuration only exposes entries and measurement files. Adapters must preserve a component's

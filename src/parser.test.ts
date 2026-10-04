@@ -666,3 +666,41 @@ export function Page({save,t}) { const title=t('title'); const visible=Boolean(1
   expect(buttons[1]!.events.onClick!.steps[0]!.name).toBe("save");
   expect(buttons[2]!.events.onClick!.steps[0]!.name).toBe("t");
 });
+
+test("named handlers reject list shadows until lexical captures are qualified", async () => {
+  for (const input of [
+    `import {useState} from 'preact/hooks'; export function Page() { const [count,setCount]=useState(0); const items=[10]; const add=()=>setCount(count+1); return <main>{items.map(count=><button onClick={add} />)}</main>; }`,
+    `export function Page({save}) { const count=0; const items=[10]; const add=()=>save(count+1); return <main>{items.map((item,count)=><button onClick={add} />)}</main>; }`,
+    `export function Page({save,count}) { const items=[10]; const add=()=>save(count+1); return <main>{items.map(count=><section>{items.map(item=><button onClick={add} />)}</section>)}</main>; }`,
+    `const count=0; export function Page({save}) { const items=[10]; const add=()=>save(count+1); return <main>{items.map(count=><button onClick={add} />)}</main>; }`,
+  ]) {
+    await expect(compile(await source("Page.tsx", input))).rejects.toThrow(
+      "handler nombrado add se usa bajo map con bindings externos sombreados (count)",
+    );
+  }
+});
+
+test("named handlers remain supported outside shadows and inline handlers preserve list bindings", async () => {
+  const entry = await source(
+    "Page.tsx",
+    `import {useState} from 'preact/hooks'; export function Page() { const [count,setCount]=useState(0); const items=[10]; const add=()=>setCount(count+1); return <main><button onClick={add} />{items.map(item=><button onClick={add} />)}{items.map(count=><button onClick={()=>setCount(count+1)} />)}</main>; }`,
+  );
+  const compiled = await compile(entry);
+  const buttons = elements(compiled.components[0]!.body).filter(
+    (node) => node.tag === "button",
+  );
+  expect(buttons).toHaveLength(3);
+  for (const button of buttons)
+    expect(button.events.onClick!.steps[0]).toEqual({
+      kind: "set",
+      name: "count",
+      args: [
+        {
+          kind: "binary",
+          op: "+",
+          left: { kind: "name", name: "count" },
+          right: { kind: "literal", value: 1 },
+        },
+      ],
+    });
+});

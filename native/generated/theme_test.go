@@ -20,7 +20,7 @@ func TestThemeIsGeneratedFromCapturedAstroCustomProperties(t *testing.T) {
 	if got := generated.Size(theme.SizeNamePadding); got != 5 {
 		t.Fatalf("captured padding: got %v, want 5", got)
 	}
-	if got, ok := generated.CSS("--color-background"); !ok || got != "#ffffff" {
+	if got, ok := generated.CSS("--component-density"); !ok || got != "compact" {
 		t.Fatalf("CSS token inventory was lost: %q", got)
 	}
 }
