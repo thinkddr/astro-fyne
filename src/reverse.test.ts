@@ -337,6 +337,26 @@ test("embedded bitmap bytes, digest, dimensions and output paths reuse shared va
   expect(output.assets[0]!.content).toEqual(bytes);
   expect(output.preact).toContain(`src={"/assets/${hash}.png"}`);
   expect(output.preact).toContain('alt={"Local image"}');
+  const noPixels = Buffer.concat([
+    bytes.subarray(0, 33),
+    bytes.subarray(bytes.length - 12),
+  ]);
+  const noPixelsHash = createHash("sha256").update(noPixels).digest("hex");
+  expect(() =>
+    emitWebScene(
+      {
+        ...scene,
+        resources: [
+          {
+            ...scene.resources[0]!,
+            hash: noPixelsHash,
+            content: noPixels.toString("base64"),
+          },
+        ],
+      },
+      { name: "Scene" },
+    ),
+  ).toThrow("sin datos IDAT");
   for (const resource of [
     { ...scene.resources[0]!, hash: "0".repeat(64) },
     { ...scene.resources[0]!, path: "../escape.png" },
