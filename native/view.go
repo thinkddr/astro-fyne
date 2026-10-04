@@ -413,9 +413,15 @@ func (v *View) reconcile() {
 	}
 	v.err = profileError
 	v.nodes = nodes
+	// Reused elements are updated in place below. Freeze their previous sibling
+	// lists first so source reordering can distinguish a moved DOM subtree from
+	// an anchor whose index changed only because another sibling moved.
+	previousRoots := append([]*element(nil), v.roots...)
+	previousChildren := make(map[*element][]*element, len(v.elements))
 	current := make(map[string]*element, len(ids))
 	previousByIdentity := make(map[string]*element, len(v.elements))
 	for _, previous := range v.elements {
+		previousChildren[previous] = append([]*element(nil), previous.children...)
 		if previous.node.Identity != "" {
 			previousByIdentity[previous.node.Identity] = previous
 		}
@@ -453,8 +459,18 @@ func (v *View) reconcile() {
 		return out
 	}
 	v.roots = build(nodes, Style{})
+	v.clearMovedFocus(previousRoots, previousChildren)
+	visible := make(map[*element]bool, len(current))
+	var visibility func([]*element, bool)
+	visibility = func(elements []*element, parentVisible bool) {
+		for _, e := range elements {
+			visible[e] = parentVisible && e.style.Display != "none"
+			visibility(e.children, visible[e])
+		}
+	}
+	visibility(v.roots, true)
 	for _, previous := range v.elements {
-		if retained[previous] && !previous.node.Disabled && previous.style.Display != "none" {
+		if retained[previous] && !previous.node.Disabled && visible[previous] {
 			continue
 		}
 		v.clearDetachedFocus(previous)
@@ -481,8 +497,8 @@ func (v *View) clearDetachedFocus(e *element) {
 	if target == nil || target.Focused() != focusable {
 		return
 	}
-	// Removing a DOM input does not commit its abandoned value. Suppress that
-	// callback while still letting the editor release its caret and selection.
+	// DOM removal, movement and hidden ancestors release focus without a user
+	// change event. Suppress commit while the editor drops its caret/selection.
 	if input, ok := e.object.(*inputWidget); ok {
 		input.dirty = false
 	}
