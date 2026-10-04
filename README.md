@@ -196,6 +196,11 @@ The generator report always starts with `pixelPerfectVerified: false`. Generatio
 bounding boxes do not establish visual equality. Keep the comparator result with both captures
 and the measurement file as the evidence for a passing profile.
 
+`visual-scale2.json` defines a separate geometry profile at scale 2. CI captures its
+browser and native output at 640 × 480 physical pixels and compares all channels with
+zero tolerance. It preserves the same 320 × 240 logical viewport; this profile does
+not certify bitmap interpolation or typography at scale 2.
+
 Measured constructors declare the captured device scale. After assigning the widget to its
 canvas, hosts must call `view.BindCanvas(window.Canvas())` and check `view.ValidateCanvas()`
 before certifying or exporting it. A measured profile requires its exact logical viewport and
