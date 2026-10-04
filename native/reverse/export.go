@@ -146,6 +146,9 @@ func (e *exporter) object(object fyne.CanvasObject, path string) (Node, error) {
 		if err != nil {
 			return Node{}, fmt.Errorf("reverse: View %q is invalid: %w", id, err)
 		}
+		if snapshot.HasFocus {
+			return Node{}, fmt.Errorf("reverse: View %q has active focus/caret/selection not represented by scene schema 1; export an unfocused frame", id)
+		}
 		if snapshot.Measured && (snapshot.CaptureScale != e.opts.Viewport.Scale || snapshot.Size != fyne.NewSize(e.opts.Viewport.Width, e.opts.Viewport.Height)) {
 			return Node{}, fmt.Errorf("reverse: View %q capture viewport or scale differs from export", id)
 		}

@@ -387,3 +387,25 @@ func TestStableSourceIdentitySurvivesDOMIDChangesAndRejectsDuplicates(t *testing
 		t.Fatal("invalid tree partially mutated the previously valid frame")
 	}
 }
+
+func TestExportDetectsBoundViewFocusWithoutOptionalCanvas(t *testing.T) {
+	app(t)
+	v := webui.NewView(func() []webui.Node { return []webui.Node{{ID: "edit", Kind: "input"}} })
+	c := software.NewCanvas()
+	c.SetPadded(false)
+	c.Resize(fyne.NewSize(320, 240))
+	c.SetContent(v)
+	if err := v.BindCanvas(c); err != nil {
+		t.Fatal(err)
+	}
+	c.Focus(v.Object("edit").(fyne.Focusable))
+	opts := options()
+	opts.NodeFontFamilies = map[string]string{"edit": "HostFont"}
+	if _, err := Export(v, opts); err == nil || !strings.Contains(err.Error(), "focus") {
+		t.Fatalf("focused native frame exported without caret/selection: %v", err)
+	}
+	c.Unfocus()
+	if _, err := Export(v, opts); err != nil {
+		t.Fatal(err)
+	}
+}

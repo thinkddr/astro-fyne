@@ -131,6 +131,7 @@ type ViewSnapshot struct {
 	Size         fyne.Size
 	CaptureScale float32
 	Measured     bool
+	HasFocus     bool
 }
 
 // Snapshot reads the current reconciled tree on Fyne's event goroutine. It does
@@ -176,7 +177,12 @@ func (v *View) Snapshot() (ViewSnapshot, error) {
 		}
 		return out
 	}
-	return ViewSnapshot{Roots: freeze(v.roots), Size: v.Size(), CaptureScale: v.captureScale, Measured: len(v.measurements) != 0}, nil
+	target := v.boundCanvas
+	if target == nil && fyne.CurrentApp() != nil && fyne.CurrentApp().Driver() != nil {
+		target = fyne.CurrentApp().Driver().CanvasForObject(v)
+	}
+	hasFocus := target != nil && target.Focused() != nil
+	return ViewSnapshot{Roots: freeze(v.roots), Size: v.Size(), CaptureScale: v.captureScale, Measured: len(v.measurements) != 0, HasFocus: hasFocus}, nil
 }
 
 // SetAutoRefreshEvents selects who reevaluates the source tree after callbacks.
