@@ -14,6 +14,7 @@ import (
 	"image/color"
 	"math"
 	"net/url"
+	"reflect"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -78,6 +79,7 @@ type Style struct {
 // Fyne's event goroutine; native adapters completing background work use fyne.Do.
 type View struct {
 	widget.BaseWidget
+	owner             fyne.Widget
 	backend           Backend
 	build             func() []Node
 	nodes             []Node
@@ -101,12 +103,38 @@ var _ fyne.Widget = (*View)(nil)
 // NewView builds the initial tree before its first render, so the first frame is
 // complete without relying on Fyne to call a renderer's Refresh for us.
 func NewView(build func() []Node, backends ...Backend) *View {
+	return NewViewForWidget(func(view *View) fyne.Widget { return view }, build, backends...)
+}
+
+// NewViewForWidget builds a View owned by an extending widget. attach is called
+// once with the allocated View and must attach it to the returned widget before
+// returning (for example, &GeneratedWidget{View: view}). Only then does the View
+// bind its BaseWidget and evaluate its initial source tree. No owner methods or
+// renderers are invoked while an extending widget's embedded View is still nil.
+//
+// Fyne cannot rebind ExtendBaseWidget after NewView has already bound it to the
+// inner View. Using this factory from the beginning keeps refresh, geometry,
+// renderer cache, focus traversal and repaint attached to the actual owner.
+func NewViewForWidget(attach func(*View) fyne.Widget, build func() []Node, backends ...Backend) *View {
 	var backend Backend = FyneBackend{}
 	if len(backends) > 0 && backends[0] != nil {
 		backend = backends[0]
 	}
 	v := &View{build: build, backend: backend, elements: make(map[string]*element), bitmaps: make(map[[32]byte]bitmapAsset), autoRefreshEvents: true}
-	v.ExtendBaseWidget(v)
+	v.owner = v
+	if attach == nil {
+		v.ExtendBaseWidget(v)
+		v.err = fmt.Errorf("webui: an extending widget requires an attachment factory")
+		return v
+	}
+	owner := attach(v)
+	if owner == nil || reflect.ValueOf(owner).Kind() == reflect.Pointer && reflect.ValueOf(owner).IsNil() {
+		v.ExtendBaseWidget(v)
+		v.err = fmt.Errorf("webui: attachment factory returned a nil widget owner")
+		return v
+	}
+	v.owner = owner
+	v.ExtendBaseWidget(owner)
 	v.reconcile()
 	return v
 }
@@ -185,7 +213,7 @@ func (v *View) Snapshot() (ViewSnapshot, error) {
 	}
 	target := v.boundCanvas
 	if target == nil && fyne.CurrentApp() != nil && fyne.CurrentApp().Driver() != nil {
-		target = fyne.CurrentApp().Driver().CanvasForObject(v)
+		target = fyne.CurrentApp().Driver().CanvasForObject(v.owner)
 		if target == nil {
 			for _, e := range v.elements {
 				target = fyne.CurrentApp().Driver().CanvasForObject(e.object)
@@ -675,7 +703,7 @@ func (r *viewRenderer) Refresh() {
 		r.objects = append(r.objects, e.object)
 	}
 	r.Layout(r.view.Size())
-	canvas.Refresh(r.view)
+	canvas.Refresh(r.view.owner)
 }
 
 type element struct {
