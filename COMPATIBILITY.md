@@ -104,6 +104,50 @@ its own fixed spacing and typography profile, including a 14px `rem`; it is not 
 Tailwind implementation. CSS inside Astro files or imported stylesheets requires browser
 measurements. A measured profile uses the browser's actual rectangles and computed styles.
 
+### Responsive source layout
+
+The opt-in responsive mode is a native implementation of a restricted, single-line
+[CSS Flexbox layout](https://www.w3.org/TR/css-flexbox-1/). It is activated by literal
+inline `display: "flex"` on a single root; the existing utility classes retain their
+prototype layout contract. Browser capture is used to verify the implementation, rather
+than to supply its positions.
+
+The root must have `width: "100%"`, an explicit pixel height and
+`boxSizing: "border-box"`. The entire subtree consists of empty container elements;
+containers with children must themselves use `display: "flex"`. Every flex item must
+declare a nonnegative pixel `flexBasis`, `minWidth: 0`, `minHeight: 0` and
+`boxSizing: "border-box"`. `flexGrow` defaults to 0 and `flexShrink` to 1; explicit zero
+factors remain zero. Sizes and spacing use numbers or `px`, not the prototype mapper's
+14px `rem` assumption. A dimension of zero remains distinct from an omitted dimension.
+
+Supported main axes are `row` and `column`, with one equal `gap` between items.
+`justifyContent` accepts `flex-start`, `flex-end`, `center`, `space-between`,
+`space-around` and `space-evenly`. `alignItems` and `alignSelf` accept `flex-start`,
+`flex-end`, `center` and `stretch`; `alignSelf: "auto"` inherits the container's setting.
+Stretch applies only to an unspecified cross dimension. A `100%` child dimension is
+supported only on the cross axis, against a definite parent size.
+
+Growth with a total factor below one consumes only that proportion of the available
+space. Shrinkage weights each factor by the inner flex base size; items freeze at
+their padding/border floor and remaining space is recalculated. Layout keeps source
+order and updates existing native objects on resize. Runtime validation checks the
+expanded tree, including component and list results, before it lays out the frame.
+
+This mode does not implement text or control intrinsic sizes, automatic/content/percentage
+bases, automatic minima, margins, wrapping, reverse directions, `order`, baseline alignment,
+min/max constraints, the CSS cascade, external stylesheets or arbitrary percentage sizing.
+Unsupported declarations or tree shapes fail explicitly. Measured profiles keep their
+existing exact-viewport restriction.
+
+The responsive corpus compares a rectangular layout through 224 → 368 → 512 → 368 → 224
+logical pixels at scale 1, then 224 pixels at scale 2, with a fixed height of 640 pixels.
+It includes distribution, growth, shrinkage, nested axes and cross alignment. Native
+geometry is checked against Chromium with a declared 1/64 CSS-pixel bound; every image
+comparison retains the zero-difference RGBA policy. Each native frame is also exported and
+rendered through the inverse pipeline for another zero-difference comparison. These
+selected integer-edge cases do not establish general subpixel rasterization or platform
+renderer equivalence.
+
 | Feature              | Current boundary                                                                                                                                                                      |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Geometry             | CSS pixel dimensions; viewport coordinates for roots; parent border-box coordinates for children                                                                                      |
