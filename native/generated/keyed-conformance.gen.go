@@ -29,12 +29,13 @@ func NewKeyedConformance(props webui.Scope, actions webui.Actions, backends ...w
 	}
 	state := webui.Scope{}
 	var view *webui.View
+	var generated *KeyedConformanceWidget
 	refresh := func() {
 		if view != nil {
 			view.Refresh()
 		}
 	}
-	view = webui.NewView(func() []webui.Node {
+	view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &KeyedConformanceWidget{View: v}; return generated }, func() []webui.Node {
 		active := map[string]bool{}
 		nodes := buildKeyedConformance_KeyedConformance_e88d309c(props, actions, refresh, state, active, "")
 		for key := range state {
@@ -49,7 +50,7 @@ func NewKeyedConformance(props webui.Scope, actions webui.Actions, backends ...w
 		return nil, err
 	}
 
-	return &KeyedConformanceWidget{View: view}, nil
+	return generated, nil
 }
 
 func buildKeyedConformance_ConditionalEditor_e88d309c(props webui.Scope, actions webui.Actions, refresh func(), state webui.Scope, active map[string]bool, prefix string) []webui.Node {

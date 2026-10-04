@@ -29,12 +29,13 @@ func NewConformance(props webui.Scope, actions webui.Actions, backends ...webui.
 	}
 	state := webui.Scope{}
 	var view *webui.View
+	var generated *ConformanceWidget
 	refresh := func() {
 		if view != nil {
 			view.Refresh()
 		}
 	}
-	view = webui.NewView(func() []webui.Node {
+	view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &ConformanceWidget{View: v}; return generated }, func() []webui.Node {
 		active := map[string]bool{}
 		nodes := buildConformance_Conformance_17a88bbb(props, actions, refresh, state, active, "")
 		for key := range state {
@@ -49,7 +50,7 @@ func NewConformance(props webui.Scope, actions webui.Actions, backends ...webui.
 		return nil, err
 	}
 
-	return &ConformanceWidget{View: view}, nil
+	return generated, nil
 }
 
 func buildConformance_Conformance_17a88bbb(props webui.Scope, actions webui.Actions, refresh func(), state webui.Scope, active map[string]bool, prefix string) []webui.Node {

@@ -29,12 +29,13 @@ func NewCounter(props webui.Scope, actions webui.Actions, backends ...webui.Back
 	}
 	state := webui.Scope{}
 	var view *webui.View
+	var generated *CounterWidget
 	refresh := func() {
 		if view != nil {
 			view.Refresh()
 		}
 	}
-	view = webui.NewView(func() []webui.Node {
+	view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &CounterWidget{View: v}; return generated }, func() []webui.Node {
 		active := map[string]bool{}
 		nodes := buildCounter_index_26df59de(props, actions, refresh, state, active, "")
 		for key := range state {
@@ -49,7 +50,7 @@ func NewCounter(props webui.Scope, actions webui.Actions, backends ...webui.Back
 		return nil, err
 	}
 
-	return &CounterWidget{View: view}, nil
+	return generated, nil
 }
 
 func buildCounter_Counter_fd415ca4(props webui.Scope, actions webui.Actions, refresh func(), state webui.Scope, active map[string]bool, prefix string) []webui.Node {

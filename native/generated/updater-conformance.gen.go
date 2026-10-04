@@ -29,12 +29,13 @@ func NewUpdaterConformance(props webui.Scope, actions webui.Actions, backends ..
 	}
 	state := webui.Scope{}
 	var view *webui.View
+	var generated *UpdaterConformanceWidget
 	refresh := func() {
 		if view != nil {
 			view.Refresh()
 		}
 	}
-	view = webui.NewView(func() []webui.Node {
+	view = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { generated = &UpdaterConformanceWidget{View: v}; return generated }, func() []webui.Node {
 		active := map[string]bool{}
 		nodes := buildUpdaterConformance_UpdaterConformance_cc5f4c8c(props, actions, refresh, state, active, "")
 		for key := range state {
@@ -49,7 +50,7 @@ func NewUpdaterConformance(props webui.Scope, actions webui.Actions, backends ..
 		return nil, err
 	}
 
-	return &UpdaterConformanceWidget{View: view}, nil
+	return generated, nil
 }
 
 func buildUpdaterConformance_CrossHookUnit_cc5f4c8c(props webui.Scope, actions webui.Actions, refresh func(), state webui.Scope, active map[string]bool, prefix string) []webui.Node {
