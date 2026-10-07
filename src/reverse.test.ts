@@ -564,3 +564,44 @@ test("emitted textarea Enter and disabled controls do not infer submit behavior"
     }),
   ).toThrow("multiline submit");
 });
+
+test("a web scene commit disabling or removing its field prevents subsequent submit", () => {
+  for (const invalidation of ["disabled", "removed"] as const) {
+    const field = node({
+      kind: "input",
+      text: "",
+      value: "initial",
+      events: { change: "change", submit: "submit" },
+    });
+    const scene = document([field]);
+    scene.requiredActions = ["change", "submit"];
+    const compiled = executeGenerated(
+      emitWebScene(scene, { name: "Scene", actionsModule: "./actions" }).preact,
+    );
+    const target = { value: "changed", disabled: false, isConnected: true };
+    const observed: string[] = [];
+    const actions = {
+      change() {
+        observed.push("change");
+        if (invalidation === "disabled") target.disabled = true;
+        else target.isConnected = false;
+      },
+      submit() {
+        observed.push("submit");
+      },
+    };
+    const fieldNode = compiled.Scene({ actions }).children[0] as VNode;
+    const input = (fieldNode.type as (props: Record<string, unknown>) => VNode)(
+      fieldNode.props,
+    );
+    const handlers = input.props as Record<string, (event: unknown) => void>;
+    handlers.onInput!({ currentTarget: target });
+    handlers.onKeyDown!({
+      currentTarget: target,
+      key: "Enter",
+      isComposing: false,
+      preventDefault() {},
+    });
+    expect(observed).toEqual(["change"]);
+  }
+});
