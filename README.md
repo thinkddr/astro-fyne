@@ -166,9 +166,25 @@ Open `/native-page/NativePage`. The fixture exports real native objects using th
 driver, so this example does not require a desktop window.
 
 The exporter captures the current frame. It preserves supported values, styles, resources
-and named event bindings; it does not translate Go function bodies or infer responsive
-layout from a screenshot. Interactive scenes need explicit action bindings and an
+and named event bindings. Set `PreserveLayout: true` to retain validated source Flexbox
+declarations from a generated responsive View. Arbitrary Go layouts and function bodies
+need explicit host contracts. Interactive scenes need explicit action bindings and an
 `--actions-module` exporting `actions`. See the [complete reverse guide](docs/reverse-conversion.md).
+
+Rebuild the exported scene as native widgets, including interactive scenes whose generated
+web island contains hydration code:
+
+```sh
+bun run to-fyne --scene artifacts/reverse/scene.json \
+  --out native/generated --name NativeScene
+bun run check --scene artifacts/reverse/scene.json \
+  --out native/generated --name NativeScene
+```
+
+Schema 1 scenes retain fixed boxes and local input editing. Schema 2 scenes retain the
+supported Flexbox declarations and resize without additional captures. Both generate native
+resources, themes and named actions. Supply matching fonts through `--fonts faces.json` or
+a host backend; the [reverse guide](docs/reverse-conversion.md) describes these boundaries.
 
 ## Commands
 
@@ -185,9 +201,10 @@ All conversion commands support `--help`. `bun run astro-fyne --help` lists the 
 | `bun run demo:scene`                        | Export the included native scene for reverse conversion |
 | `bun run demo:native`                       | Run the generated desktop example                       |
 
-Forward commands default to `astro-fyne.json`. Use `--config PATH`, `--entry NAME` and,
+Forward source commands default to `astro-fyne.json`. Use `--config PATH`, `--entry NAME` and,
 for a single measured entry, `--measurements PATH`. Reverse output is checked with
-`bun run to-web … --check`.
+`bun run to-web … --check`. Native scene input supports `to-fyne --scene …` and
+`check --scene …`, with `--out`, `--name`, optional `--package` and `--fonts`.
 
 ## Compatibility and visual accuracy
 
@@ -197,12 +214,13 @@ for a single measured entry, `--measurements PATH`. Reverse output is checked wi
 | Native output        | Fyne widgets, generated themes, explicit host actions, local PNG/JPEG resources and static TTF faces |
 | Responsive layout    | Explicit row/column Flexbox, boxes, one-line text, buttons, single-line inputs and bitmap leaves     |
 | Browser measurements | Fixed source/state/viewport/device-scale profiles with validated styles                              |
-| Reverse output       | Supported native scenes exported into frozen web frames, with named actions                          |
+| Reverse output       | Fixed native scenes or preserved source Flexbox, with values, resources and named actions            |
 | Still unsupported    | Arbitrary JS/Go, full CSS cascade, grid, wrapping/intrinsic layout, animations and browser APIs      |
 
 CI compares browser and native captures and retains the generated code, traces, scene files
-and pixel diffs. The current corpus includes **27 exact visual comparisons** with zero RGBA
-differences, plus control behavior and geometry checks. **All 22 responsive typography frames
+and pixel diffs. The current corpus includes **38 exact visual comparisons** with zero RGBA
+differences, plus **12 exact native scene reconstruction frames**, control behavior and
+geometry checks. **All 22 responsive typography frames
 still differ at zero tolerance.** Passing a profile certifies that profile only.
 
 Generation reports `pixelPerfectVerified: false`; generating code or matching rectangles
