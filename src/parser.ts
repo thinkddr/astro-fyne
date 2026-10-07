@@ -788,6 +788,11 @@ class Compiler {
         );
       case "get":
         return this.hasHostCall(value.object) || this.hasHostCall(value.key);
+      case "chain":
+        return (
+          this.hasHostCall(value.object) ||
+          value.accesses.some((access) => this.hasHostCall(access.key))
+        );
       case "binary":
         return this.hasHostCall(value.left) || this.hasHostCall(value.right);
       case "unary":
@@ -888,14 +893,44 @@ class Compiler {
       }
       return { kind: "name", name: node.text };
     }
+    if (
+      ts.isOptionalChain(node) &&
+      (ts.isPropertyAccessExpression(node) ||
+        ts.isElementAccessExpression(node))
+    ) {
+      const accesses: Extract<Expr, { kind: "chain" }>["accesses"] = [];
+      let base: ts.Expression = node;
+      // Do not unwrap parentheses here: (value?.a).b ends the chain, while
+      // value?.a.b skips both accesses only when value itself is nullish.
+      while (ts.isOptionalChain(base)) {
+        if (
+          ts.isPropertyAccessExpression(base) ||
+          ts.isElementAccessExpression(base)
+        ) {
+          const access = base;
+          accesses.unshift({
+            optional: !!access.questionDotToken,
+            key: ts.isPropertyAccessExpression(access)
+              ? literal(access.name.text)
+              : this.expr(access.argumentExpression, scope),
+          });
+          base = access.expression;
+        } else if (ts.isNonNullExpression(base)) {
+          base = base.expression;
+        } else {
+          this.fail(
+            scope.source,
+            base,
+            "Optional calls require an explicit native callable contract.",
+            scope,
+          );
+        }
+      }
+      // Read the base through the ordinary expression rules, preserving Astro
+      // SSR diagnostics and lexical/updater substitutions.
+      return { kind: "chain", object: this.expr(base, scope), accesses };
+    }
     if (ts.isPropertyAccessExpression(node)) {
-      if (node.questionDotToken)
-        this.fail(
-          scope.source,
-          node,
-          "Optional access requires an explicit binding in stage 01.",
-          scope,
-        );
       if (
         ts.isIdentifier(node.expression) &&
         node.expression.text === "Astro" &&
@@ -924,13 +959,6 @@ class Compiler {
       };
     }
     if (ts.isElementAccessExpression(node)) {
-      if (node.questionDotToken)
-        this.fail(
-          scope.source,
-          node,
-          "Optional access requires an explicit binding in stage 01.",
-          scope,
-        );
       return {
         kind: "get",
         object: this.expr(node.expression, scope),

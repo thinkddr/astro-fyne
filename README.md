@@ -14,6 +14,11 @@ errors. Universal 1:1 conversion is the project goal, not a capability of this r
 [Compatibility](COMPATIBILITY.md) · [Native integration](docs/native-runtime.md) ·
 [Reverse conversion](docs/reverse-conversion.md) · [Visual verification](docs/visual-verification.md)
 
+The source compiler lowers supported logic into Go with native state and widgets.
+Nullable property/index chains such as `profile?.details.name ?? "Guest"` retain
+JavaScript's short-circuit behavior in that generated Go. See the compatibility
+contract for the supported expressions, events and layouts.
+
 ## Get started
 
 Install [Bun](https://bun.sh/docs/installation) and the Go version declared in
