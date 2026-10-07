@@ -284,6 +284,23 @@ Native Go functions, server behavior, custom renderers, dynamic Fyne layouts and
 full state machine require additional source or host contracts. A frozen export describes one
 rendered state. Export success alone does not prove behavior or pixel equality.
 
+The opt-in schema 2 export preserves validated responsive source Flexbox metadata from
+`webui.View` snapshots. Resolved reference boxes stay separate from source declarations,
+including dimension presence and explicit zero growth/shrink factors. It requires a single
+visible responsive View at the viewport origin and size, with opaque square borderless root
+coverage. Arbitrary native layout algorithms and canvas composition remain unsupported in
+this mode. Default exports keep the schema 1 frozen contract.
+
+Both scene versions can generate native Go directly through `to-fyne --scene`, including
+interactive scenes that generate a web island outside the forward parser's source subset.
+Named callbacks, bitmap bytes and declared fonts remain explicit. Schema 1 reconstruction
+uses authored fixed geometry with local editing, fixed node structure, viewport and scale;
+it does not weaken browser measurement freshness. Schema 2 reconstruction uses the responsive
+native layout engine. Native scene import rejects unsupported multiline and placeholder paint.
+Static schema 2 TSX can also pass through the existing source compiler without measurements.
+Scene round trips preserve the exported state and declared events; they do not recover
+arbitrary Go/JavaScript function bodies or the original application's state machine.
+
 Raw native entries currently require a borderless host theme; Fyne's centered asymmetric
 input chrome needs a layered paint contract. Native textarea export is rejected until shared
 hard-line and soft-wrap behavior is defined. Focus, caret and selection are outside the scene

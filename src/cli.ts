@@ -326,6 +326,16 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     await reverseMain(argv);
     return;
   }
+  if (argv.includes("--scene")) {
+    if (!["generate", "check"].includes(command))
+      throw usageError(
+        "Scene input supports to-fyne/generate and check.",
+        command,
+      );
+    const { nativeSceneMain } = await import("./scene-native-cli.ts");
+    await nativeSceneMain(argv, command === "check");
+    return;
+  }
   const options: Options = {
     config: "astro-fyne.json",
     check: command === "check",

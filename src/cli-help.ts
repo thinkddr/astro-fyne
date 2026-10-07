@@ -45,6 +45,7 @@ Commands:
 
 Examples:
   bun run to-fyne
+  bun run to-fyne --scene scene.json --out native/generated --name NativePage
   bun run check --config path/to/astro-fyne.json
   bun run to-web --scene scene.json --out src/pages/native --name NativePage
 
@@ -77,6 +78,20 @@ Examples:
 Callbacks require an explicit client actions module. The scene is an initial
 snapshot; generated output does not certify visual equivalence.
 `;
+  const sceneHelp =
+    command === "generate" || command === "check"
+      ? `
+Native scene input:
+  bun run ${command === "generate" ? "to-fyne" : "check"} --scene <file> --out <directory> --name <Name> [options]
+  --scene <file>           Rebuild schema 1 fixed or schema 2 responsive native scenes.
+  --out <directory>        Destination for Name.gen.go and its generation report.
+  --name <Name>            Capitalized generated widget name.
+  --package <identifier>   Go package name. Default: generated.
+  --fonts <file>           JSON array of explicit TrueType face bindings;
+                           source paths are relative to this JSON file.
+  --check                 Verify scene output without writing it.
+`
+      : "";
   const descriptions = {
     generate: "Astro + Preact → Fyne Go widgets",
     check: "verify generated Fyne files without writing",
@@ -96,7 +111,7 @@ ${command === "analyze" ? "" : "  --measurements <file>    Override the selected
 Examples:
   bun run ${command === "generate" ? "to-fyne" : command}
   bun run ${command === "generate" ? "to-fyne" : command} --config path/to/astro-fyne.json --entry NativePage
-${command === "watch" ? "\nWatch performs an initial generation. Stop it with Ctrl+C.\n" : ""}${command === "analyze" ? "\nAnalysis goes to stdout as JSON and does not require gofmt.\n" : "\nGo's gofmt must be on PATH. Generated output does not certify visual equivalence.\n"}`;
+${command === "watch" ? "\nWatch performs an initial generation. Stop it with Ctrl+C.\n" : ""}${command === "analyze" ? "\nAnalysis goes to stdout as JSON and does not require gofmt.\n" : "\nGo's gofmt must be on PATH. Generated output does not certify visual equivalence.\n"}${sceneHelp}`;
 }
 
 /** Read CLI inputs with a path-specific error instead of an unlabelled JSON error. */
