@@ -122,10 +122,12 @@ test("optional calls, module host effects and SSR reads retain explicit diagnost
       "export function Page({t}) { return <p>{t?.('key')}</p>; }",
       "const value=null?.[t('key')]; export function Page() { return <p>{value}</p>; }",
       "export function Page() { return <p>{Astro.request?.url}</p>; }",
+      "export function Page({value}) { return <p>{value?.#hidden}</p>; }",
+      "export function Page({value}) { return <p>{value.#hidden}</p>; }",
     ]) {
       await writeFile(entry, source);
       await expect(compile(entry)).rejects.toThrow(
-        /Optional calls|initialization|Astro.request/,
+        /Optional calls|initialization|Astro.request|Private-field/,
       );
     }
   } finally {

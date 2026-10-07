@@ -908,6 +908,16 @@ class Compiler {
           ts.isElementAccessExpression(base)
         ) {
           const access = base;
+          if (
+            ts.isPropertyAccessExpression(access) &&
+            ts.isPrivateIdentifier(access.name)
+          )
+            this.fail(
+              scope.source,
+              access,
+              "Private-field access requires an explicit native class contract.",
+              scope,
+            );
           accesses.unshift({
             optional: !!access.questionDotToken,
             key: ts.isPropertyAccessExpression(access)
@@ -931,6 +941,13 @@ class Compiler {
       return { kind: "chain", object: this.expr(base, scope), accesses };
     }
     if (ts.isPropertyAccessExpression(node)) {
+      if (ts.isPrivateIdentifier(node.name))
+        this.fail(
+          scope.source,
+          node,
+          "Private-field access requires an explicit native class contract.",
+          scope,
+        );
       if (
         ts.isIdentifier(node.expression) &&
         node.expression.text === "Astro" &&
