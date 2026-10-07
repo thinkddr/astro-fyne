@@ -10,6 +10,26 @@ concurrency:
   group: conformance-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  fractional-shaping:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: native/go.mod
+          cache: false
+      - name: Prove the fractional-size regression and test the isolated correction
+        run: bash ci/fractional-text.sh
+      - name: Preserve the candidate source and regression evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fractional-text-${{ github.sha }}
+          path: |
+            artifacts/fractional-text
+            ci/typesetting-fractional_test.go
+          if-no-files-found: warn
   compiler-and-native:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 35
@@ -32,6 +52,7 @@ jobs:
           path: |
             artifacts
             native/generated
+            ci/fyne-texttrace_test.go
             native/go.sum
             native/go.mod
           if-no-files-found: warn

@@ -32,3 +32,5 @@ require (
 	golang.org/x/text v0.42.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace fyne.io/fyne/v2 => github.com/thinkddr/fyne/v2 v2.8.1-sytue.16

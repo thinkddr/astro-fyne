@@ -108,6 +108,16 @@ and refuses to overwrite files it does not own.
 
 ## Use widgets, themes and fonts
 
+The runtime and desktop demo pin the public [Sytue Fyne fork](https://github.com/thinkddr/fyne)
+at `v2.8.1-sytue.16`, including its pixel-position rounding and Entry scroll fixes.
+Imports remain `fyne.io/fyne/v2`. Go replacements do not propagate to a host module;
+apply the same replacement in your application's `go.mod`:
+
+```sh
+go mod edit -replace=fyne.io/fyne/v2=github.com/thinkddr/fyne/v2@v2.8.1-sytue.16
+go mod tidy
+```
+
 Add `github.com/thinkddr/astro-fyne/native` to your Go application. The generated constructor
 returns a native widget embedding `*webui.View`:
 
@@ -222,6 +232,11 @@ and pixel diffs. The current corpus includes **38 exact visual comparisons** wit
 differences, plus **12 exact native scene reconstruction frames**, control behavior and
 geometry checks. **All 22 responsive typography frames
 still differ at zero tolerance.** Passing a profile certifies that profile only.
+
+A separate [typography comparison](docs/visual-verification.md#isolate-native-text-differences)
+checks seven text rows at scales 1 and 2 against upstream Fyne and the published fork.
+It records actual shaped glyphs, baselines and strict pixel differences to guide native
+rendering improvements. It remains an uncertified diagnostic.
 
 Generation reports `pixelPerfectVerified: false`; generating code or matching rectangles
 is not proof of matching pixels. Follow the [visual verification guide](docs/visual-verification.md)
