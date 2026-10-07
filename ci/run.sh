@@ -7,6 +7,7 @@ bun install --frozen-lockfile --ignore-scripts
 # Start with actual Fyne objects, then compile the exported scene into a web page.
 (cd native && GOMAXPROCS=2 go run -p=1 ./reverse/cmd/scene-fixture --out ../artifacts/reverse)
 (cd native && GOMAXPROCS=2 go run -p=1 ./reverse/cmd/scene-fixture --controls --out ../artifacts/reverse-controls)
+bash ci/bidirectional.sh
 bun src/cli.ts reverse --scene artifacts/reverse/scene.json --out example/src/pages/reverse-generated --name ReverseGeometry --public-dir example/public
 bun src/cli.ts reverse --scene artifacts/reverse/scene.json --out example/src/pages/reverse-generated --name ReverseGeometry --public-dir example/public --check
 cp example/src/pages/reverse-generated/ReverseGeometry.* artifacts/reverse/
@@ -61,12 +62,18 @@ export ASTRO_FYNE_PRIMITIVE_SOURCE_HASH="$(bun -e 'console.log((await Bun.file("
 task_scale2_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-scale2-analysis.json").json()).sourceHash)')"
 bun run build:web
 bunx --no-install playwright install --with-deps chromium
-bunx --no-install astro preview --root example --host 127.0.0.1 --port 4321 > /tmp/astro-fyne-preview.log 2>&1 &
+# The shell owns this foreground process and its cleanup, including when Astro
+# detects an agent and would otherwise detach a preview server.
+bunx --no-install astro preview --ignore-lock --root example --host 127.0.0.1 --port 4321 > /tmp/astro-fyne-preview.log 2>&1 &
 task_preview_pid=$!
 trap 'kill "$task_preview_pid" 2>/dev/null || true' EXIT
 task_preview_ready=false
 for attempt in $(seq 1 60); do
-  if curl -fsS http://127.0.0.1:4321/geometry >/dev/null; then
+  if ! kill -0 "$task_preview_pid" 2>/dev/null; then
+    cat /tmp/astro-fyne-preview.log >&2
+    exit 1
+  fi
+  if curl -fsS http://127.0.0.1:4321/geometry >/dev/null 2>&1; then
     task_preview_ready=true
     break
   fi
@@ -129,7 +136,7 @@ if [[ "$task_native_test_status" -eq 0 ]]; then
   kill "$task_preview_pid"
   wait "$task_preview_pid" 2>/dev/null || true
   bun run build:web
-  bunx --no-install astro preview --root example --host 127.0.0.1 --port 4321 > /tmp/astro-fyne-preview.log 2>&1 &
+  bunx --no-install astro preview --ignore-lock --root example --host 127.0.0.1 --port 4321 > /tmp/astro-fyne-preview.log 2>&1 &
   task_preview_pid=$!
   task_preview_ready=false
   task_flex_first="${task_flex_cases%%$'\n'*}"
@@ -150,6 +157,7 @@ if [[ "$task_native_test_status" -eq 0 ]]; then
   fi
   bun capture/responsive-flex-reverse.ts --base-url http://127.0.0.1:4321 --out artifacts/responsive-flex
   bun capture/responsive-flex-reverse.ts --base-url http://127.0.0.1:4321 --out artifacts/responsive-bitmap --preset bitmap
+  bun capture/responsive-scene.ts http://127.0.0.1:4321 artifacts
   cd native
 fi
 task_comparison_status=0
@@ -175,11 +183,13 @@ while IFS= read -r task_flex_case; do
   task_flex_directory="../artifacts/responsive-flex/$task_flex_case"
   run_comparison "$task_flex_directory/comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_flex_directory/web.png" --native "$task_flex_directory/native.png" --out "$task_flex_directory/diff.png"
   run_comparison "$task_flex_directory/reverse-comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_flex_directory/native.png" --native "$task_flex_directory/reverse-web.png" --out "$task_flex_directory/reverse-diff.png"
+  run_comparison "$task_flex_directory/responsive-scene-comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_flex_directory/native.png" --native "$task_flex_directory/responsive-scene-web.png" --out "$task_flex_directory/responsive-scene-diff.png"
 done <<< "$task_flex_cases"
 while IFS= read -r task_bitmap_case; do
   task_bitmap_directory="../artifacts/responsive-bitmap/$task_bitmap_case"
   run_comparison "$task_bitmap_directory/comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_bitmap_directory/web.png" --native "$task_bitmap_directory/native.png" --out "$task_bitmap_directory/diff.png"
   run_comparison "$task_bitmap_directory/reverse-comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_bitmap_directory/native.png" --native "$task_bitmap_directory/reverse-web.png" --out "$task_bitmap_directory/reverse-diff.png"
+  run_comparison "$task_bitmap_directory/responsive-scene-comparison.json" go run ./visual/cmd/astro-fyne-compare --reference "$task_bitmap_directory/native.png" --native "$task_bitmap_directory/responsive-scene-web.png" --out "$task_bitmap_directory/responsive-scene-diff.png"
 done <<< "$task_bitmap_cases"
 # Typography is an explicitly uncertified diagnostic, separate from the exact
 # rectangle/bitmap gates. Keep every strict comparator result and fail if an

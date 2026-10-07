@@ -4,6 +4,12 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { inspectBitmap } from "./resources.ts";
+import {
+  sourceStyleCSS,
+  validateResponsiveScene,
+  validateSceneFlex,
+} from "./scene-layout.ts";
+import type { SceneFlex } from "./scene-layout.ts";
 
 const geometry = [
   "x",
@@ -35,6 +41,10 @@ const strings = [
 ] as const;
 export type SceneStyle = Record<(typeof geometry)[number], number> &
   Record<(typeof strings)[number], string> & { measured: boolean };
+export type SceneSourceStyle = Omit<SceneStyle, "measured"> & {
+  measured: false;
+  flex: SceneFlex;
+};
 export interface SceneNode {
   id: string;
   kind: "container" | "text" | "button" | "input" | "textarea" | "image";
@@ -50,6 +60,7 @@ export interface SceneNode {
   events?: { tap?: string; input?: string; change?: string; submit?: string };
   children: SceneNode[];
   resource?: string;
+  sourceStyle?: SceneSourceStyle;
 }
 export interface SceneResource {
   name: string;
@@ -61,7 +72,8 @@ export interface SceneResource {
   height: number;
 }
 export interface SceneDocument {
-  schema: 1;
+  schema: 1 | 2;
+  layout?: "flex";
   viewport: { width: number; height: number; scale: number };
   roots: SceneNode[];
   tokens: Record<string, string>;
@@ -186,6 +198,35 @@ function color(value: string, path: string): string {
     ? `rgb(${rgba[0]}, ${rgba[1]}, ${rgba[2]})`
     : `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${rgba[3]! / 255})`;
 }
+
+/** Resolve a validated solid scene color to native RGBA8 channels. */
+export function sceneColorRGBA(
+  value: string,
+): [number, number, number, number] {
+  const normalized = color(value, "color").toLowerCase().trim();
+  if (normalized === "transparent") return [0, 0, 0, 0];
+  if (normalized === "black") return [0, 0, 0, 255];
+  if (normalized === "white") return [255, 255, 255, 255];
+  if (normalized.startsWith("#")) {
+    let hex = normalized.slice(1);
+    if (hex.length <= 4)
+      hex = [...hex].map((character) => character + character).join("");
+    if (hex.length === 6) hex += "ff";
+    return [0, 2, 4, 6].map((offset) =>
+      parseInt(hex.slice(offset, offset + 2), 16),
+    ) as [number, number, number, number];
+  }
+  const channels = normalized
+    .slice(normalized.indexOf("(") + 1, -1)
+    .split(",")
+    .map(Number);
+  return [
+    channels[0]!,
+    channels[1]!,
+    channels[2]!,
+    channels.length === 4 ? Math.round(channels[3]! * 255) : 255,
+  ];
+}
 function style(value: unknown, path: string): SceneStyle {
   const source = record(value, path);
   fields(source, [...geometry, ...strings, "measured"], path);
@@ -231,10 +272,23 @@ export function validateSceneDocument(value: unknown): SceneDocument {
   const source = record(value, "$");
   fields(
     source,
-    ["schema", "viewport", "roots", "tokens", "resources", "requiredActions"],
+    [
+      "schema",
+      "viewport",
+      "roots",
+      "tokens",
+      "resources",
+      "requiredActions",
+      "layout",
+    ],
     "$",
   );
-  if (source.schema !== 1) fail("$.schema", "expected schema 1");
+  if (source.schema !== 1 && source.schema !== 2)
+    fail("$.schema", "expected schema 1 or 2");
+  if (
+    source.schema === 2 ? source.layout !== "flex" : source.layout !== undefined
+  )
+    fail("$.layout", "schema 2 requires layout:flex; schema 1 is frozen");
   const viewport = record(source.viewport, "$.viewport");
   fields(viewport, ["width", "height", "scale"], "$.viewport");
   const width = number(viewport.width, "$.viewport.width", Number.MIN_VALUE);
@@ -274,6 +328,7 @@ export function validateSceneDocument(value: unknown): SceneDocument {
           "events",
           "children",
           "resource",
+          "sourceStyle",
         ],
         location,
       );
@@ -292,6 +347,24 @@ export function validateSceneDocument(value: unknown): SceneDocument {
         style: style(node.style, `${location}.style`),
         children: [],
       } as SceneNode;
+      if (source.schema === 2) {
+        const declared = record(node.sourceStyle, `${location}.sourceStyle`);
+        if (declared.measured !== false)
+          fail(
+            `${location}.sourceStyle.measured`,
+            "source declarations cannot be measured",
+          );
+        const { flex, ...values } = declared;
+        output.sourceStyle = {
+          ...style({ ...values, measured: true }, `${location}.sourceStyle`),
+          measured: false,
+          flex: validateSceneFlex(flex, `${location}.sourceStyle.flex`),
+        };
+      } else if (node.sourceStyle !== undefined)
+        fail(
+          `${location}.sourceStyle`,
+          "responsive declarations require schema 2",
+        );
       ids.set(id, output);
       for (const key of [
         "text",
@@ -512,14 +585,17 @@ export function validateSceneDocument(value: unknown): SceneDocument {
       "$.requiredActions",
       "must match exactly the actions referenced by node events",
     );
-  return {
-    schema: 1,
+  const document: SceneDocument = {
+    schema: source.schema,
+    ...(source.schema === 2 ? { layout: "flex" as const } : {}),
     viewport: { width, height, scale },
     roots,
     tokens: { ...tokens } as Record<string, string>,
     resources,
     requiredActions: [...requiredActions].sort(),
   };
+  if (document.schema === 2) validateResponsiveScene(document);
+  return document;
 }
 
 const literal = (value: unknown) =>
@@ -602,9 +678,11 @@ export function emitWebScene(
   for (let suffix = 1; sceneIDs.has(rootID); suffix++)
     rootID = `fyne-root-${suffix}`;
   const staticScene = !hasControls && !document.requiredActions.length;
+  const responsive = document.schema === 2;
+  if (responsive) rootID = document.roots[0]!.id;
   const rules: string[] = [
-    `.${scope}{position:relative;box-sizing:border-box;width:${document.viewport.width}px;height:${document.viewport.height}px;margin:0;padding:0;border:0;overflow:hidden;${tokens}}`,
-    `.${scope} .af-node{box-sizing:border-box;position:absolute;margin:0;min-width:0;min-height:0;max-width:none;max-height:none;box-shadow:none;}`,
+    `.${scope}{position:relative;box-sizing:border-box;width:${responsive ? "100%" : `${document.viewport.width}px`};height:${document.viewport.height}px;margin:0;padding:0;border:0;overflow:hidden;${tokens}}`,
+    `.${scope} .af-node{box-sizing:border-box;position:${responsive ? "static" : "absolute"};margin:0;min-width:0;min-height:0;max-width:none;max-height:none;box-shadow:none;}`,
     `.${scope} button, .${scope} input, .${scope} textarea{appearance:none;}`,
     `.${scope} textarea{resize:none;}`,
     `.${scope} img{object-fit:fill;}`,
@@ -618,16 +696,22 @@ export function emitWebScene(
     const index = nodeCount++;
     const className = `${scope}-n${index}`;
     const s = node.style;
-    rules.push(
-      `.${scope} .${className}{left:${s.x - parentBorder}px;top:${s.y - parentBorder}px;width:${s.width}px;height:${s.height}px;padding:${s.paddingTop}px ${s.paddingRight}px ${s.paddingBottom}px ${s.paddingLeft}px;gap:${s.gap}px;flex-direction:${s.direction || "column"};background:${color(s.background, "background")};color:${color(s.color, "color")};border:${s.borderWidth}px solid ${color(s.borderColor, "borderColor")};border-radius:${s.radius}px;font-size:${s.fontSize}px;line-height:${s.lineHeight}px;font-weight:${s.fontWeight || 400};font-family:${s.fontFamily || "inherit"};font-style:${s.fontStyle || "normal"};text-align:${s.textAlign || "left"};white-space:${s.whiteSpace || "normal"};display:${s.display || "block"};opacity:${s.opacity};}`,
-    );
-    const attrs = `id={${literal(node.id)}} class={${literal(`af-node ${className}`)}}${node.accessibleLabel ? ` aria-label={${literal(node.accessibleLabel)}}` : ""}`;
+    if (!responsive)
+      rules.push(
+        `.${scope} .${className}{left:${s.x - parentBorder}px;top:${s.y - parentBorder}px;width:${s.width}px;height:${s.height}px;padding:${s.paddingTop}px ${s.paddingRight}px ${s.paddingBottom}px ${s.paddingLeft}px;gap:${s.gap}px;flex-direction:${s.direction || "column"};background:${color(s.background, "background")};color:${color(s.color, "color")};border:${s.borderWidth}px solid ${color(s.borderColor, "borderColor")};border-radius:${s.radius}px;font-size:${s.fontSize}px;line-height:${s.lineHeight}px;font-weight:${s.fontWeight || 400};font-family:${s.fontFamily || "inherit"};font-style:${s.fontStyle || "normal"};text-align:${s.textAlign || "left"};white-space:${s.whiteSpace || "normal"};display:${s.display || "block"};opacity:${s.opacity};}`,
+      );
+    const classes = `${node.id === rootID && responsive ? scope + " " : ""}af-node ${className}`;
+    const sourceCSS = responsive
+      ? sourceStyleCSS(node.sourceStyle!)
+      : undefined;
+    const inline = sourceCSS ? ` style={${literal(sourceCSS)}}` : "";
+    const attrs = `id={${literal(node.id)}}${responsive && staticScene ? "" : ` class={${literal(classes)}}`}${inline}${node.accessibleLabel ? ` aria-label={${literal(node.accessibleLabel)}}` : ""}`;
     if (node.kind === "input" || node.kind === "textarea") {
       if (node.placeholderColor)
         rules.push(
           `.${scope} .${className}::placeholder{color:${color(node.placeholderColor, "placeholderColor")};opacity:1;font:inherit;line-height:inherit;}`,
         );
-      return `<${name}Field id={${literal(node.id)}} className={${literal(`af-node ${className}`)}} initial={${literal(node.value ?? "")}} placeholder={${literal(node.placeholder ?? "")}} label={${literal(node.accessibleLabel ?? node.placeholder ?? "")}} disabled={${!!node.disabled}} multiline={${node.kind === "textarea"}} input={${literal(node.events?.input)}} change={${literal(node.events?.change)}} submit={${literal(node.events?.submit)}} actions={boundActions} />`;
+      return `<${name}Field id={${literal(node.id)}} className={${literal(classes)}}${inline} initial={${literal(node.value ?? "")}} placeholder={${literal(node.placeholder ?? "")}} label={${literal(node.accessibleLabel ?? node.placeholder ?? "")}} disabled={${!!node.disabled}} multiline={${node.kind === "textarea"}} input={${literal(node.events?.input)}} change={${literal(node.events?.change)}} submit={${literal(node.events?.submit)}} actions={boundActions} />`;
     }
     if (node.kind === "image")
       return `<img ${attrs} src={${literal("/" + resources.get(node.resource!)!.path)}} alt={${literal(node.accessibleLabel ?? "")}} />`;
@@ -637,6 +721,9 @@ export function emitWebScene(
     return `<${tag} ${attrs}${node.labelFor ? ` htmlFor={${literal(node.labelFor)}}` : ""}>{${literal(node.text ?? "")}}${node.children.map((child) => render(child, s.borderWidth)).join("")}</${tag}>`;
   };
   const body = document.roots.map((node) => render(node, 0)).join("\n");
+  const markup = responsive
+    ? body
+    : `<main id={${literal(rootID)}} class={${literal(scope)}}>${body}</main>`;
   const css = `/* Code generated by astro-fyne. DO NOT EDIT.\n * SPDX-License-Identifier: Apache-2.0\n * Geometry is a frozen scene; visual parity requires a comparison. */\n${rules.join("\n")}\n`;
   const load = actionsModule
     ? `useEffect(()=>{ if(actions) return; let active=true; import(${actionsModule}).then(module=>{const next=module.actions as ${name}Actions; require${name}Actions(next); if(active) setLoaded(next);}).catch(error=>{if(active) setFailure(error instanceof globalThis.Error?error.message:globalThis.String(error));}); return()=>{active=false;}; },[actions]);`
@@ -644,9 +731,9 @@ export function emitWebScene(
   const header =
     "// Code generated by astro-fyne. DO NOT EDIT.\n// SPDX-License-Identifier: Apache-2.0\n";
   const preact = staticScene
-    ? `${header}import ${literal(`./${name}.css`)};\nexport function ${name}(){return <main id={${literal(rootID)}} class={${literal(scope)}}>${body}</main>;}\nexport default ${name};\n`
-    : `${header}// Scene data is escaped; host action code remains explicit.\nimport {useEffect,useRef,useState} from "preact/hooks";\nimport type {JSX} from "preact";\nimport ${literal(`./${name}.css`)};\nexport type ${name}Actions=Record<string,((value?:string)=>unknown)|undefined>;\nexport interface ${name}Props {actions?:${name}Actions;}\nconst requiredActions=${literal(document.requiredActions)};\nexport function require${name}Actions(actions:${name}Actions):void { for(const id of requiredActions) {if(!actions||!globalThis.Object.prototype.hasOwnProperty.call(actions,id)||typeof actions[id]!=="function") throw new globalThis.Error("Missing native scene action: "+id);} }\nfunction ${name}Field({id,className,initial,placeholder,label,disabled,multiline,input,change,submit,actions}:{id:string;className:string;initial:string;placeholder:string;label:string;disabled:boolean;multiline:boolean;input?:string;change?:string;submit?:string;actions:${name}Actions}) {\n const [value,setValue]=useState(initial); const committed=useRef(initial); const dirty=useRef(false);const current=useRef(initial);\n const commit=(next:string)=>{if(disabled)return; const changed=dirty.current&&next!==committed.current; committed.current=next;dirty.current=false;if(changed&&change)actions[change]!(next);};\n const handlers={id,class:className,value,placeholder,disabled,"aria-label":label||undefined,name:id,onFocus:(event:JSX.TargetedFocusEvent<HTMLInputElement|HTMLTextAreaElement>)=>{committed.current=event.currentTarget.value;dirty.current=false;},onInput:(event:JSX.TargetedInputEvent<HTMLInputElement|HTMLTextAreaElement>)=>{if(disabled)return;const next=event.currentTarget.value;if(next===current.current)return;current.current=next;setValue(next);dirty.current=true;if(input)actions[input]!(next);},onBlur:(event:JSX.TargetedFocusEvent<HTMLInputElement|HTMLTextAreaElement>)=>commit(event.currentTarget.value),onKeyDown:(event:JSX.TargetedKeyboardEvent<HTMLInputElement|HTMLTextAreaElement>)=>{if(disabled||multiline||event.key!=="Enter"||event.isComposing)return;event.preventDefault();commit(event.currentTarget.value);if(submit)actions[submit]!(event.currentTarget.value);}};\n return multiline?<textarea {...handlers}/>:<input type="text" {...handlers}/>;\n}\nexport function ${name}({actions}:${name}Props={}) {const [loaded,setLoaded]=useState<${name}Actions|undefined>(undefined);const [failure,setFailure]=useState("");${load}\n if(failure)throw new globalThis.Error(failure);const boundActions=actions??loaded${document.requiredActions.length ? "" : "??{}"};if(!boundActions)return null;require${name}Actions(boundActions);\n return <main id={${literal(rootID)}} class={${literal(scope)}}>${body}</main>;\n}\nexport default ${name};\n`;
-  const astro = `---\n${header}import ${name} from ${componentImport};\n---\n<!doctype html>\n<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/><title>${name}</title></head><body><${name} client:only="preact" /></body></html>\n<style is:global>html,body{margin:0;padding:0;overflow:hidden;}</style>\n`;
+    ? `${header}${responsive ? "" : `import ${literal(`./${name}.css`)};\n`}export function ${name}(){return ${markup};}\nexport default ${name};\n`
+    : `${header}// Scene data is escaped; host action code remains explicit.\nimport {useEffect,useRef,useState} from "preact/hooks";\nimport type {JSX} from "preact";\nimport ${literal(`./${name}.css`)};\nexport type ${name}Actions=Record<string,((value?:string)=>unknown)|undefined>;\nexport interface ${name}Props {actions?:${name}Actions;}\nconst requiredActions=${literal(document.requiredActions)};\nexport function require${name}Actions(actions:${name}Actions):void { for(const id of requiredActions) {if(!actions||!globalThis.Object.prototype.hasOwnProperty.call(actions,id)||typeof actions[id]!=="function") throw new globalThis.Error("Missing native scene action: "+id);} }\nfunction ${name}Field({id,className,style,initial,placeholder,label,disabled,multiline,input,change,submit,actions}:{id:string;className:string;style?:JSX.CSSProperties;initial:string;placeholder:string;label:string;disabled:boolean;multiline:boolean;input?:string;change?:string;submit?:string;actions:${name}Actions}) {\n const [value,setValue]=useState(initial); const committed=useRef(initial); const dirty=useRef(false);const current=useRef(initial);\n const commit=(next:string)=>{if(disabled)return; const changed=dirty.current&&next!==committed.current; committed.current=next;dirty.current=false;if(changed&&change)actions[change]!(next);};\n const handlers={id,class:className,style,value,placeholder,disabled,"aria-label":label||undefined,name:id,onFocus:(event:JSX.TargetedFocusEvent<HTMLInputElement|HTMLTextAreaElement>)=>{committed.current=event.currentTarget.value;dirty.current=false;},onInput:(event:JSX.TargetedInputEvent<HTMLInputElement|HTMLTextAreaElement>)=>{if(disabled)return;const next=event.currentTarget.value;if(next===current.current)return;current.current=next;setValue(next);dirty.current=true;if(input)actions[input]!(next);},onBlur:(event:JSX.TargetedFocusEvent<HTMLInputElement|HTMLTextAreaElement>)=>commit(event.currentTarget.value),onKeyDown:(event:JSX.TargetedKeyboardEvent<HTMLInputElement|HTMLTextAreaElement>)=>{if(disabled||multiline||event.key!=="Enter"||event.isComposing)return;event.preventDefault();const field=event.currentTarget;const submitted=field.value;commit(submitted);if(submit&&field.disabled!==true&&field.isConnected!==false)actions[submit]!(submitted);}};\n return multiline?<textarea {...handlers}/>:<input type="text" {...handlers}/>;\n}\nexport function ${name}({actions}:${name}Props={}) {const [loaded,setLoaded]=useState<${name}Actions|undefined>(undefined);const [failure,setFailure]=useState("");${load}\n if(failure)throw new globalThis.Error(failure);const boundActions=actions??loaded${document.requiredActions.length ? "" : "??{}"};if(!boundActions)return null;require${name}Actions(boundActions);\n return ${markup};\n}\nexport default ${name};\n`;
+  const astro = `---\n${header}import ${name} from ${componentImport};\n${responsive ? `import ${literal(`./${name}.css`)};\n` : ""}---\n<!doctype html>\n<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/><title>${name}</title></head><body><${name} client:only="preact" /></body></html>\n<style is:global>html,body{margin:0;padding:0;overflow:hidden;}</style>\n`;
   return {
     astro,
     preact,
@@ -674,7 +761,9 @@ export function emitWebScene(
       ),
       visualVerified: false,
       warnings: [
-        "This is a frozen laid-out scene, not a translation of arbitrary Go source or callback code.",
+        responsive
+          ? "Responsive Flexbox declarations are preserved; values and named callback boundaries describe the exported state."
+          : "This is a frozen laid-out scene, not a translation of arbitrary Go source or callback code.",
         "Font-family assertions require matching browser font resources; pixel equality has not been verified.",
       ],
     },
