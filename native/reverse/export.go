@@ -70,6 +70,14 @@ func Export(root fyne.CanvasObject, opts Options) (Document, error) {
 		return Document{}, err
 	}
 	e.doc.Roots = append(e.doc.Roots, node)
+	if opts.PreserveLayout {
+		e.doc.Schema, e.doc.Layout = 2, "flex"
+		rootOnly := node
+		rootOnly.Children = nil
+		if !coversViewport([]Node{rootOnly}, opts.Viewport, 0, 0) {
+			return Document{}, fmt.Errorf("reverse: responsive export requires an opaque square borderless root covering the viewport")
+		}
+	}
 	if err := validateNodes(e.doc.Roots); err != nil {
 		return Document{}, err
 	}
@@ -97,6 +105,9 @@ func Export(root fyne.CanvasObject, opts Options) (Document, error) {
 		return Document{}, fmt.Errorf("reverse: CanvasBackground is a nil color")
 	}
 	if !coversViewport(e.doc.Roots, opts.Viewport, 0, 0) {
+		if opts.PreserveLayout {
+			return Document{}, fmt.Errorf("reverse: responsive export requires an opaque square borderless root covering the viewport; canvas composition is not represented by schema 2")
+		}
 		if opts.CanvasBackground == nil {
 			return Document{}, fmt.Errorf("reverse: tree does not guarantee opaque viewport coverage; CanvasBackground must explicitly assert the actual canvas background or color.Transparent")
 		}
@@ -192,6 +203,50 @@ func (e *exporter) object(object fyne.CanvasObject, path string) (Node, error) {
 		if snapshot.Measured && (snapshot.CaptureScale != e.opts.Viewport.Scale || snapshot.Size != fyne.NewSize(e.opts.Viewport.Width, e.opts.Viewport.Height)) {
 			return Node{}, fmt.Errorf("reverse: View %q capture viewport or scale differs from export", id)
 		}
+		if e.opts.PreserveLayout {
+			if path != "native-root" || !snapshot.Responsive || len(snapshot.Roots) != 1 || snapshot.Size != fyne.NewSize(e.opts.Viewport.Width, e.opts.Viewport.Height) || object.Position() != (fyne.Position{}) || !object.Visible() {
+				return Node{}, fmt.Errorf("reverse: preserving layout requires a visible responsive View at the viewport origin and size")
+			}
+			if _, hasID := e.opts.IDs[object]; hasID {
+				return Node{}, fmt.Errorf("reverse: responsive View wrapper IDs have no web node; bind IDs to its source nodes")
+			}
+			if bindings, exists := e.opts.Bindings[object]; exists {
+				if bindings != (Events{}) {
+					return Node{}, fmt.Errorf("reverse: responsive View wrapper has no portable events")
+				}
+				e.usedBindings[object] = true
+			}
+			delete(e.ids, id) // The transparent implementation wrapper has no scene node.
+			return e.snapshot(snapshot.Roots[0])
+		}
+		// Implementation wrappers must not steal an existing source node ID.
+		// Explicit host wrapper IDs still fail on a collision, as ordinary IDs do.
+		if _, explicit := e.opts.IDs[object]; !explicit {
+			sourceIDs := map[string]bool{}
+			var collect func([]webui.SnapshotNode)
+			collect = func(nodes []webui.SnapshotNode) {
+				for _, node := range nodes {
+					sourceID := node.Node.ID
+					if alias, ok := e.opts.IDs[node.Object]; ok {
+						sourceID = alias
+					}
+					sourceIDs[sourceID] = true
+					collect(node.Children)
+				}
+			}
+			collect(snapshot.Roots)
+			if sourceIDs[id] {
+				delete(e.ids, id)
+				for suffix := 1; ; suffix++ {
+					candidate := fmt.Sprintf("%s-view-%d", id, suffix)
+					if !sourceIDs[candidate] && !e.ids[candidate] {
+						id, n.ID = candidate, candidate
+						e.ids[id] = true
+						break
+					}
+				}
+			}
+		}
 		n.Kind = "container"
 		for _, child := range snapshot.Roots {
 			exported, err := e.snapshot(child)
@@ -204,6 +259,9 @@ func (e *exporter) object(object fyne.CanvasObject, path string) (Node, error) {
 			return Node{}, err
 		}
 		return n, validateStyle(n.Style)
+	}
+	if e.opts.PreserveLayout {
+		return Node{}, fmt.Errorf("reverse: preserving layout requires a responsive View; arbitrary Fyne layouts cannot be inferred")
 	}
 	var callbacks Events
 	switch o := object.(type) {
@@ -356,6 +414,14 @@ func (e *exporter) snapshot(source webui.SnapshotNode) (Node, error) {
 	}
 	s := source.Node
 	n := Node{ID: id, Kind: s.Kind, Text: s.Text, Value: s.Value, Placeholder: s.Placeholder, PlaceholderColor: source.PlaceholderColor, Disabled: s.Disabled, AccessibleLabel: s.AccessibleLabel, LabelFor: s.LabelFor, Style: s.Style, Children: []Node{}}
+	if e.opts.PreserveLayout {
+		if source.SourceStyle == nil || source.SourceStyle.Flex == nil {
+			return Node{}, fmt.Errorf("reverse: %q is missing responsive source declarations", id)
+		}
+		style := *source.SourceStyle
+		style.Opacity = 1
+		n.SourceStyle = &style
+	}
 	if strings.ContainsAny(n.Text, "\r\n\t") || n.Style.WhiteSpace == "nowrap" && !portableSingleLine(n.Text) {
 		return Node{}, fmt.Errorf("reverse: View %q literal whitespace/newlines are not represented by schema 1", id)
 	}
@@ -382,6 +448,9 @@ func (e *exporter) snapshot(source webui.SnapshotNode) (Node, error) {
 	if n.Text != "" || n.Kind == "input" || n.Kind == "textarea" {
 		if family, ok := e.opts.NodeFontFamilies[id]; ok {
 			n.Style.FontFamily = family
+			if n.SourceStyle != nil {
+				n.SourceStyle.FontFamily = family
+			}
 			e.usedFonts[id] = true
 		}
 		if strings.TrimSpace(n.Style.FontFamily) == "" {
@@ -397,6 +466,9 @@ func (e *exporter) snapshot(source webui.SnapshotNode) (Node, error) {
 	}
 	if s.OnCommit != nil {
 		callbacks.Change = "required"
+	}
+	if s.OnSubmit != nil {
+		callbacks.Submit = "required"
 	}
 	if err := e.events(&n, source.Object, callbacks); err != nil {
 		return Node{}, err

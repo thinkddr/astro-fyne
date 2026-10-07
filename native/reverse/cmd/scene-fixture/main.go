@@ -24,15 +24,21 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	webui "github.com/thinkddr/astro-fyne/native"
+	"github.com/thinkddr/astro-fyne/native/generated"
 	"github.com/thinkddr/astro-fyne/native/reverse"
 )
 
 func main() {
 	out := flag.String("out", "", "write scene.json and native.png in this directory; otherwise print the scene")
 	controls := flag.Bool("controls", false, "export an initial input/button scene and native-behavior.json event oracle instead of PNG")
+	responsive := flag.String("responsive", "", "preserve source layout: flex or bitmap")
 	flag.Parse()
 	var err error
-	if *controls {
+	if *controls && *responsive != "" {
+		err = fmt.Errorf("--controls and --responsive are separate fixtures")
+	} else if *responsive != "" {
+		err = runResponsive(*out, *responsive)
+	} else if *controls {
 		err = runControls(*out)
 	} else {
 		err = run(*out)
@@ -41,6 +47,54 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// Export one initial responsive source frame. Later corpus widths must be
+// reconstructed from these declarations, never from additional measured scenes.
+func runResponsive(out, preset string) error {
+	if out == "" {
+		return fmt.Errorf("--responsive requires --out")
+	}
+	a := test.NewApp()
+	defer a.Quit()
+	var view *webui.View
+	var object fyne.CanvasObject
+	var sourceHash string
+	height := float32(640)
+	switch preset {
+	case "flex":
+		v, err := generated.NewResponsiveFlex(webui.Scope{}, webui.Actions{})
+		if err != nil {
+			return err
+		}
+		view, object, sourceHash = v.View, v, generated.ResponsiveFlexSourceHash
+	case "bitmap":
+		v, err := generated.NewResponsiveBitmap(webui.Scope{}, webui.Actions{})
+		if err != nil {
+			return err
+		}
+		view, object, sourceHash, height = v.View, v, generated.ResponsiveBitmapSourceHash, 96
+	default:
+		return fmt.Errorf("--responsive must be flex or bitmap")
+	}
+	c := software.NewCanvas()
+	c.SetPadded(false)
+	c.Resize(fyne.NewSize(224, height))
+	c.SetContent(object)
+	if err := view.BindCanvas(c); err != nil {
+		return err
+	}
+	scene, err := reverse.Export(object, reverse.Options{Viewport: reverse.Viewport{Width: 224, Height: height, Scale: 1}, Canvas: c, PreserveLayout: true})
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(out, 0755); err != nil {
+		return err
+	}
+	if err := writeJSON(filepath.Join(out, "scene.json"), scene); err != nil {
+		return err
+	}
+	return writeJSON(filepath.Join(out, "source.json"), map[string]any{"schema": 1, "sourceHash": sourceHash})
 }
 
 type behaviorEvent struct {

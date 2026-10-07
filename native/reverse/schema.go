@@ -46,6 +46,9 @@ type Node struct {
 	Events           *Events     `json:"events,omitempty"`
 	Children         []Node      `json:"children"`
 	Resource         string      `json:"resource,omitempty"`
+	// SourceStyle is present only in schema 2 responsive exports. Style still
+	// records the resolved reference frame; source dimensions retain presence.
+	SourceStyle *webui.Style `json:"sourceStyle,omitempty"`
 }
 
 // Resource is an immutable bitmap. Content is JSON base64 via encoding/json.
@@ -68,6 +71,7 @@ type Document struct {
 	Tokens          map[string]string `json:"tokens"`
 	Resources       []Resource        `json:"resources"`
 	RequiredActions []string          `json:"requiredActions"`
+	Layout          string            `json:"layout,omitempty"`
 }
 
 // Options makes external contracts explicit. Export must be called on Fyne's UI
@@ -76,6 +80,9 @@ type Document struct {
 // callbacks without corresponding bindings are errors.
 type Options struct {
 	Viewport Viewport
+	// PreserveLayout exports schema 2 from a single responsive webui.View root.
+	// Arbitrary Fyne layout algorithms have no portable declaration contract.
+	PreserveLayout bool
 	// Canvas, when supplied, verifies the declared viewport and scale against
 	// the actual native canvas. A focused frame has no portable focus contract yet.
 	Canvas fyne.Canvas

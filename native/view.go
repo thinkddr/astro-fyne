@@ -34,12 +34,17 @@ type Node struct {
 	CaptureSignature          string
 	AccessibleLabel, LabelFor string
 	Disabled                  bool
-	Style                     Style
-	Children                  []Node
-	OnTap                     func()
-	OnChange                  func(string)
+	// LocalValue lets an imported scene field retain its browser-style local
+	// editing state across host refreshes; Value supplies its initial text.
+	LocalValue bool
+	Style      Style
+	Children   []Node
+	OnTap      func()
+	OnChange   func(string)
 	// OnCommit represents HTML change; OnChange represents immediate input.
-	OnCommit      func(string)
+	OnCommit func(string)
+	// OnSubmit is a single-line Return action, after a deduplicated commit.
+	OnSubmit      func(string)
 	ImageResource fyne.Resource
 }
 
@@ -88,6 +93,7 @@ type View struct {
 	roots             []*element
 	measurements      map[string]Style
 	measurementState  string
+	sceneLayout       bool
 	viewport          fyne.Size
 	captureScale      float32
 	boundCanvas       fyne.Canvas
@@ -152,6 +158,9 @@ type SnapshotNode struct {
 	Object           fyne.CanvasObject
 	Children         []SnapshotNode
 	PlaceholderColor string
+	// SourceStyle preserves validated responsive declarations separately from
+	// resolved geometry. Frozen exports continue to omit these declarations.
+	SourceStyle *Style
 }
 
 // ViewSnapshot describes the existing frame. Size and CaptureScale let exporters
@@ -162,6 +171,7 @@ type ViewSnapshot struct {
 	CaptureScale float32
 	Measured     bool
 	HasFocus     bool
+	Responsive   bool
 }
 
 // Snapshot copies the valid current frame on Fyne's event goroutine without
@@ -170,10 +180,17 @@ func (v *View) Snapshot() (ViewSnapshot, error) {
 	if err := errors.Join(v.Error(), v.ValidateCanvas()); err != nil {
 		return ViewSnapshot{}, err
 	}
+	portableLayout := v.responsive && len(v.measurements) == 0 && v.sourceLayoutMatchesFrame()
 	var freeze func([]*element) []SnapshotNode
 	freeze = func(elements []*element) []SnapshotNode {
 		out := make([]SnapshotNode, len(elements))
 		for i, e := range elements {
+			var sourceStyle *Style
+			if portableLayout {
+				copy := []Node{{Style: e.style}}
+				freezeFlexStyles(copy)
+				sourceStyle = &copy[0].Style
+			}
 			n := e.node
 			n.Children = nil
 			n.Style = e.style
@@ -203,7 +220,7 @@ func (v *View) Snapshot() (ViewSnapshot, error) {
 					placeholderColor = colorCSS(c)
 				}
 			}
-			out[i] = SnapshotNode{Node: n, Object: e.object, Children: freeze(e.children), PlaceholderColor: placeholderColor}
+			out[i] = SnapshotNode{Node: n, Object: e.object, Children: freeze(e.children), PlaceholderColor: placeholderColor, SourceStyle: sourceStyle}
 		}
 		return out
 	}
@@ -225,7 +242,7 @@ func (v *View) Snapshot() (ViewSnapshot, error) {
 			hasFocus = true
 		}
 	}
-	return ViewSnapshot{Roots: freeze(v.roots), Size: v.Size(), CaptureScale: v.captureScale, Measured: len(v.measurements) != 0, HasFocus: hasFocus}, nil
+	return ViewSnapshot{Roots: freeze(v.roots), Size: v.Size(), CaptureScale: v.captureScale, Measured: len(v.measurements) != 0, HasFocus: hasFocus, Responsive: portableLayout}, nil
 }
 
 // SetAutoRefreshEvents controls automatic source refresh after callbacks.
@@ -242,7 +259,7 @@ func (v *View) refreshAfterEvent() {
 // must surface this error; a measured page with an error is not parity certified.
 func (v *View) Error() error {
 	var editingErr error
-	if len(v.measurements) != 0 {
+	if len(v.measurements) != 0 && !v.sceneLayout {
 		editingErr = v.uncommittedInputError()
 	}
 	return errors.Join(v.err, v.layoutErr, v.canvasErr, v.navigationErr, editingErr, v.responsiveFrameError())
@@ -334,7 +351,18 @@ func (v *View) ValidateViewport(size fyne.Size) error {
 // ApplyMeasurements validates every node before replacing the captured profile.
 // Missing/extra IDs are errors. A profile becomes stale when visual state changes.
 func (v *View) ApplyMeasurements(measurements map[string]Style) error {
-	if err := v.uncommittedInputError(); err != nil {
+	return v.applyLayout(measurements, false)
+}
+
+// ApplySceneLayout applies authored fixed boxes from an exported native scene.
+// Unlike a browser measurement profile, input values may change within those
+// boxes. Viewport, scale and node IDs remain fixed; this never certifies pixels.
+func (v *View) ApplySceneLayout(layout map[string]Style) error {
+	return v.applyLayout(layout, true)
+}
+
+func (v *View) applyLayout(measurements map[string]Style, scene bool) error {
+	if err := v.uncommittedInputError(); err != nil && !scene {
 		return err
 	}
 	ids := make(map[string]bool, len(v.elements))
@@ -373,6 +401,10 @@ func (v *View) ApplyMeasurements(measurements map[string]Style) error {
 		v.measurements[id] = style
 	}
 	v.measurementState = visualState(v.nodes)
+	v.sceneLayout = scene
+	if scene {
+		v.measurementState = frameState(v.nodes, true)
+	}
 	v.Refresh()
 	return errors.Join(v.err, v.canvasErr)
 }
@@ -380,6 +412,7 @@ func (v *View) ApplyMeasurements(measurements map[string]Style) error {
 // ClearMeasurements returns to source layout and removes capture certification.
 func (v *View) ClearMeasurements() {
 	v.measurements, v.measurementState = nil, ""
+	v.sceneLayout = false
 	v.Refresh()
 }
 
@@ -441,7 +474,7 @@ func (v *View) reconcile() {
 	freezeFlexStyles(nodes)
 	var profileError error
 	if len(v.measurements) > 0 {
-		if visualState(nodes) != v.measurementState {
+		if frameState(nodes, v.sceneLayout) != v.measurementState {
 			profileError = fmt.Errorf("webui: visual state changed; supply a measurement profile for the new state")
 		}
 		for id := range ids {
@@ -586,6 +619,12 @@ func validateNodes(nodes []Node, ids, identities map[string]bool) error {
 		if n.Kind != "container" && len(n.Children) > 0 {
 			return fmt.Errorf("webui: %s %q must carry its text directly, not nested children", n.Kind, n.ID)
 		}
+		if n.OnSubmit != nil && n.Kind != "input" {
+			return fmt.Errorf("webui: submit on %q requires a single-line input", n.ID)
+		}
+		if n.LocalValue && n.Kind != "input" && n.Kind != "textarea" {
+			return fmt.Errorf("webui: local editing state on %q requires an input", n.ID)
+		}
 		if n.Style.Measured {
 			return fmt.Errorf("webui: node %q must supply browser geometry through ApplyMeasurements", n.ID)
 		}
@@ -650,6 +689,12 @@ func validateStyle(id string, s Style) error {
 func finite(v float32) bool { return !math.IsNaN(float64(v)) && !math.IsInf(float64(v), 0) }
 
 func visualState(nodes []Node) string {
+	return frameState(nodes, false)
+}
+
+// Authored scene geometry permits changing a single-line field's value. Node
+// types, hierarchy, resources and source styles retain their fixed contract.
+func frameState(nodes []Node, scene bool) string {
 	type stateNode struct {
 		ID, Kind, Text, Value, Placeholder, Href, Variant, Size string
 		CaptureSignature                                        string
@@ -662,6 +707,9 @@ func visualState(nodes []Node) string {
 	state = func(nodes []Node) []stateNode {
 		out := make([]stateNode, len(nodes))
 		for i, n := range nodes {
+			if scene && n.Kind == "input" {
+				n.Value = ""
+			}
 			imageHash := ""
 			if n.Kind == "image" && n.ImageResource != nil {
 				imageHash = fmt.Sprintf("%x", sha256.Sum256(n.ImageResource.Content()))
@@ -750,18 +798,19 @@ func (r *viewRenderer) Refresh() {
 }
 
 type element struct {
-	view           *View
-	node           Node
-	label          string
-	style          Style
-	children       []*element
-	object         fyne.CanvasObject
-	input          Editor
-	renderer       *elementRenderer
-	suppressChange bool
-	image          *canvas.Image
-	imageHash      [32]byte
-	imageSize      fyne.Size
+	view                  *View
+	node                  Node
+	label                 string
+	style                 Style
+	children              []*element
+	object                fyne.CanvasObject
+	input                 Editor
+	renderer              *elementRenderer
+	suppressChange        bool
+	image                 *canvas.Image
+	imageHash             [32]byte
+	imageSize             fyne.Size
+	localValueInitialized bool
 }
 
 func newElement(v *View, n Node) *element {
@@ -837,12 +886,13 @@ func (e *element) update() {
 		}
 		e.suppressChange = true
 		e.input.SetStyle(e.style)
-		if e.input.Text() != e.node.Value {
+		if e.input.Text() != e.node.Value && (!e.node.LocalValue || !e.localValueInitialized) {
 			e.input.SetText(e.node.Value)
 			if w, ok := e.object.(*inputWidget); ok && !w.dirty {
 				w.committedValue = e.node.Value
 			}
 		}
+		e.localValueInitialized = true
 		e.input.SetPlaceholder(e.node.Placeholder)
 		e.input.SetDisabled(e.node.Disabled)
 		e.input.Object().Refresh() // Materialize placeholder/scroller before the first Layout.
@@ -1089,7 +1139,13 @@ func (w *inputWidget) TypedKey(k *fyne.KeyEvent) {
 	if !w.element.node.Disabled {
 		w.element.input.TypedKey(k)
 		if w.element.node.Kind == "input" && (k.Name == fyne.KeyReturn || k.Name == fyne.KeyEnter) {
+			value := w.element.input.Text()
 			w.commit()
+			// Commit callbacks can disable or remove this control.
+			if !w.element.node.Disabled && w.element.view.elements[w.element.node.ID] == w.element && w.element.node.OnSubmit != nil {
+				w.element.node.OnSubmit(value)
+				w.element.view.refreshAfterEvent()
+			}
 		}
 	}
 }
