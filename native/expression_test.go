@@ -10,6 +10,28 @@ import (
 	"testing"
 )
 
+func TestNullishAccessDoesNotTreatFalsyPrimitivesAsMissing(t *testing.T) {
+	for _, value := range []any{nil, Undefined} {
+		if !IsNullish(value) {
+			t.Fatalf("nullish value %T was not recognized", value)
+		}
+	}
+	for _, value := range []any{false, 0, float64(0), "", Scope{}, []any{}} {
+		if IsNullish(value) {
+			t.Fatalf("ordinary value %T was incorrectly short-circuited", value)
+		}
+	}
+	for _, value := range []any{false, 0, float32(0), float64(0)} {
+		if !isUndefined(Get(value, "missing")) {
+			t.Fatalf("boxed primitive %T fabricated a missing own property", value)
+		}
+		primitiveFailure(t, "prototype adapter", func() { Get(value, "toString") })
+	}
+	for _, value := range []any{0, float64(0)} {
+		primitiveFailure(t, "prototype adapter", func() { Get(value, "toFixed") })
+	}
+}
+
 func TestNumberRadixStringsRoundBeyondUint64LikeJavaScript(t *testing.T) {
 	for _, value := range []string{
 		"0x10000000000000000",

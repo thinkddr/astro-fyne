@@ -8,6 +8,12 @@ export type Expr =
   /** Only the lexical updater parameter reads pending state; closures stay fixed. */
   | { kind: "current"; name: string }
   | { kind: "get"; object: Expr; key: Expr }
+  /** One continuous optional chain. Parentheses start a separate expression. */
+  | {
+      kind: "chain";
+      object: Expr;
+      accesses: { optional: boolean; key: Expr }[];
+    }
   | { kind: "binary"; op: string; left: Expr; right: Expr }
   | { kind: "unary"; op: string; value: Expr }
   | { kind: "conditional"; test: Expr; yes: Expr; no: Expr }

@@ -47,11 +47,15 @@ func TestExportBrowserComparablePrimitiveBehavior(t *testing.T) {
 		Previous float64 `json:"previous"`
 	}
 	observations := []observation{}
+	unexpectedCalls := []string{}
 	translate := func(args ...any) any {
 		if len(args) != 1 {
 			t.Fatalf("primitive translator expects one key, got %v", args)
 		}
 		key := webui.String(args[0])
+		if key == "forbidden-key" {
+			unexpectedCalls = append(unexpectedCalls, key)
+		}
 		observations = append(observations, observation{key, 0})
 		return key
 	}
@@ -107,6 +111,7 @@ func TestExportBrowserComparablePrimitiveBehavior(t *testing.T) {
 		snapshot(action)
 	}
 	trace.Observations = observations
+	trace.UnexpectedCalls = unexpectedCalls
 	data, err = json.MarshalIndent(trace, "", "  ")
 	if err != nil {
 		t.Fatal(err)

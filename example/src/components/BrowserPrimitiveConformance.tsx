@@ -20,6 +20,7 @@ export function BrowserPrimitiveConformance({
   return (
     <PrimitiveConformance
       t={(key) => {
+        if (key === "forbidden-key") trace.unexpectedCalls.push(key);
         trace.observations.push({ prefix: key, previous: 0 });
         return key;
       }}
