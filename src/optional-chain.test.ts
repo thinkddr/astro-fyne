@@ -127,7 +127,7 @@ test("optional calls, module host effects and SSR reads retain explicit diagnost
     ]) {
       await writeFile(entry, source);
       await expect(compile(entry)).rejects.toThrow(
-        /Optional calls|initialization|Astro.request|Private-field/,
+        /Optional calls|initialization|Astro.request|Private-field|private identifiers/,
       );
     }
   } finally {
