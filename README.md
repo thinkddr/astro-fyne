@@ -19,6 +19,12 @@ Nullable property/index chains such as `profile?.details.name ?? "Guest"` retain
 JavaScript's short-circuit behavior in that generated Go. See the compatibility
 contract for the supported expressions, events and layouts.
 
+The opt-in [JavaScript engine route](docs/javascript-runtime.md) bundles component modules
+and runs real Preact in Goja, a JavaScript engine written in Go, while Fyne renders native
+controls. Generated files remain Go and embed the JavaScript program. Its recorded program
+archives continue closures, module state and events through Fyne → Astro → Fyne; CSS and
+browser APIs still require native contracts.
+
 ## Get started
 
 Install [Bun](https://bun.sh/docs/installation) and the Go version declared in

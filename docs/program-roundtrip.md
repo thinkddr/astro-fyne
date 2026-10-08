@@ -12,6 +12,10 @@ widgets; it does not embed a JavaScript engine. The browser uses real Preact hoo
 reconciliation with a typed interpreter for the validated IR. Neither runtime uses `eval`
 or recovers arbitrary function bodies.
 
+For bundled JavaScript execution, use the separate [Goja route](javascript-runtime.md)
+with `--javascript` and `ExportJavascript()`. That mode transports recorded programs and
+events; the declarative archive described here retains its original Go-lowering contract.
+
 ## Enable and export
 
 Add `portableProgram: true` to the source entry in your configuration:

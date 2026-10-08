@@ -15,6 +15,7 @@
     "src/**/*.ts",
     "capture/**/*.ts",
     "ci/program-roundtrip.ts",
+    "ci/javascript-roundtrip.ts",
     "example/src/components/**/*.tsx",
     "example/src/pages/**/*.tsx"
   ]
