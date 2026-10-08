@@ -8,6 +8,13 @@ preserving behavior and producing identical pixels for declared rendering profil
 establishes a compiler, a native runtime and measurable failure gates. Universal compatibility
 remains a development objective.
 
+Source-generated widgets can opt into [portable program archives](docs/program-roundtrip.md)
+with `portableProgram: true`. This preserves the supported declarative program, declared
+state and list identities across native → Preact → native continuation. Go remains compiled;
+external callbacks use named bindings. CSS source and package adapters need retained source
+or explicit web contracts before entering that archive. Scene export remains available for
+supported handwritten Fyne objects.
+
 Compatibility has three separate requirements: source syntax must compile, native interaction
 must preserve the relevant behavior, and the resulting native image must match the browser.
 A parser test alone establishes the first requirement. A generated button responding to a
