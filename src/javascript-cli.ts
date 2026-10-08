@@ -132,7 +132,7 @@ return jsruntime.New(archive,actions,backends...)
 import {createJavascriptComponent,type JavascriptHandle,type JavascriptProps} from "./javascript-view.ts";
 import type {JavascriptArchive,JavascriptActions} from "./javascript-types.ts";
 import factory from "./program.js";
-const archive=${literal(archive)} as JavascriptArchive;
+const archive=JSON.parse(${literal(JSON.stringify(archive))}) as JavascriptArchive;
 const Program=createJavascriptComponent(factory,archive);
 const emptyActions:JavascriptActions={};
 export type ${options.name}Handle=JavascriptHandle;

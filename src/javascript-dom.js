@@ -15,7 +15,7 @@ export function createDocument() {
       this.parentNode = null;
       this.childNodes = [];
       this.data = text || "";
-      this.attrs = {};
+      this.attrs = Object.create(null);
       this.style = Object.create(null);
       Object.defineProperty(this.style, "setProperty", {
         value: (key, value) => {

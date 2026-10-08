@@ -200,7 +200,8 @@ func New(archive Archive, actions webui.Actions, backends ...webui.Backend) (*Wi
 		if !ok {
 			return errors.New("javascript: bundle must export a factory")
 		}
-		value, err := w.vm.RunString("(" + string(raw) + ")")
+		parse, _ := goja.AssertFunction(w.vm.Get("JSON").ToObject(w.vm).Get("parse"))
+		value, err := parse(goja.Undefined(), w.vm.ToValue(string(raw)))
 		if err != nil {
 			return err
 		}
@@ -286,7 +287,12 @@ func (w *Widget) callJSON(name string, value any) (goja.Value, error) {
 		return nil, err
 	}
 	var arg goja.Value
-	err = w.limited(func() error { var err error; arg, err = w.vm.RunString("(" + string(data) + ")"); return err })
+	err = w.limited(func() error {
+		parse, _ := goja.AssertFunction(w.vm.Get("JSON").ToObject(w.vm).Get("parse"))
+		var err error
+		arg, err = parse(goja.Undefined(), w.vm.ToValue(string(data)))
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
