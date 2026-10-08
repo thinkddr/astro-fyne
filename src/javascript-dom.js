@@ -130,6 +130,7 @@ export function createDocument() {
         : this.childNodes.map((child) => child.textContent).join("");
     }
     set textContent(value) {
+      value = value == null ? "" : String(value);
       if (this.nodeType === 3) {
         this.data = String(value);
         return;
@@ -291,7 +292,7 @@ export function createDocument() {
       payload.currentTarget = node;
       for (const handler of [...(node.listeners[event.type + capture] || [])]) {
         const result = handler.call(node, payload);
-        if (result && typeof result.then === "function")
+        if (result instanceof Promise)
           throw new Error(
             "Async event handlers require an explicit event-loop adapter",
           );
