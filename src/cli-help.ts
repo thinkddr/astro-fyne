@@ -48,6 +48,7 @@ Examples:
   bun run to-fyne --scene scene.json --out native/generated --name NativePage
   bun run check --config path/to/astro-fyne.json
   bun run to-web --scene scene.json --out src/pages/native --name NativePage
+  bun run to-web --program counter.program.json --out src/pages/counter --name Counter
 
 Run "bun run astro-fyne <command> --help" for options and examples.
 Conversion supports the documented declarative subset. Generated output alone
@@ -60,6 +61,7 @@ Usage: bun run to-web --scene <file> --out <directory> --name <Name> [options]
 
 Required:
   --scene <file>           Fyne scene JSON exported by the native scene API.
+  --program <file>         Portable generated program, used instead of --scene.
   --out <directory>        Destination for Name.astro, Name.tsx, Name.css and report.
   --name <Name>            Generated component name, for example NativePage.
 
@@ -76,7 +78,8 @@ Examples:
   bun run to-web --scene scene.json --out src/pages/native --name NativePage --actions-module ../../actions --check
 
 Callbacks require an explicit client actions module. The scene is an initial
-snapshot; generated output does not certify visual equivalence.
+snapshot. --program preserves declared state and logic within the documented
+subset; generated output does not certify visual equivalence.
 `;
   const sceneHelp =
     command === "generate" || command === "check"
@@ -90,6 +93,12 @@ Native scene input:
   --fonts <file>           JSON array of explicit TrueType face bindings;
                            source paths are relative to this JSON file.
   --check                 Verify scene output without writing it.
+
+Portable program input:
+  bun run ${command === "generate" ? "to-fyne" : "check"} --program <file> --out <directory> --name <Name> [--package <identifier>] [--check]
+  Recompile a generated widget's exported program and current declared state.
+  Opt into ExportProgram() with portableProgram: true in the source entry.
+  CSS source, arbitrary JS/Go and function bodies need explicit contracts.
 `
       : "";
   const descriptions = {

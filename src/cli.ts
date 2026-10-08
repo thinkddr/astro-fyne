@@ -29,6 +29,7 @@ interface Entry {
   measurements?: string;
   publicDir?: string;
   fonts?: FontFace[];
+  portableProgram?: boolean;
   profile?: { state: string; width: number; height: number; scale: number };
 }
 interface Config {
@@ -89,6 +90,11 @@ function readConfig(value: unknown, root: string): Config {
     if (entry.publicDir !== undefined && typeof entry.publicDir !== "string")
       throw new Error(`${entry.name}: publicDir must be a path.`);
     if (entry.fonts !== undefined) validateFontFaces(entry.fonts);
+    if (
+      entry.portableProgram !== undefined &&
+      typeof entry.portableProgram !== "boolean"
+    )
+      throw new Error(`${entry.name}: portableProgram must be a Boolean.`);
     if (entry.profile !== undefined) {
       const profile = entry.profile;
       if (
@@ -176,6 +182,7 @@ export async function generate(options: Options): Promise<void> {
       packageName: config.package,
       ...(entry.profile ? { profile: entry.profile } : {}),
       ...(measurements ? { measurements } : {}),
+      ...(entry.portableProgram ? { portableProgram: true } : {}),
     });
     const formatted = spawnSync("gofmt", [], {
       input: code,
@@ -204,6 +211,15 @@ export async function generate(options: Options): Promise<void> {
       actions: program.actions,
       components: program.components.map((component) => component.name),
       compatibility: "declarative-stage-1",
+      ...(entry.portableProgram
+        ? {
+            portableProgram: {
+              schema: 1,
+              exportMethod: "ExportProgram",
+              state: "declared-state-and-list-identities",
+            },
+          }
+        : {}),
       visual: {
         measured: Boolean(measurements),
         pixelPerfectVerified: false,
@@ -319,6 +335,20 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   if (!command) throw usageError(`Unknown command: ${name}`);
   if (wantsHelp(argv)) {
     process.stdout.write(helpText(command));
+    return;
+  }
+  if (argv.includes("--program")) {
+    if (!["generate", "check", "reverse"].includes(command))
+      throw usageError(
+        "Program input supports to-fyne, to-web and check.",
+        command,
+      );
+    const { programMain } = await import("./program-cli.ts");
+    await programMain(
+      argv,
+      command === "reverse" ? "web" : "native",
+      command === "check",
+    );
     return;
   }
   if (command === "reverse") {

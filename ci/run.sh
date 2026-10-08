@@ -16,7 +16,7 @@ bun src/cli.ts reverse --scene artifacts/reverse-controls/scene.json --out examp
 cp example/src/pages/reverse-controls/ReverseControls.* artifacts/reverse-controls/
 bun run typecheck
 bun test src
-bunx --no-install prettier --check README.md docs src capture example astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json package.json tsconfig.json
+bunx --no-install prettier --check README.md docs src capture example ci/program-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json package.json tsconfig.json
 bun src/cli.ts generate --config astro-fyne.json
 bun src/cli.ts check --config astro-fyne.json
 bun src/cli.ts generate --config conformance.json
@@ -60,8 +60,11 @@ task_reverse_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-rever
 task_keyed_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-keyed-analysis.json").json()).sourceHash)')"
 export ASTRO_FYNE_PRIMITIVE_SOURCE_HASH="$(bun -e 'console.log((await Bun.file("artifacts-primitive-analysis.json").json()).sourceHash)')"
 task_scale2_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-scale2-analysis.json").json()).sourceHash)')"
-bun run build:web
 bunx --no-install playwright install --with-deps chromium
+bun ci/program-roundtrip.ts
+# Include the generated portable islands in the real Astro build and type check.
+bun run typecheck
+bun run build:web
 # The shell owns this foreground process and its cleanup, including when Astro
 # detects an agent and would otherwise detach a preview server.
 bunx --no-install astro preview --ignore-lock --root example --host 127.0.0.1 --port 4321 > /tmp/astro-fyne-preview.log 2>&1 &
@@ -83,6 +86,7 @@ if [[ "$task_preview_ready" != true ]]; then
   cat /tmp/astro-fyne-preview.log >&2
   exit 1
 fi
+bun capture/program-astro.ts http://127.0.0.1:4321 artifacts/program-roundtrip
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/geometry --out artifacts --width 320 --height 240 --scale 1 --source-hash "$task_source_hash"
 bun capture/behavior.ts http://127.0.0.1:4321/conformance conformance-scenario.json artifacts/web-behavior.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH"
 bun capture/keyed-behavior.ts http://127.0.0.1:4321/keyed keyed-scenario.json artifacts/web-keyed-behavior.json "$task_keyed_source_hash"
