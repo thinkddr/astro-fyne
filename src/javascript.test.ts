@@ -150,7 +150,10 @@ test("JavaScript bundling diagnoses missing platform assets before writing", asy
     await expect(bundleJavascript(join(directory, "Page.tsx"))).rejects.toThrow(
       "CSS imports",
     );
-    await writeFile(join(directory, "Page.astro"), "<p>Hello</p>");
+    await writeFile(
+      join(directory, "Page.astro"),
+      "---\nconst value=await Promise.resolve(1);\n---\n<p>{value}</p>",
+    );
     await expect(
       bundleJavascript(join(directory, "Page.astro")),
     ).rejects.toThrow("frontmatter");
