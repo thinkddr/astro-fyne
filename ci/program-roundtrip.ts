@@ -462,6 +462,16 @@ await writeFile(
   JSON.stringify(follow, null, 2) + "\n",
 );
 const nativeFollow = await probe("restore");
+const formatted = Bun.spawn(["gofmt", "-w", native], {
+  stdout: "ignore",
+  stderr: "pipe",
+});
+const [formatErrors, formatStatus] = await Promise.all([
+  new Response(formatted.stderr).text(),
+  formatted.exited,
+]);
+if (formatStatus !== 0)
+  throw new Error(`Formatting native program fixtures failed: ${formatErrors}`);
 for (const c of cases) {
   assert.deepEqual(
     nativeFollow[c.name]!.frames,
