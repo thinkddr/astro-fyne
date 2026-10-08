@@ -4,7 +4,6 @@
 declare global {
   interface Window {
     afyJavascriptEvents: unknown[][];
-    afyJavascript: any;
   }
 }
 export const actions = {

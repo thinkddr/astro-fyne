@@ -47,9 +47,11 @@ function Child({ label }: { label: string }) {
 export function JavascriptConformance({
   observe,
   initial = 1,
+  data = JSON.parse('{"__proto__":{"count":7},"constructor":"kept"}'),
 }: {
   observe: (...values: any[]) => null;
   initial?: number;
+  data?: Record<string, any>;
 }) {
   const [count, setCount] = useState(() => initial);
   const [name, dispatch] = useReducer(
@@ -117,7 +119,7 @@ export function JavascriptConformance({
               "[object Object]",
         )}
       </p>
-      <p id="js-data">{`${graph === graph.self}|${graph.lookup.get("answer")}|${Object.is(-0, 0)}|${Number.isNaN(NaN)}`}</p>
+      <p id="js-data">{`${graph === graph.self}|${graph.lookup.get("answer")}|${Object.is(-0, 0)}|${Number.isNaN(NaN)}|${Object.hasOwn(data, "__proto__")}|${data.__proto__.count}|${data.constructor}`}</p>
       <p id="js-name">{name}</p>
       <p id="js-total">{total}</p>
       <p id="js-module">{moduleCount}</p>

@@ -14,6 +14,13 @@ import type {
   JavascriptArchive,
   JavascriptFrame,
 } from "../src/javascript-types.ts";
+// Declare the browser probe before generated pages or action modules exist.
+declare global {
+  interface Window {
+    afyJavascriptEvents: unknown[][];
+    afyJavascript: any;
+  }
+}
 
 const root = resolve(import.meta.dir, ".."),
   evidence = join(root, "artifacts/javascript-roundtrip"),
@@ -46,7 +53,7 @@ for (const dir of [evidence, native, web])
 const initial = await bundleJavascript(
   join(root, "example/src/components/JavascriptConformance.tsx"),
   "JavascriptConformance",
-  {},
+  { data: JSON.parse('{"__proto__":{"count":7},"constructor":"kept"}') },
   ["observe"],
 );
 await writeFile(join(evidence, "initial.json"), JSON.stringify(initial));
@@ -167,7 +174,7 @@ assert.equal(
 );
 assert.equal(
   frameValues(nativeResult.frames[0])["js-data"],
-  "true|42|false|true",
+  "true|42|false|true|true|7|kept",
   "Internal cycles/Maps/special numbers changed",
 );
 await writeFile(
@@ -286,7 +293,11 @@ try {
     normalize(nativeResult.calls),
     "Callback order, lexical closures or effects differ",
   );
-  exported = await page.evaluate(() => window.afyJavascript.export());
+  // Transfer archival JSON as a string: Playwright's object deserializer assigns
+  // __proto__ keys, changing their data semantics before regeneration.
+  exported = JSON.parse(
+    await page.evaluate(() => JSON.stringify(window.afyJavascript.export())),
+  );
   await writeFile(
     join(evidence, "browser-program.json"),
     JSON.stringify(exported),

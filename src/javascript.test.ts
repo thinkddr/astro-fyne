@@ -13,6 +13,9 @@ test("JavaScript host data diagnoses values that JSON would silently change", ()
   expect(javascriptHostJSON({ text: "🙂", value: 0 })).toBe(
     '{"text":"🙂","value":0}',
   );
+  expect(javascriptHostJSON(JSON.parse('{"__proto__":{"count":7}}'))).toBe(
+    '{"__proto__":{"count":7}}',
+  );
   for (const value of [
     NaN,
     -0,
