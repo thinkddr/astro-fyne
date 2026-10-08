@@ -1,0 +1,6 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Astro Fyne contributors.
+const { heading, children } = Astro.props;
+---
+<main><h1 id="astro-js-heading">{heading}</h1><p id="astro-js-slot">{Astro.slots.has("default")}|{children}</p><slot><p id="astro-js-fallback">Fallback</p></slot></main>

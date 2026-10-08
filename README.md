@@ -25,6 +25,10 @@ controls. Generated files remain Go and embed the JavaScript program. Its record
 archives continue closures, module state and events through Fyne → Astro → Fyne; CSS and
 browser APIs still require native contracts.
 
+The same route now accepts [Astro source files](docs/astro-javascript.md), including
+synchronous frontmatter, nested components/default slots, hydrated Preact islands and
+processed scripts. CI compares their native continuation with the original Astro page.
+
 ## Get started
 
 Install [Bun](https://bun.sh/docs/installation) and the Go version declared in

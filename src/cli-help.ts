@@ -65,7 +65,7 @@ Required:
   --scene <file>           Fyne scene JSON exported by the native scene API.
   --program <file>         Portable generated program, used instead of --scene.
   --javascript            Use a bundled JavaScript archive or --source component.
-  --source <file>          TSX/JSX/TS/JS entry for --javascript.
+  --source <file>          Astro/TSX/JSX/TS/JS entry for --javascript.
   --export <identifier>    JavaScript named export. Default: default.
   --props <file>           Initial JSON data for a JavaScript source entry.
   --actions <names>        Comma-separated JavaScript action props.

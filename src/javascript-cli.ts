@@ -81,7 +81,7 @@ const ${options.name}JavascriptArchive = ${literal(JSON.stringify(archive))}
 type ${options.name}Widget = jsruntime.Widget
 func New${options.name}(props webui.Scope,actions webui.Actions,backends ...webui.Backend)(*${options.name}Widget,error){
 var archive jsruntime.Archive;if err:=json.Unmarshal([]byte(${options.name}JavascriptArchive),&archive);err!=nil{return nil,err}
-if len(props)>0 {if len(archive.Events)>0||archive.Frame!=nil{return nil,errors.New("javascript: replay requires original props; regenerate source to replace them")};data,err:=json.Marshal(props);if err!=nil{return nil,err};archive.Props=data}
+if len(props)>0 {if len(archive.Events)>0||len(archive.Journal)>0||archive.Frame!=nil{return nil,errors.New("javascript: replay requires original props; regenerate source to replace them")};data,err:=json.Marshal(props);if err!=nil{return nil,err};archive.Props=data}
 return jsruntime.New(archive,actions,backends...)
 }
 `;
@@ -141,7 +141,7 @@ private program=createRef<JavascriptHandle>();private active=false;state:{loaded
 componentDidMount(){this.active=true;${module ? `if(!this.props.actions)import(${literal(module)}).then(value=>{if(this.active)this.setState({loaded:value.actions});}).catch(error=>{if(this.active)this.setState({failure:error});});` : ""}}
 componentWillUnmount(){this.active=false;}
 exportJavascript(){if(!this.program.current)throw new Error("Export requires a mounted JavaScript program");return this.program.current.exportJavascript();}
-render(){const {loaded,failure}=this.state;if(failure)throw failure;const actions=this.props.actions??loaded${archive.actions.length ? "" : "??emptyActions"};return actions?h(Program,{actions,ref:this.program}):null;}
+render(){const {loaded,failure}=this.state;if(failure)throw failure;const actions=this.props.actions??loaded${archive.actions.length || module ? "" : "??emptyActions"};return actions?h(Program,{actions,ref:this.program}):null;}
 }
 export default ${options.name};\n`,
     );
