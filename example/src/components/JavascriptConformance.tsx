@@ -154,7 +154,14 @@ export function JavascriptConformance({
       <button id="js-direct" ref={direct}>
         Direct handler
       </button>
-      <button id="js-programmatic" onClick={() => direct.current!.click()}>
+      <button
+        id="js-programmatic"
+        onClick={() => {
+          direct.current!.click();
+          // DOM event handlers ignore ordinary return values, including refs.
+          return direct.current;
+        }}
+      >
         Programmatic click
       </button>
       <button
