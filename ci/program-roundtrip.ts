@@ -10,6 +10,13 @@ import { emitGo, scopeHelper } from "../src/emit.ts";
 import { generateProgram } from "../src/program-cli.ts";
 import { validateProgramArchive, type ProgramArchive } from "../src/program.ts";
 
+// The first CI type check runs before the browser probe has been generated.
+declare global {
+  interface Window {
+    afyProbe: any;
+  }
+}
+
 interface Action {
   id: string;
   append?: string;
