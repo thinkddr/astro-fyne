@@ -8,6 +8,14 @@ preserving behavior and producing identical pixels for declared rendering profil
 establishes a compiler, a native runtime and measurable failure gates. Universal compatibility
 remains a development objective.
 
+An explicit [JavaScript execution mode](docs/javascript-runtime.md) now complements the
+declarative compiler. It embeds bundled component code in generated Go, runs real Preact
+inside pure-Go Goja, and renders supported native controls. Recorded input/host boundaries
+rebuild closures and module/hook state across native ↔ Astro continuation without repeating
+external effects. Its synchronous execution profile, JSON host boundary and native DOM/CSS
+adapters are separate from the declarative source contract below. General browser/SSR APIs,
+asynchronous platform work and pixel equivalence remain pending.
+
 Source-generated widgets can opt into [portable program archives](docs/program-roundtrip.md)
 with `portableProgram: true`. This preserves the supported declarative program, declared
 state and list identities across native → Preact → native continuation. Go remains compiled;

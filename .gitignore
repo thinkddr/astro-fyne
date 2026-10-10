@@ -19,4 +19,6 @@ example/public/assets/
 native/.scene-roundtrip/
 example/src/pages/scene-responsive/
 native/.program-roundtrip/
+native/.javascript-probe/
+example/src/pages/javascript-roundtrip/
 example/src/pages/program-roundtrip/
