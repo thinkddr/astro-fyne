@@ -7,6 +7,7 @@ import { dirname, extname, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { javascriptHostJSON } from "./javascript-data.ts";
+import { astroJavascript } from "./javascript-astro.ts";
 
 import type { JavascriptArchive } from "./javascript-types.ts";
 export type { JavascriptArchive } from "./javascript-types.ts";
@@ -22,15 +23,27 @@ export async function bundleJavascript(
   actions: string[] = [],
 ): Promise<JavascriptArchive> {
   source = resolve(source);
-  if (![".tsx", ".jsx", ".ts", ".js"].includes(extname(source)))
-    throw new Error(
-      "JavaScript mode needs a TSX/JSX/TS/JS entry; use the declarative compiler for Astro frontmatter",
-    );
+  if (![".astro", ".tsx", ".jsx", ".ts", ".js"].includes(extname(source)))
+    throw new Error("JavaScript mode needs an Astro/TSX/JSX/TS/JS entry");
   if (selected !== "default" && !identifier.test(selected))
     throw new Error("JavaScript export must be an identifier");
+  if (extname(source) === ".astro" && selected !== "default")
+    throw new Error(
+      "Astro JavaScript entries expose only the default component",
+    );
+  if (Object.keys(props).some((name) => name.startsWith("_afyAstro")))
+    throw new Error(
+      "_afyAstroSlots is reserved for native Astro slot metadata",
+    );
   const sources = new Map<string, string>(),
     root = dirname(source);
-  async function build(entry: string, contents: string): Promise<string> {
+  const scripts = new Map<string, { contents: string; directory: string }>();
+  async function build(
+    entry: string,
+    contents: string,
+    resolveDir = root,
+    script = false,
+  ): Promise<string> {
     const result = await Bun.build({
       entrypoints: [entry],
       target: "browser",
@@ -46,14 +59,59 @@ export async function bundleJavascript(
               path: args.path,
               namespace: "astro-fyne",
             }));
-            builder.onResolve({ filter: /^preact(?:\/.*)?$/ }, (args) => ({
-              path: fileURLToPath(import.meta.resolve(args.path)),
-            }));
+            builder.onResolve({ filter: /^preact(?:\/.*)?$/ }, (args) => {
+              if (script)
+                throw new Error(
+                  "Scripts importing Preact require a shared renderer adapter; use a hydrated component",
+                );
+              return { path: fileURLToPath(import.meta.resolve(args.path)) };
+            });
+            builder.onResolve({ filter: /\.astro$/ }, (args) => {
+              if (
+                args.importer &&
+                args.importer !== entry &&
+                !args.importer.endsWith(".astro")
+              )
+                throw new Error(
+                  "Astro server components require an Astro parent; JSX embedding needs an SSR adapter",
+                );
+              return undefined;
+            });
+            builder.onResolve({ filter: /.*/ }, (args) =>
+              args.importer === entry
+                ? { path: Bun.resolveSync(args.path, resolveDir) }
+                : undefined,
+            );
             builder.onLoad({ filter: /.*/, namespace: "astro-fyne" }, () => ({
               contents,
-              loader: "js",
-              resolveDir: root,
+              loader: script ? "ts" : "js",
+              resolveDir,
             }));
+            builder.onLoad({ filter: /\.astro$/ }, async (args) => {
+              if (script)
+                throw new Error(
+                  "Browser scripts cannot import Astro server components",
+                );
+              const text = await readFile(args.path, "utf8");
+              const identity = relative(root, args.path).replaceAll("\\", "/");
+              sources.set(identity, hash(text));
+              return {
+                contents: await astroJavascript(
+                  text,
+                  args.path,
+                  identity,
+                  async (contents, label) => {
+                    scripts.set(label, {
+                      contents,
+                      directory: dirname(args.path),
+                    });
+                    return `globalThis._afyAstroScripts[${JSON.stringify(label)}]();`;
+                  },
+                ),
+                loader: "tsx",
+                resolveDir: dirname(args.path),
+              };
+            });
             builder.onLoad(
               { filter: /\.(?:[cm]?[jt]sx?|json|css)$/ },
               async (args) => {
@@ -108,11 +166,21 @@ export async function bundleJavascript(
     "astro-fyne-entry:program",
     `import * as source from ${JSON.stringify(source)}; import {h,render,options} from "preact"; globalThis._afyComponent = source[${JSON.stringify(selected)}]; globalThis._afyPreact = {h,render,options};`,
   );
+  const scriptFactories: string[] = [];
+  for (const [label, script] of scripts) {
+    const code = await build(
+      "astro-fyne-entry:script:" + hash(label),
+      script.contents,
+      script.directory,
+      true,
+    );
+    scriptFactories.push(`[${JSON.stringify(label)}]:()=>{${code}}`);
+  }
   const license = await readFile(
     resolve(fileURLToPath(import.meta.resolve("preact")), "../../LICENSE"),
     "utf8",
   );
-  const code = `/* Bundled Preact: ${license.replaceAll("*/", "* / ")} */\nfunction(host,archive){const globalThis={};${runtime}\nconst runtime=globalThis._afyRuntime(host,archive);return(function(environment){const{document,window,self,globalThis,Math,Date,setTimeout,clearTimeout,requestAnimationFrame,cancelAnimationFrame,queueMicrotask,fetch,setInterval,getComputedStyle,console}=environment;${program}\nreturn runtime.bind(globalThis._afyComponent,globalThis._afyPreact);})(runtime.environment);}`;
+  const code = `/* Bundled Preact: ${license.replaceAll("*/", "* / ")} */\nfunction(host,archive){const globalThis={};${runtime}\nconst runtime=globalThis._afyRuntime(host,archive);return(function(environment){const{document,window,self,globalThis,Math,Date,setTimeout,clearTimeout,requestAnimationFrame,cancelAnimationFrame,queueMicrotask,fetch,setInterval,getComputedStyle,console}=environment;${scriptFactories.length ? `globalThis._afyAstroScripts={${scriptFactories.join(",")}};` : ""}${program}\nreturn runtime.bind(globalThis._afyComponent,globalThis._afyPreact);})(runtime.environment);}`;
   const archive: JavascriptArchive = {
     schema: 1,
     kind: "astro-fyne-javascript",

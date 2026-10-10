@@ -1,0 +1,13 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Astro Fyne contributors.
+import Frame from "../astro-runtime/Frame.astro";
+import ScriptPanel from "../astro-runtime/ScriptPanel.astro";
+import Counter from "../components/AstroJavascriptCounter.tsx";
+import { total } from "../astro-runtime/math.ts";
+const heading = Astro.props.heading ?? ["Astro", "Goja"].map(value => value.toUpperCase()).join("/");
+const amount = total([1, 2, 3]);
+const data = JSON.parse('{"__proto__":{"value":7},"constructor":"kept"}');
+const shared = { value: 7 };
+---
+<Frame heading={heading} children="prop-data"><p id="astro-js-frontmatter">{amount}|{Object.hasOwn(data, "__proto__")}|{data.__proto__.value}|{data.constructor}</p><p id="astro-js-values">{true}|{false}|{NaN}|{() => "lambda"}|{new Set([1, 2])}|{{toString() { return "record"; }}}</p><Counter client:load initial={2} left={shared} right={shared}/><p id="astro-js-script-count">0</p><button id="astro-js-script-increment">Script increment</button><ScriptPanel/><ScriptPanel/></Frame>

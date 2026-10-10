@@ -3,7 +3,7 @@
 
 # Run JavaScript in native Fyne
 
-The explicit `--javascript` route bundles a TSX/JSX/TS/JS component and runs it in
+The explicit `--javascript` route bundles an Astro/TSX/JSX/TS/JS component and runs it in
 [Goja](https://github.com/dop251/goja), a JavaScript engine implemented in Go.
 Generated native files remain `.go`. They embed the JavaScript program and call the
 Go runtime; the application does not require Node, Bun or a browser at runtime.
@@ -145,8 +145,9 @@ pixel dimensions, spacing, solid colors/borders, typography and row/column direc
 CSS imports, class-based styling, general cascade/layout and rich text require native
 contracts. Mixed padding/background shorthands and longhands are diagnosed until ordered
 CSS is retained.
-`.astro` frontmatter and server execution keep the existing declarative route; this
-JavaScript entry route currently accepts component modules. Astro output uses a hydrated
+[Astro source entries](astro-javascript.md) support synchronous frontmatter, nested Astro
+components, default slots, compatible hydrated Preact islands and processed scripts.
+General SSR/routing and browser services require further adapters. Astro output uses a hydrated
 Preact island, with private helper files excluded from page routing.
 
 Universal conversion remains pending these platform contracts and the independent

@@ -22,39 +22,83 @@ declare global {
   }
 }
 
+const astro = process.argv.includes("--astro");
 const root = resolve(import.meta.dir, ".."),
-  evidence = join(root, "artifacts/javascript-roundtrip"),
-  native = join(root, "native/.javascript-probe"),
-  web = join(root, "example/src/pages/javascript-roundtrip");
+  evidence = join(
+    root,
+    astro
+      ? "artifacts/astro-javascript-roundtrip"
+      : "artifacts/javascript-roundtrip",
+  ),
+  native = join(
+    root,
+    astro ? "native/.astro-javascript-probe" : "native/.javascript-probe",
+  ),
+  web = join(
+    root,
+    astro
+      ? "example/src/pages/astro-javascript-roundtrip"
+      : "example/src/pages/javascript-roundtrip",
+  );
 const tap = (...ids: string[]) => ids.map((id) => ({ id }));
-const scenario = {
-  prefix: tap("js-increment", "js-a-increment", "js-optional-increment"),
-  suffix: [
-    ...tap(
-      "js-reorder",
-      "js-b-increment",
-      "js-toggle",
-      "js-toggle",
-      "js-optional-increment",
-      "js-increment",
-    ),
-    { id: "js-input", value: "fyne" },
-    { id: "js-uncontrolled", value: "native" },
-    ...tap("js-programmatic"),
-    ...tap("js-reorder", "js-a-increment"),
-  ],
-  follow: [
-    ...tap("js-increment", "js-toggle", "js-toggle", "js-optional-increment"),
-  ],
-  rejects: [] as { path: string; event: string; contains: string }[],
-};
+const scenario = astro
+  ? {
+      prefix: tap("astro-js-script-increment", "astro-js-increment"),
+      suffix: [
+        ...tap("astro-js-script-increment", "astro-js-increment"),
+        { id: "astro-js-input", value: "fyne" },
+        ...tap(
+          "astro-js-increment",
+          "astro-js-script-increment",
+          "astro-js-script-increment",
+        ),
+      ],
+      follow: [
+        ...tap("astro-js-increment", "astro-js-script-increment"),
+        { id: "astro-js-input", value: "astro" },
+      ],
+      rejects: [] as { path: string; event: string; contains: string }[],
+    }
+  : {
+      prefix: tap("js-increment", "js-a-increment", "js-optional-increment"),
+      suffix: [
+        ...tap(
+          "js-reorder",
+          "js-b-increment",
+          "js-toggle",
+          "js-toggle",
+          "js-optional-increment",
+          "js-increment",
+        ),
+        { id: "js-input", value: "fyne" },
+        { id: "js-uncontrolled", value: "native" },
+        ...tap("js-programmatic"),
+        ...tap("js-reorder", "js-a-increment"),
+      ],
+      follow: [
+        ...tap(
+          "js-increment",
+          "js-toggle",
+          "js-toggle",
+          "js-optional-increment",
+        ),
+      ],
+      rejects: [] as { path: string; event: string; contains: string }[],
+    };
 for (const dir of [evidence, native, web])
   await mkdir(dir, { recursive: true });
 const initial = await bundleJavascript(
-  join(root, "example/src/components/JavascriptConformance.tsx"),
-  "JavascriptConformance",
-  { data: JSON.parse('{"__proto__":{"count":7},"constructor":"kept"}') },
-  ["observe"],
+  join(
+    root,
+    astro
+      ? "example/src/pages/astro-javascript-original.astro"
+      : "example/src/components/JavascriptConformance.tsx",
+  ),
+  astro ? "default" : "JavascriptConformance",
+  astro
+    ? {}
+    : { data: JSON.parse('{"__proto__":{"count":7},"constructor":"kept"}') },
+  astro ? [] : ["observe"],
 );
 await writeFile(join(evidence, "initial.json"), JSON.stringify(initial));
 for (const [name, source, event, contains] of [
@@ -167,16 +211,28 @@ const frameValues = (frames: JavascriptFrame[]) => {
   walk(frames);
   return values;
 };
-assert.equal(
-  frameValues(nativeResult.frames[0])["js-standard"],
-  "true",
-  "Date/Math intrinsic shape changed",
-);
-assert.equal(
-  frameValues(nativeResult.frames[0])["js-data"],
-  "true|42|false|true|true|7|kept",
-  "Internal cycles/Maps/special numbers changed",
-);
+if (!astro) {
+  assert.equal(
+    frameValues(nativeResult.frames[0])["js-standard"],
+    "true",
+    "Date/Math intrinsic shape changed",
+  );
+  assert.equal(
+    frameValues(nativeResult.frames[0])["js-data"],
+    "true|42|false|true|true|7|kept",
+    "Internal cycles/Maps/special numbers changed",
+  );
+} else {
+  assert.equal(
+    frameValues(nativeResult.frames[0])["astro-js-values"],
+    "true||NaN|lambda|12|record",
+  );
+  assert.equal(
+    frameValues(nativeResult.frames[0])["astro-js-script-count"],
+    "2",
+    "Astro repeated a hoisted script for repeated components",
+  );
+}
 await writeFile(
   join(evidence, "native.json"),
   JSON.stringify(nativeResult, null, 2) + "\n",
@@ -322,41 +378,43 @@ try {
       2,
     ) + "\n",
   );
-  await page.evaluate(() => window.afyJavascript.original());
-  await settle();
-  for (const step of scenario.prefix) await perform(step);
-  await page.evaluate(() => window.afyJavascript.clear());
-  const originalValues: Record<string, string>[] = [];
-  const originalCapture = () =>
-    page.evaluate(() =>
-      Object.fromEntries(
-        [...document.querySelectorAll("#probe [id]")].map((element) => [
-          element.id,
-          element instanceof HTMLInputElement
-            ? element.value
-            : element.textContent,
-        ]),
-      ),
-    );
-  for (let i = 0; i <= scenario.suffix.length; i++) {
-    if (i) await perform(scenario.suffix[i - 1]!);
-    const values = await originalCapture();
+  if (!astro) {
+    await page.evaluate(() => window.afyJavascript.original());
+    await settle();
+    for (const step of scenario.prefix) await perform(step);
+    await page.evaluate(() => window.afyJavascript.clear());
+    const originalValues: Record<string, string>[] = [];
+    const originalCapture = () =>
+      page.evaluate(() =>
+        Object.fromEntries(
+          [...document.querySelectorAll("#probe [id]")].map((element) => [
+            element.id,
+            element instanceof HTMLInputElement
+              ? element.value
+              : element.textContent,
+          ]),
+        ),
+      );
+    for (let i = 0; i <= scenario.suffix.length; i++) {
+      if (i) await perform(scenario.suffix[i - 1]!);
+      const values = await originalCapture();
+      assert.deepEqual(
+        values,
+        frameValues(nativeResult.frames[i]),
+        "Original browser source differs from native JavaScript",
+      );
+      originalValues.push(values as Record<string, string>);
+    }
     assert.deepEqual(
-      values,
-      frameValues(nativeResult.frames[i]),
-      "Original browser source differs from native JavaScript",
+      normalize(await page.evaluate(() => window.afyJavascript.calls())),
+      normalize(nativeResult.calls),
+      "Original source callbacks/closures/effects differ",
     );
-    originalValues.push(values as Record<string, string>);
+    await writeFile(
+      join(evidence, "original-browser.json"),
+      JSON.stringify({ frames: originalValues }, null, 2) + "\n",
+    );
   }
-  assert.deepEqual(
-    normalize(await page.evaluate(() => window.afyJavascript.calls())),
-    normalize(nativeResult.calls),
-    "Original source callbacks/closures/effects differ",
-  );
-  await writeFile(
-    join(evidence, "original-browser.json"),
-    JSON.stringify({ frames: originalValues }, null, 2) + "\n",
-  );
   assert.deepEqual(errors, [], "Browser runtime errors");
 } finally {
   await browser.close();
@@ -404,8 +462,9 @@ await writeFile(
   JSON.stringify(
     {
       passed: true,
-      browserFrames: webResult.frames.length * 2 + webResult.follow.length,
-      originalBrowserFrames: webResult.frames.length,
+      browserFrames:
+        webResult.frames.length * (astro ? 1 : 2) + webResult.follow.length,
+      originalBrowserFrames: astro ? 0 : webResult.frames.length,
       platformDiagnostics: scenario.rejects.length,
       nativeFrames: nativeResult.frames.length + restored.frames.length,
       externalEffectsReplayed: 0,
@@ -416,5 +475,5 @@ await writeFile(
   ) + "\n",
 );
 console.log(
-  `JavaScript roundtrip passed: ${webResult.frames.length * 2 + webResult.follow.length} browser (including ${webResult.frames.length} original-source) and ${nativeResult.frames.length + restored.frames.length} generated-Go frames; replay repeated zero host effects.`,
+  `${astro ? "Astro " : ""}JavaScript roundtrip passed: ${webResult.frames.length * (astro ? 1 : 2) + webResult.follow.length} browser (including ${astro ? 0 : webResult.frames.length} original-source) and ${nativeResult.frames.length + restored.frames.length} generated-Go frames; replay repeated zero host effects.`,
 );

@@ -63,6 +63,7 @@ task_scale2_source_hash="$(bun -e 'console.log((await Bun.file("artifacts-scale2
 bunx --no-install playwright install --with-deps chromium
 bun ci/program-roundtrip.ts
 bun ci/javascript-roundtrip.ts
+bun ci/javascript-roundtrip.ts --astro
 # Include the generated portable islands in the real Astro build and type check.
 bun run typecheck
 bun run build:web
@@ -89,6 +90,7 @@ if [[ "$task_preview_ready" != true ]]; then
 fi
 bun capture/program-astro.ts http://127.0.0.1:4321 artifacts/program-roundtrip
 bun capture/javascript-astro.ts http://127.0.0.1:4321 artifacts/javascript-roundtrip
+bun capture/astro-javascript.ts http://127.0.0.1:4321 artifacts/astro-javascript-roundtrip
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/geometry --out artifacts --width 320 --height 240 --scale 1 --source-hash "$task_source_hash"
 bun capture/behavior.ts http://127.0.0.1:4321/conformance conformance-scenario.json artifacts/web-behavior.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH"
 bun capture/keyed-behavior.ts http://127.0.0.1:4321/keyed keyed-scenario.json artifacts/web-keyed-behavior.json "$task_keyed_source_hash"
