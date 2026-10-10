@@ -20,5 +20,7 @@ native/.scene-roundtrip/
 example/src/pages/scene-responsive/
 native/.program-roundtrip/
 native/.javascript-probe/
+native/.astro-javascript-probe/
+example/src/pages/astro-javascript-roundtrip/
 example/src/pages/javascript-roundtrip/
 example/src/pages/program-roundtrip/

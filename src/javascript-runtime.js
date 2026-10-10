@@ -222,7 +222,13 @@ export function createRuntime(host, archive) {
         drain();
       };
       try {
-        preact.render(preact.h(entry, props), dom.root);
+        preact.render(
+          preact.h(
+            entry,
+            entry._afyAstroEntry ? { _afyAstroProps: props } : props,
+          ),
+          dom.root,
+        );
         drain();
       } catch (error) {
         failed = true;

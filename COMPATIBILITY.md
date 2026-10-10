@@ -16,6 +16,12 @@ external effects. Its synchronous execution profile, JSON host boundary and nati
 adapters are separate from the declarative source contract below. General browser/SSR APIs,
 asynchronous platform work and pixel equivalence remain pending.
 
+[Astro entries in the JavaScript engine](docs/astro-javascript.md) now preserve synchronous
+frontmatter lifetime, default slots, compatible hydrated islands and processed script
+deduplication/module state. Original Astro pages and regenerated islands are compared with
+actual generated-Go traces. Async SSR, routing, general DOM/CSS and arbitrary native Go
+callback conversion still require explicit contracts.
+
 Source-generated widgets can opt into [portable program archives](docs/program-roundtrip.md)
 with `portableProgram: true`. This preserves the supported declarative program, declared
 state and list identities across native → Preact → native continuation. Go remains compiled;
