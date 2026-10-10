@@ -25,7 +25,7 @@ original JavaScript or execute a general ECMAScript runtime.
 | Entry files         | `.astro`, `.tsx` and `.jsx`; local component imports; default or selected named exports                                                    | General package resolution, server execution and arbitrary module side effects                                                         |
 | Components          | Function components with supported props, constants and a declarative JSX return                                                           | Class components, arbitrary imperative component bodies and slots/children without a native contract                                   |
 | State               | Supported `useState` declarations; direct and declarative updater setters in event handlers                                                | Other hooks, arbitrary custom hooks and general effect lifecycles                                                                      |
-| Expressions         | Literals, supported property/index access, arrays, objects, templates, conditionals and listed operators                                   | Arbitrary function calls, spread, optional chaining and unsupported JavaScript constructs                                              |
+| Expressions         | Literals, supported ordinary/optional property and index access, arrays, objects, templates, conditionals and listed operators             | Arbitrary function calls, optional calls, spread and unsupported JavaScript constructs                                                 |
 | Branches and lists  | Supported JSX conditionals and declarative `map` callbacks; unique finite homogeneous string or number keys on a single root               | General iteration, arbitrary callback bodies, mixed or changing key types and fragment keys                                            |
 | Events              | Button/link `onClick`; input/textarea `onInput` and `onChange`; Go host callbacks declared explicitly in props and the host translator `t` | Full DOM event propagation, arbitrary event payloads, browser effects and implicit platform adapters                                   |
 | HTML nodes          | Supported container, plain text, button, link, input, textarea and local bitmap image tags                                                 | Rich text nesting, forms, specialized form controls and unsupported tags                                                               |
@@ -44,6 +44,14 @@ their comma-separated primitive projection; ordinary records use the standard
 those methods and can make conversion fail with a TypeError. Native callable overrides,
 custom prototypes, boxed values and `Symbol.toPrimitive` require explicit adapters.
 Array coercion is bounded and rejects cycles rather than recursing without limit.
+Optional property/index access preserves one continuous chain, evaluating its base
+once and skipping computed keys and subsequent accesses only at a nullish optional
+step. For example, `null?.child.value` produces `undefined`, while
+`(null?.child).value` fails. False, zero and empty strings remain ordinary values;
+reads of missing own properties on Boolean and number primitives produce `undefined`.
+Parentheses end the chain, while erased TypeScript non-null assertions do not.
+Optional calls and inherited callable properties still require an explicit native
+callable/prototype contract.
 Known inherited prototype properties cannot be read as a fabricated `undefined` value;
 reading them requires a prototype adapter. Ordinary absent data properties still yield
 `undefined`. Prototype-mutating `__proto__` literals receive a source diagnostic.
@@ -251,9 +259,13 @@ and requires the comparator to fail. A release should report which scenarios act
 in CI and which remain untested, rather than applying a general fidelity badge to generated
 code. Failed or missing comparisons leave a profile uncertified.
 
-A separate primitive scenario compares 33 text fields across four real component states
+A separate primitive scenario compares 46 text fields across four real component states
 and eight observation frames in Chromium and generated Go. Its event callbacks also
-compare object initializer evaluation order. These checks establish behavior rather than font
+compare object initializer evaluation order. Its optional access cases require skipped
+keys to remain uncalled and preserve the order of evaluated keys and single base calls.
+An optional-access updater advances nullable object state through all four states;
+compiled Go/JavaScript negative cases also check that parentheses and nonoptional
+nullish intermediates fail. These checks establish behavior rather than font
 pixel parity. The scale 2 geometry scenario captures the actual 320 × 240 logical canvas
 as 640 × 480 pixels in both renderers and checks the same zero-difference policy. It
 also verifies that a scale 1 canvas cannot validate or export a scale 2 profile. This

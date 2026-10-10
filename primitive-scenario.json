@@ -32,7 +32,20 @@
     "truth-empty-array",
     "truth-empty-object",
     "utf16-length",
-    "utf16-order"
+    "utf16-order",
+    "optional-continuous",
+    "optional-repeated",
+    "optional-lazy-key",
+    "optional-lazy-tail",
+    "optional-array",
+    "optional-empty-string",
+    "optional-false",
+    "optional-zero",
+    "optional-undefined",
+    "optional-base-once",
+    "optional-grouped",
+    "optional-non-null",
+    "optional-updater"
   ],
   "actions": [
     "observe-order",

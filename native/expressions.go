@@ -27,6 +27,10 @@ var Undefined any = undefinedValue{}
 
 func isUndefined(value any) bool { _, ok := value.(undefinedValue); return ok }
 
+// IsNullish is the optional-chain predicate. False, zero and empty strings are
+// ordinary values; chain keys and subsequent accesses must stay lazy.
+func IsNullish(value any) bool { return value == nil || isUndefined(value) }
+
 // Require prevents a generated page from displaying actions which do nothing.
 func Require(actions Actions, names []string) error {
 	for _, name := range names {
@@ -102,6 +106,13 @@ func Get(value any, key any) any {
 			return f.Interface()
 		}
 		return missingProperty(r.Kind(), property)
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		// Ordinary primitive property reads box the value in JavaScript. None of
+		// these boxes has own string-keyed data; inherited callables still need
+		// the same explicit prototype contract as strings and arrays.
+		return missingProperty(r.Kind(), property)
 	default:
 		panic(fmt.Sprintf("webui: cannot access property %v of %T", key, value))
 	}
@@ -117,6 +128,12 @@ func missingProperty(kind reflect.Kind, property string) any {
 		"isPrototypeOf", "propertyIsEnumerable", "__proto__", "__defineGetter__",
 		"__defineSetter__", "__lookupGetter__", "__lookupSetter__":
 		inherited = true
+	}
+	if kind != reflect.Bool && kind >= reflect.Int && kind <= reflect.Float64 {
+		switch property {
+		case "toExponential", "toFixed", "toPrecision":
+			inherited = true
+		}
 	}
 	if kind == reflect.Array || kind == reflect.Slice {
 		switch property {

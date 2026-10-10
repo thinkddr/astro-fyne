@@ -97,6 +97,13 @@ function expression(value: Expr, scope = "scope"): string {
       return `webui.Get(pending, ${quote(value.name)})`;
     case "get":
       return `webui.Get(${expression(value.object, scope)}, ${expression(value.key, scope)})`;
+    case "chain":
+      return `func() any { var value any = ${expression(value.object, scope)}; ${value.accesses
+        .map(
+          (access) =>
+            `${access.optional ? "if webui.IsNullish(value) { return webui.Undefined }; " : ""}value = webui.Get(value, ${expression(access.key, scope)});`,
+        )
+        .join(" ")} return value }()`;
     case "binary": {
       const left = expression(value.left, scope),
         right = expression(value.right, scope);
