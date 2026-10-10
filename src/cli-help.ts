@@ -45,13 +45,15 @@ Commands:
 
 Examples:
   bun run to-fyne
+  bun run to-fyne --javascript --source src/Counter.tsx --out native/generated --name Counter
   bun run to-fyne --scene scene.json --out native/generated --name NativePage
   bun run check --config path/to/astro-fyne.json
   bun run to-web --scene scene.json --out src/pages/native --name NativePage
   bun run to-web --program counter.program.json --out src/pages/counter --name Counter
 
 Run "bun run astro-fyne <command> --help" for options and examples.
-Conversion supports the documented declarative subset. Generated output alone
+Conversion offers declarative Go lowering or --javascript execution in pure-Go Goja.
+Both modes use native Fyne widgets and documented platform contracts. Generated output alone
 does not certify visual equivalence; compare browser and native captures.
 `;
   if (command === "reverse")
@@ -62,6 +64,11 @@ Usage: bun run to-web --scene <file> --out <directory> --name <Name> [options]
 Required:
   --scene <file>           Fyne scene JSON exported by the native scene API.
   --program <file>         Portable generated program, used instead of --scene.
+  --javascript            Use a bundled JavaScript archive or --source component.
+  --source <file>          TSX/JSX/TS/JS entry for --javascript.
+  --export <identifier>    JavaScript named export. Default: default.
+  --props <file>           Initial JSON data for a JavaScript source entry.
+  --actions <names>        Comma-separated JavaScript action props.
   --out <directory>        Destination for Name.astro, Name.tsx, Name.css and report.
   --name <Name>            Generated component name, for example NativePage.
 
@@ -99,6 +106,15 @@ Portable program input:
   Recompile a generated widget's exported program and current declared state.
   Opt into ExportProgram() with portableProgram: true in the source entry.
   CSS source, arbitrary JS/Go and function bodies need explicit contracts.
+
+JavaScript execution:
+  bun run to-fyne --javascript --source <component> --out <directory> --name <Name>
+  bun run to-fyne --javascript --program <archive> --out <directory> --name <Name>
+  --export <identifier>    Named component export. Default: default.
+  --props <file>           Initial JSON props for source input.
+  --actions <names>        Comma-separated callback names bound by the Go host.
+  Generated Go embeds JavaScript executed in Goja, with native Fyne controls.
+  See docs/javascript-runtime.md for replay and native platform boundaries.
 `
       : "";
   const descriptions = {

@@ -337,6 +337,20 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     process.stdout.write(helpText(command));
     return;
   }
+  if (argv.includes("--javascript")) {
+    if (!["generate", "check", "reverse"].includes(command))
+      throw usageError(
+        "JavaScript mode supports to-fyne, to-web and check.",
+        command,
+      );
+    const { javascriptMain } = await import("./javascript-cli.ts");
+    await javascriptMain(
+      argv,
+      command === "reverse" ? "web" : "native",
+      command === "check",
+    );
+    return;
+  }
   if (argv.includes("--program")) {
     if (!["generate", "check", "reverse"].includes(command))
       throw usageError(
