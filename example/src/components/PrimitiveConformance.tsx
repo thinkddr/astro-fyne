@@ -11,9 +11,25 @@ interface PrimitiveProps {
 
 export function PrimitiveConformance({ t, observeObject }: PrimitiveProps) {
   const [phase, setPhase] = useState(0);
+  const [optionalState, setOptionalState] = useState<{ value: number } | null>(
+    null,
+  );
+  const record = (
+    phase % 2 === 0 ? null : { nested: { value: phase }, empty: null }
+  ) as any;
+  const missing = undefined as any;
   return (
     <main id="primitive-conformance">
-      <button id="next-phase" type="button" onClick={() => setPhase(phase + 1)}>
+      <button
+        id="next-phase"
+        type="button"
+        onClick={() => {
+          setPhase(phase + 1);
+          setOptionalState((previous) => ({
+            value: (previous?.value ?? 0) + 1,
+          }));
+        }}
+      >
         Next phase
       </button>
       <button
@@ -58,6 +74,19 @@ export function PrimitiveConformance({ t, observeObject }: PrimitiveProps) {
       <p id="truth-empty-object">{String(Boolean({}))}</p>
       <p id="utf16-length">{String("A🙂B".length)}</p>
       <p id="utf16-order">{String("🙂" < "\uE000")}</p>
+      <p id="optional-continuous">{String(record?.nested.value)}</p>
+      <p id="optional-repeated">{String(record?.empty?.value)}</p>
+      <p id="optional-lazy-key">{String(record?.[t("nested")].value)}</p>
+      <p id="optional-lazy-tail">{String(record?.nested[t("value")])}</p>
+      <p id="optional-array">{String([phase]?.[0])}</p>
+      <p id="optional-empty-string">{String(""?.length)}</p>
+      <p id="optional-false">{String((false as any)?.[t("false-key")])}</p>
+      <p id="optional-zero">{String((0 as any)?.[t("zero-key")])}</p>
+      <p id="optional-undefined">{String(missing?.[t("forbidden-key")])}</p>
+      <p id="optional-base-once">{String(t("base-once")?.length)}</p>
+      <p id="optional-grouped">{String(record?.nested?.value)}</p>
+      <p id="optional-non-null">{String(record?.nested!.value)}</p>
+      <p id="optional-updater">{String(optionalState?.value ?? "seed")}</p>
     </main>
   );
 }
