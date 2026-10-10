@@ -191,6 +191,11 @@ supported Flexbox declarations and resize without additional captures. Both gene
 resources, themes and named actions. Supply matching fonts through `--fonts faces.json` or
 a host backend; the [reverse guide](docs/reverse-conversion.md) describes these boundaries.
 
+Source-generated widgets can also preserve their declarative logic and current state. Enable
+`portableProgram: true`, export with `ExportProgram()`, and import using `to-web --program`
+or `to-fyne --program`. Native execution remains generated Go. See the
+[program roundtrip guide](docs/program-roundtrip.md) for actions, data and CSS boundaries.
+
 ## Commands
 
 All conversion commands support `--help`. `bun run astro-fyne --help` lists the complete interface.
@@ -220,6 +225,7 @@ for a single measured entry, `--measurements PATH`. Reverse output is checked wi
 | Responsive layout    | Explicit row/column Flexbox, boxes, one-line text, buttons, single-line inputs and bitmap leaves     |
 | Browser measurements | Fixed source/state/viewport/device-scale profiles with validated styles                              |
 | Reverse output       | Fixed native scenes or preserved source Flexbox, with values, resources and named actions            |
+| Program roundtrip    | Opt-in compiler IR, declared props/state and list identities restored in Preact and generated Go     |
 | Still unsupported    | Arbitrary JS/Go, full CSS cascade, grid, wrapping/intrinsic layout, animations and browser APIs      |
 
 CI compares browser and native captures and retains the generated code, traces, scene files
