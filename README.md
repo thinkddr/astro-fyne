@@ -32,7 +32,7 @@ processed scripts. CI compares their native continuation with the original Astro
 ## Get started
 
 Install [Bun](https://bun.sh/docs/installation) and the Go version declared in
-[native/go.mod](native/go.mod). CI currently uses Bun **1.4.2** and Go **1.27.1**.
+[native/go.mod](native/go.mod). CI currently uses Bun **1.4.2** and Go **1.27.2**.
 Running a desktop window also requires the [Fyne platform dependencies](https://docs.fyne.io/started/).
 The compiler is currently installed from this repository; there is no published npm package.
 
