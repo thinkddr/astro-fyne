@@ -18,3 +18,5 @@ example/src/pages/bitmap-reverse/
 example/public/assets/
 native/.scene-roundtrip/
 example/src/pages/scene-responsive/
+native/.program-roundtrip/
+example/src/pages/program-roundtrip/
