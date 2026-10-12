@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 
-import { isValidElement } from "preact";
+import { h, isValidElement } from "preact";
+import { useMemo } from "preact/hooks";
 import { javascriptHostJSON } from "./javascript-data.ts";
 
 /** Astro renders functions/iterables and some scalars differently from JSX. */
@@ -16,55 +17,128 @@ export function astroChild(
   if (value == null || value === false) return null;
   if (Array.isArray(value))
     return value.map((item) => astroChild(item, depth, budget));
-  if (typeof value === "function") return astroChild(value(), depth, budget);
-  if (typeof value === "object") {
-    if (
-      value instanceof Promise ||
-      typeof value.then === "function" ||
-      Symbol.asyncIterator in value
-    )
-      throw new Error(
-        "Async Astro rendering requires an SSR/event-loop adapter",
-      );
-    if (
-      ArrayBuffer.isView(value) ||
-      value[Symbol.for("astro:html-string")] ||
-      value[Symbol.for("astro:slot-string")]
-    )
-      throw new Error(
-        "Raw Astro HTML/bytes require a native rich-text adapter",
-      );
-    if (Symbol.iterator in value) {
-      const result = [];
-      for (const item of value) result.push(astroChild(item, depth, budget));
-      return result;
+  if (
+    typeof value === "function" ||
+    (typeof value === "object" && value !== null)
+  )
+    return h(AstroValue, { value, depth, budget });
+  return String(value);
+}
+
+function AstroValue({
+  value,
+  depth,
+  budget,
+}: {
+  value: any;
+  depth: number;
+  budget: { remaining: number };
+}): any {
+  return useMemo(() => {
+    if (typeof value === "function") return astroChild(value(), depth, budget);
+    if (typeof value === "object") {
+      if (
+        value instanceof Promise ||
+        typeof value.then === "function" ||
+        Symbol.asyncIterator in value
+      )
+        throw new Error(
+          "Async Astro rendering requires an SSR/event-loop adapter",
+        );
+      if (
+        ArrayBuffer.isView(value) ||
+        value[Symbol.for("astro:html-string")] ||
+        value[Symbol.for("astro:slot-string")]
+      )
+        throw new Error(
+          "Raw Astro HTML/bytes require a native rich-text adapter",
+        );
+      if (Symbol.iterator in value) {
+        const result = [];
+        for (const item of value) result.push(astroChild(item, depth, budget));
+        return result;
+      }
     }
+    const text = String(value);
+    if (typeof value === "object" && /[<&]/.test(text))
+      throw new Error(
+        "Object Astro HTML rendering requires a native HTML adapter",
+      );
+    return text;
+  }, []);
+}
+
+/** Astro evaluates each supplied slot once when creating its render instance. */
+export function astroSlots(slots: Record<string, () => any>) {
+  const prepared: Record<string, () => any> = Object.create(null);
+  for (const name of Object.keys(slots)) {
+    const render = slots[name]!;
+    const initial = render();
+    let consumed = false;
+    prepared[name] = () => {
+      if (consumed) return render();
+      consumed = true;
+      return initial;
+    };
   }
-  const text = String(value);
-  if (typeof value === "object" && /[<&]/.test(text))
-    throw new Error(
-      "Object Astro HTML rendering requires a native HTML adapter",
-    );
-  return text;
+  return prepared;
+}
+
+function AstroSlot({
+  render,
+  fallback,
+}: {
+  render?: () => any;
+  fallback: any;
+}): any {
+  // Selection happens while walking the rendered tree. Fallback expressions
+  // have already evaluated as function arguments, including for filled slots.
+  return useMemo(() => (render ? render() : fallback), []);
+}
+
+export function astroSlot(
+  slots: Record<string, () => any>,
+  name: string,
+  fallback: any,
+) {
+  return h(AstroSlot, {
+    render: Object.hasOwn(slots, name) ? slots[name] : undefined,
+    fallback,
+  });
 }
 
 export function astroContext(
   props: Record<string, any>,
   slots: Record<string, () => any>,
 ) {
+  const publicSlots: Record<string, any> = {
+    has(name: string) {
+      if (name in Object.prototype || ["has", "render"].includes(name))
+        throw new Error(
+          `Reserved Astro slot name ${name} requires a slot adapter`,
+        );
+      return Object.hasOwn(slots, name);
+    },
+    render() {
+      throw new Error(
+        "Astro.slots.render requires an async HTML adapter; use <slot> for native content",
+      );
+    },
+  };
+  for (const name of Object.keys(slots)) {
+    if (name in publicSlots)
+      throw new Error(
+        `Reserved Astro slot name ${name} requires a slot adapter`,
+      );
+    Object.defineProperty(publicSlots, name, {
+      get: () => true,
+      enumerable: true,
+    });
+  }
   return new Proxy(
     {
       props,
-      slots: {
-        has(name: string) {
-          return Object.hasOwn(slots, name);
-        },
-        render() {
-          throw new Error(
-            "Astro.slots.render requires an async HTML adapter; use <slot> for native content",
-          );
-        },
-      },
+      slots: publicSlots,
     },
     {
       get(target, name, receiver) {
@@ -98,6 +172,7 @@ export function astroAttributes(
     if (
       name.startsWith("_afyAstro") ||
       name.includes(":") ||
+      name === "slot" ||
       (!component && /^on/i.test(name)) ||
       (!component && ["key", "ref", "children"].includes(name))
     )

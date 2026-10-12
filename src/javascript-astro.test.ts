@@ -65,7 +65,89 @@ test("Astro JavaScript source accepts arbitrary frontmatter and retains imported
   api.flush();
   expect(values(api.snapshot())["astro-js-script-count"]).toBe("2");
 }, 60_000);
-test("Astro props retain key/ref/children data and default slots remain lazy", async () => {
+test("Astro named slots preserve preparation, fallback and repeated-render order", async () => {
+  const path = join(
+    import.meta.dir,
+    "../example/src/pages/astro-javascript-original.astro",
+  );
+  const archive = await bundleJavascript(path);
+  expect(
+    archive.sources.some((source) => source.path.endsWith("Forward.astro")),
+  ).toBe(true);
+  const api = mount(archive);
+  const initial = values(api.snapshot());
+  expect(initial["astro-js-slot-presence"]).toBe(
+    "true|true|true|true|true|false|true|true",
+  );
+  expect(initial["astro-js-slot-start"]).toBe("4");
+  expect(initial["astro-js-slot-parent"]).toBe("4");
+  expect(initial["astro-js-slot-after"]).toBe("6");
+  expect(initial["astro-js-header-first"]).toBe("23");
+  expect(initial["astro-js-header-again"]).toBe("78");
+  expect(initial["astro-js-slot-default"]).toBe("D-1");
+  expect(initial["astro-js-slot-missing"]).toBe("M-9");
+  expect(initial["astro-js-slot-empty"]).toBe("E");
+  expect(initial["astro-js-forward"]).toBe("true|falseENTITY");
+  const walk = (frames: JavascriptFrame[]) => {
+    for (const frame of frames) {
+      expect(frame.attrs?.slot).toBeUndefined();
+      walk(frame.children ?? []);
+    }
+  };
+  walk(api.snapshot());
+}, 60_000);
+test("Astro named slot boundaries diagnose dynamic routing and reserved names", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "afy-astro-slots-"));
+  try {
+    const path = join(directory, "Page.astro");
+    await writeFile(join(directory, "Frame.astro"), `<slot name="header"/>`);
+    for (const [markup, diagnostic] of [
+      [`<Frame><p slot={"header"}>Dynamic</p></Frame>`, "static"],
+      [
+        `<Frame><Fragment slot={"header"}><p>Dynamic</p></Fragment></Frame>`,
+        "static",
+      ],
+      [`<slot name={"header"}/>`, "static"],
+      [`<Frame><p slot="has">Reserved</p></Frame>`, "Reserved"],
+      [`<slot name="constructor"/>`, "Reserved"],
+      [`<p slot="header">No parent</p>`, "slot adapter"],
+    ]) {
+      await writeFile(
+        path,
+        `---\nimport Frame from "./Frame.astro";\n---\n${markup}`,
+      );
+      await expect(bundleJavascript(path)).rejects.toThrow(diagnostic!);
+    }
+    await writeFile(
+      path,
+      `---\nconst attributes={slot:"header"};\n---\n<p {...attributes}>No dynamic slot</p>`,
+    );
+    const archiveForDynamic = await bundleJavascript(path);
+    expect(() => mount(archiveForDynamic)).toThrow("attribute slot");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 60_000);
+test("Astro literal slot keys retain entity spelling after UTF-8 source prefixes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "afy-astro-slot-unicode-"));
+  try {
+    await writeFile(
+      join(directory, "Frame.astro"),
+      `<p id="has">{Astro.slots.has("a&amp;b")}|{Astro.slots.has("a&b")}</p><section id="body"><slot name="a&amp;b"/></section>`,
+    );
+    const path = join(directory, "Page.astro");
+    await writeFile(
+      path,
+      `---\nimport Frame from "./Frame.astro";\n---\n<p>á🙂</p><Frame><p slot="a&amp;b">Entidad</p></Frame>`,
+    );
+    const result = values(mount(await bundleJavascript(path)).snapshot());
+    expect(result.has).toBe("true|");
+    expect(result.body).toBe("Entidad");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 60_000);
+test("Astro props retain key/ref/children data and repeat default slots", async () => {
   const directory = await mkdtemp(join(tmpdir(), "afy-astro-props-"));
   try {
     const path = join(directory, "Page.astro");
@@ -150,7 +232,7 @@ test("Astro unsupported server/browser contracts produce source diagnostics", as
       [`<html><head/><body>Document</body></html>`, "CSS/window"],
       [`<button onclick="void 0">Click</button>`, "event"],
       [`<p set:html="<b>Raw</b>"/>`, "directive"],
-      [`<slot name="header"/>`, "slot"],
+      [`<slot name={"header"} />`, "static"],
       [`<script is:inline>void 0;</script>`, "script attributes"],
       [`<Counter/>`, "Non-hydrated"],
       [`<Counter client:visible/>`, "deferred"],

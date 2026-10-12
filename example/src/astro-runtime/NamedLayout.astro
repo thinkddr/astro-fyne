@@ -1,0 +1,20 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Astro Fyne contributors.
+import Forward from "./Forward.astro";
+const { state } = Astro.props;
+const initial = state.value;
+const present = ["default", "header", "footer", "unused", "", "a&b"].map(name => String(Astro.slots.has(name))).join("|");
+---
+<section>
+  <p id="astro-js-slot-presence">{present}|{Astro.slots.header}|{Astro.slots.missing === undefined}</p>
+  <p id="astro-js-slot-start">{initial}</p>
+  <section id="astro-js-header-first"><slot name="header">{++state.value}</slot></section>
+  <section id="astro-js-slot-default"><slot>{() => { throw new Error("Unused default fallback"); }}</slot></section>
+  <section id="astro-js-header-again"><slot name="header">{++state.value}</slot></section>
+  <p id="astro-js-slot-after">{state.value}</p>
+  <slot name="footer">{() => { throw new Error("Unused footer fallback"); }}</slot>
+  <slot name="missing"><p id="astro-js-slot-missing">{() => "M-" + ++state.value}</p></slot>
+  <section id="astro-js-slot-empty"><slot name=""/></section>
+  <Forward><slot name="a&amp;b" slot="header"/></Forward>
+</section>

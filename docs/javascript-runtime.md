@@ -146,7 +146,7 @@ CSS imports, class-based styling, general cascade/layout and rich text require n
 contracts. Mixed padding/background shorthands and longhands are diagnosed until ordered
 CSS is retained.
 [Astro source entries](astro-javascript.md) support synchronous frontmatter, nested Astro
-components, default slots, compatible hydrated Preact islands and processed scripts.
+components, default/named/forwarded slots, compatible hydrated Preact islands and processed scripts.
 General SSR/routing and browser services require further adapters. Astro output uses a hydrated
 Preact island, with private helper files excluded from page routing.
 
