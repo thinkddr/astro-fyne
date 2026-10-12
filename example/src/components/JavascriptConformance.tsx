@@ -2,6 +2,7 @@
 // Copyright 2026 Astro Fyne contributors.
 
 import { createContext } from "preact";
+import { JavascriptCheckboxes } from "./JavascriptCheckboxes";
 import {
   useCallback,
   useContext,
@@ -106,6 +107,7 @@ export function JavascriptConformance({
       onClickCapture={() => observe("capture")}
       onClick={() => observe("bubble")}
     >
+      <JavascriptCheckboxes observe={observe} />
       <p id="js-count">{count}</p>
       <p id="js-standard">
         {String(

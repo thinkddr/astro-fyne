@@ -72,6 +72,17 @@ const scenario = astro
         ),
         { id: "js-input", value: "fyne" },
         { id: "js-uncontrolled", value: "native" },
+        ...tap(
+          "js-check-controlled",
+          "js-check-local",
+          "js-check-rerender",
+          "js-check-programmatic",
+          "js-check-cancelled",
+          "js-check-disabled",
+          "js-check-readonly",
+          "js-check-label",
+        ),
+        { id: "js-check-controlled", key: "Space" },
         ...tap("js-programmatic"),
         ...tap("js-reorder", "js-a-increment"),
       ],
@@ -81,6 +92,10 @@ const scenario = astro
           "js-toggle",
           "js-toggle",
           "js-optional-increment",
+          "js-check-controlled",
+          "js-check-local",
+          "js-check-programmatic",
+          "js-check-label",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -107,6 +122,12 @@ for (const [name, source, event, contains] of [
     `export default function Page(){return <p style={{position:"absolute"}}>No adapter</p>}`,
     "",
     "CSS property position",
+  ],
+  [
+    "checkbox-style",
+    `export default function Page(){return <input type="checkbox" style={{width:20}} />}`,
+    "",
+    "checkbox styles",
   ],
   [
     "measurement",
@@ -204,7 +225,11 @@ const frameValues = (frames: JavascriptFrame[]) => {
     for (const frame of frames) {
       if (frame.attrs?.id)
         values[frame.attrs.id] =
-          frame.tag === "input" ? (frame.value ?? "") : text(frame);
+          frame.tag === "input" && frame.attrs?.type === "checkbox"
+            ? String(frame.checked)
+            : frame.tag === "input"
+              ? (frame.value ?? "")
+              : text(frame);
       walk(frame.children ?? []);
     }
   };
@@ -338,8 +363,16 @@ try {
   const frames = [
     await page.evaluate(() => window.afyJavascript.export().frame),
   ];
-  const perform = async (step: { id: string; value?: string }) => {
-    if (step.value !== undefined) {
+  const perform = async (step: {
+    id: string;
+    value?: string;
+    key?: string;
+  }) => {
+    if (step.key) {
+      const input = page.locator(`[id=${JSON.stringify(step.id)}]`);
+      await input.press(step.key);
+      await input.evaluate((element) => (element as HTMLElement).blur());
+    } else if (step.value !== undefined) {
       const input = page.locator(`[id=${JSON.stringify(step.id)}]`);
       await input.selectText();
       await input.pressSequentially(step.value);
@@ -406,7 +439,9 @@ try {
           [...document.querySelectorAll("#probe [id]")].map((element) => [
             element.id,
             element instanceof HTMLInputElement
-              ? element.value
+              ? element.type === "checkbox"
+                ? String(element.checked)
+                : element.value
               : element.textContent,
           ]),
         ),

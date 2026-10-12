@@ -43,6 +43,7 @@ type Frame struct {
 	Style    map[string]any    `json:"style,omitempty"`
 	Value    string            `json:"value,omitempty"`
 	Disabled bool              `json:"disabled,omitempty"`
+	Checked  bool              `json:"checked,omitempty"`
 	Events   []string          `json:"events,omitempty"`
 	Children []Frame           `json:"children,omitempty"`
 }

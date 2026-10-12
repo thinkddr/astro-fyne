@@ -34,6 +34,7 @@ type Node struct {
 	CaptureSignature          string
 	AccessibleLabel, LabelFor string
 	Disabled                  bool
+	Checked                   bool
 	// LocalValue lets an imported scene field retain its browser-style local
 	// editing state across host refreshes; Value supplies its initial text.
 	LocalValue bool
@@ -41,6 +42,7 @@ type Node struct {
 	Children   []Node
 	OnTap      func()
 	OnChange   func(string)
+	OnChecked  func(bool)
 	// OnCommit represents HTML change; OnChange represents immediate input.
 	OnCommit func(string)
 	// OnSubmit is a single-line Return action, after a deduplicated commit.
@@ -267,6 +269,9 @@ func (v *View) Error() error {
 
 func (v *View) uncommittedInputError() error {
 	for id, e := range v.elements {
+		if control, ok := e.object.(*checkboxWidget); ok && control.Checked != e.node.Checked {
+			return fmt.Errorf("webui: checkbox %q has an uncommitted checked state", id)
+		}
 		if e.input != nil && e.input.Text() != e.node.Value {
 			return fmt.Errorf("webui: input %q has an uncommitted visual value; commit it before supplying a matching measurement profile", id)
 		}
@@ -379,6 +384,9 @@ func (v *View) applyLayout(measurements map[string]Style, scene bool) error {
 			return err
 		}
 		e := v.elements[id]
+		if e.node.Kind == "checkbox" {
+			return fmt.Errorf("webui: checkbox measurements require a native checkbox style adapter")
+		}
 		if e.node.Kind == "image" {
 			if err := validateImageStyle(id, style); err != nil {
 				return err
@@ -612,7 +620,7 @@ func validateNodes(nodes []Node, ids, identities map[string]bool) error {
 			identities[n.Identity] = true
 		}
 		switch n.Kind {
-		case "container", "text", "button", "input", "textarea", "link", "image":
+		case "container", "text", "label", "button", "input", "textarea", "checkbox", "link", "image":
 		default:
 			return fmt.Errorf("webui: unsupported native node kind %q at %q", n.Kind, n.ID)
 		}
@@ -624,6 +632,12 @@ func validateNodes(nodes []Node, ids, identities map[string]bool) error {
 		}
 		if n.LocalValue && n.Kind != "input" && n.Kind != "textarea" {
 			return fmt.Errorf("webui: local editing state on %q requires an input", n.ID)
+		}
+		if n.Kind != "checkbox" && (n.Checked || n.OnChecked != nil) {
+			return fmt.Errorf("webui: checked state on %q requires a checkbox", n.ID)
+		}
+		if n.Kind == "checkbox" && n.Style != (Style{}) {
+			return fmt.Errorf("webui: checkbox styling requires a native checkbox style adapter")
 		}
 		if n.Style.Measured {
 			return fmt.Errorf("webui: node %q must supply browser geometry through ApplyMeasurements", n.ID)
@@ -700,6 +714,7 @@ func frameState(nodes []Node, scene bool) string {
 		CaptureSignature                                        string
 		ImageHash                                               string
 		Disabled                                                bool
+		Checked                                                 bool `json:",omitempty"`
 		Style                                                   Style
 		Children                                                []stateNode
 	}
@@ -717,7 +732,7 @@ func frameState(nodes []Node, scene bool) string {
 			out[i] = stateNode{ID: n.ID, Kind: n.Kind, Text: n.Text, Value: n.Value,
 				Placeholder: n.Placeholder, Href: n.Href, Variant: n.Variant, Size: n.Size,
 				CaptureSignature: n.CaptureSignature,
-				ImageHash:        imageHash, Disabled: n.Disabled, Style: n.Style, Children: state(n.Children)}
+				ImageHash:        imageHash, Disabled: n.Disabled, Checked: n.Checked, Style: n.Style, Children: state(n.Children)}
 		}
 		return out
 	}
@@ -816,6 +831,25 @@ type element struct {
 func newElement(v *View, n Node) *element {
 	e := &element{view: v, node: n}
 	switch n.Kind {
+	case "checkbox":
+		w := &checkboxWidget{element: e}
+		w.ExtendBaseWidget(w)
+		w.OnChanged = func(checked bool) {
+			if e.suppressChange || e.node.Disabled {
+				return
+			}
+			if e.node.OnChecked != nil {
+				e.node.OnChecked(checked)
+			}
+			if e.view.autoRefreshEvents {
+				e.view.Refresh()
+			}
+		}
+		e.object = w
+	case "label":
+		w := &labelWidget{element: e}
+		w.ExtendBaseWidget(w)
+		e.object = w
 	case "button", "link":
 		w := &actionWidget{element: e}
 		w.ExtendBaseWidget(w)
@@ -867,6 +901,16 @@ func (e *element) update() {
 	}
 	if w, ok := e.object.(*actionWidget); ok {
 		w.disabled = e.node.Disabled
+	}
+	if w, ok := e.object.(*checkboxWidget); ok {
+		e.suppressChange = true
+		w.SetChecked(e.node.Checked)
+		if e.node.Disabled {
+			w.Disable()
+		} else {
+			w.Enable()
+		}
+		e.suppressChange = false
 	}
 	if e.node.Kind == "image" {
 		hash := sha256.Sum256(e.node.ImageResource.Content())
@@ -1064,6 +1108,37 @@ type plainWidget struct {
 	widget.BaseWidget
 	element *element
 }
+
+type checkboxWidget struct {
+	widget.Check
+	element *element
+}
+
+func (w *checkboxWidget) AccessibilityLabel() string { return w.element.label }
+func (w *checkboxWidget) Tapped(event *fyne.PointEvent) {
+	if event != nil {
+		w.Check.Tapped(event)
+	} else if !w.Disabled() {
+		w.SetChecked(!w.Checked)
+	}
+}
+
+type labelWidget struct {
+	widget.BaseWidget
+	element *element
+}
+
+func (w *labelWidget) CreateRenderer() fyne.WidgetRenderer { return newElementRenderer(w.element) }
+func (w *labelWidget) Tapped(*fyne.PointEvent) {
+	if w.element.node.OnTap != nil {
+		w.element.node.OnTap()
+		if w.element.view.autoRefreshEvents {
+			w.element.view.Refresh()
+		}
+	}
+}
+func (w *labelWidget) AccessibilityLabel() string             { return w.element.node.Text }
+func (w *labelWidget) AccessibilityRole() fyne.AccessibleRole { return fyne.AccessibleRoleText }
 
 func (w *plainWidget) CreateRenderer() fyne.WidgetRenderer { return newElementRenderer(w.element) }
 func (w *plainWidget) AccessibilityLabel() string {

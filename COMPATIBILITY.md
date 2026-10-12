@@ -16,6 +16,11 @@ external effects. Its synchronous execution profile, JSON host boundary and nati
 adapters are separate from the declarative source contract below. General browser/SSR APIs,
 asynchronous platform work and pixel equivalence remain pending.
 
+The JavaScript mode also preserves unstyled checkbox state, native/Space/label activation,
+click cancellation, disabled behavior and input/change events across continuation. Checkbox
+styling and measured rendering profiles remain diagnosed; functional state tests do not
+certify their pixels.
+
 [Astro entries in the JavaScript engine](docs/astro-javascript.md) now preserve synchronous
 frontmatter lifetime, default/named/forwarded slots, compatible hydrated islands and processed script
 deduplication/module state. Original Astro pages and regenerated islands are compared with
