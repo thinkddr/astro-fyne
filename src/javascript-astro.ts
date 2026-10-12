@@ -19,6 +19,7 @@ interface Attribute {
   name: string;
   kind: string;
   value: string;
+  position?: { start: { offset: number } };
 }
 
 /** Lower Astro's synchronous render lifecycle, without executing server source. */
@@ -106,6 +107,25 @@ export async function astroJavascript(
   const fragment = prefix + "Fragment",
     child = prefix + "Child",
     attrs = prefix + "Attrs";
+  const slotName = (node: Node, attribute: Attribute): string => {
+    if (attribute.kind !== "quoted")
+      fail(node, "Astro slot names must be static quoted strings");
+    // The parser decodes entities, while Astro 7's Rust renderer keeps the
+    // source literal for slot keys. Its positions use UTF-8 byte offsets.
+    const offset = attribute.position?.start.offset;
+    const literal =
+      offset === undefined
+        ? null
+        : /^(?:slot|name)\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(
+            Buffer.from(source).subarray(offset).toString("utf8"),
+          );
+    if (!literal)
+      return fail(node, "Astro slot names must be static quoted strings");
+    const name = literal[1] ?? literal[2]!;
+    if (name in Object.prototype || ["has", "render"].includes(name))
+      fail(node, `Reserved Astro slot name ${name} requires a slot adapter`);
+    return name;
+  };
   const serialize = (node: Node, expression = false): string => {
     if (
       node.type === "frontmatter" ||
@@ -153,9 +173,15 @@ export async function astroJavascript(
       return "";
     }
     if (name === "slot") {
-      if (attributes.length)
-        fail(node, "Named/dynamic Astro slots require a slot adapter");
-      return `{${prefix}Slots.default ? ${prefix}Slots.default() : <${fragment}>${(node.children ?? []).map((node) => serialize(node)).join("")}</${fragment}>}`;
+      if (
+        attributes.length > 1 ||
+        attributes.some((attr) => attr.name !== "name")
+      )
+        fail(node, "Astro slot outlets support only a static name attribute");
+      const key = attributes.length
+        ? slotName(node, attributes[0]!)
+        : "default";
+      return `{${prefix}Slot(${prefix}Slots,${JSON.stringify(key)},<${fragment}>${(node.children ?? []).map((node) => serialize(node)).join("")}</${fragment}>)}`;
     }
     const isFragment = node.type === "fragment" || name === "Fragment";
     if (isFragment && attributes.length)
@@ -228,16 +254,54 @@ export async function astroJavascript(
     const tag = isFragment ? fragment : name;
     const values = `${attrs}({${properties.join(",")}},${component},${component && !isAstro})`;
     const spread = isFragment ? "" : `{...${values}}`;
+    if (isAstro) {
+      const slots = new Map<
+        string,
+        { content: string; meaningful: boolean }[]
+      >();
+      for (const childNode of node.children ?? []) {
+        const labels = (childNode.attributes ?? []).filter(
+          (attr) => attr.name === "slot",
+        );
+        if (labels.length > 1)
+          fail(
+            childNode,
+            "Duplicate Astro slot attributes require a slot adapter",
+          );
+        const key = labels.length ? slotName(childNode, labels[0]!) : "default";
+        const entries = slots.get(key) ?? [];
+        const owned = labels.length
+          ? {
+              ...childNode,
+              attributes: childNode.attributes!.filter(
+                (attr) => attr.name !== "slot",
+              ),
+            }
+          : childNode;
+        entries.push({
+          content: serialize(owned),
+          meaningful:
+            !!labels.length ||
+            (childNode.type !== "text" && childNode.type !== "comment") ||
+            (childNode.type === "text" && !!childNode.value?.trim()),
+        });
+        slots.set(key, entries);
+      }
+      // Astro's compiler orders static slot keys by UTF-8 bytes. The JS object
+      // then applies its ordinary integer-key order, just as the server does.
+      const groups = [...slots.entries()]
+        .filter(([, entries]) => entries.some((item) => item.meaningful))
+        .sort(([a], [b]) => Buffer.compare(Buffer.from(a), Buffer.from(b)))
+        .map(
+          ([key, entries]) =>
+            `[${JSON.stringify(key)}]:()=> <${fragment}>${entries.map((item) => item.content).join("")}</${fragment}>`,
+        );
+      return `<${tag} _afyAstroProps={${values}} _afyAstroSlots={${prefix}PrepareSlots({${groups.join(",")}})} />`;
+    }
+    if (component) return `<${tag} ${spread} />`;
     const content = (node.children ?? [])
       .map((node) => serialize(node))
       .join("");
-    if (isAstro) {
-      const hasChildren = (node.children ?? []).some(
-        (node) => node.type !== "text" || node.value?.trim(),
-      );
-      return `<${tag} _afyAstroProps={${values}} _afyAstroSlots={${hasChildren ? `{default:()=> <${fragment}>${content}</${fragment}>}` : "{}"}} />`;
-    }
-    if (component) return `<${tag} ${spread} />`;
     return `<${tag} ${spread}>${content}</${tag}>`;
   };
   const markup = serialize(ast);
@@ -247,7 +311,7 @@ export async function astroJavascript(
   const runtime = resolve(import.meta.dir, "javascript-astro-runtime.ts");
   return `import {Fragment as ${fragment}} from "preact";
 import {useMemo as ${prefix}Memo,useLayoutEffect as ${prefix}Effect} from "preact/hooks";
-import {astroChild as ${child},astroAttributes as ${attrs},astroContext as ${prefix}Context,astroScript as ${prefix}Script} from ${JSON.stringify(runtime)};
+import {astroChild as ${child},astroAttributes as ${attrs},astroContext as ${prefix}Context,astroScript as ${prefix}Script,astroSlots as ${prefix}PrepareSlots,astroSlot as ${prefix}Slot} from ${JSON.stringify(runtime)};
 ${imports.join("\n")}
 ${compiled.map((code, index) => `const ${prefix}Install${index}=()=>{${code}};`).join("\n")}
 export default function ${prefix}Component(input:any){

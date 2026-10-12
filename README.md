@@ -26,7 +26,7 @@ archives continue closures, module state and events through Fyne → Astro → F
 browser APIs still require native contracts.
 
 The same route now accepts [Astro source files](docs/astro-javascript.md), including
-synchronous frontmatter, nested components/default slots, hydrated Preact islands and
+synchronous frontmatter, nested components/default and named slots, hydrated Preact islands and
 processed scripts. CI compares their native continuation with the original Astro page.
 
 ## Get started

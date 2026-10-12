@@ -17,7 +17,7 @@ adapters are separate from the declarative source contract below. General browse
 asynchronous platform work and pixel equivalence remain pending.
 
 [Astro entries in the JavaScript engine](docs/astro-javascript.md) now preserve synchronous
-frontmatter lifetime, default slots, compatible hydrated islands and processed script
+frontmatter lifetime, default/named/forwarded slots, compatible hydrated islands and processed script
 deduplication/module state. Original Astro pages and regenerated islands are compared with
 actual generated-Go traces. Async SSR, routing, general DOM/CSS and arbitrary native Go
 callback conversion still require explicit contracts.
