@@ -8,7 +8,7 @@ The explicit `--javascript` route bundles an Astro/TSX/JSX/TS/JS component and r
 Generated native files remain `.go`. They embed the JavaScript program and call the
 Go runtime; the application does not require Node, Bun or a browser at runtime.
 JavaScript logic is interpreted, rather than translated into Go statements.
-Fyne still owns the window, drawing, buttons, links and native text editors.
+Fyne still owns the window, drawing, buttons, links, checkboxes and native text editors.
 
 The default declarative compiler remains available. Its `portableProgram` archives
 and this mode's JavaScript archives are separate, explicit contracts.
@@ -130,9 +130,14 @@ Promises/async host work, delayed timers, networking, storage, SSR and browser s
 still need event-loop/platform adapters. This is not a complete browser environment.
 
 The DOM adapter currently covers supported containers, plain text, buttons, links,
-text inputs and textareas. Click capture/bubbling, controlled/uncontrolled input/change
+unstyled checkboxes, text inputs and textareas. Click capture/bubbling, controlled/uncontrolled input/change
 events, direct event properties and programmatic clicks travel through the virtual DOM.
-Physical clicks currently enter through native buttons and links; direct clicks on text,
+Checkboxes preserve `checked`/`defaultChecked`, dirty local state, the default `on`
+value, click preactivation and cancellation, input/change ordering, disabled behavior,
+Space activation and associated plain-text labels. Native refreshes retain the control
+and suppress programmatic callbacks; archives reject visual/source checked-state divergence.
+Checkbox styling and image/geometry certification require a native checkbox style adapter.
+Physical clicks currently enter through native buttons, links, checkboxes and associated labels; direct clicks on other text,
 container backgrounds or editor surfaces need a pointer adapter.
 Links require `preventDefault()` and a named platform action for navigation.
 Native keyboard/pointer event payloads beyond this
@@ -161,11 +166,13 @@ native frame, continues the same program in Chromium, exports again and recompil
 Its conformance source uses private class fields, reducers, spreading, array methods,
 closures, module mutations, refs, context, hooks/effect cleanup, capture/bubbling,
 controlled/uncontrolled editors, direct event properties, programmatic clicks and keyed
-remounts. It compares 29 browser frames (12 from the unmodified original component) and
-17 generated-Go frames, and proves that restoration repeats zero host effects.
+remounts. Its checkbox scenario also exercises preactivation, cancellation, disabled and
+controlled/local state, labels, programmatic activation and Space. It compares 51 browser
+frames (21 from the unmodified original component) and 30 generated-Go frames, and proves
+that restoration repeats zero host effects.
 Remote CI also checks two actual
 Astro hydration/event frames, bounded VM execution and preservation of valid native
-objects after source errors. Six bundled-source scenarios verify native diagnostics for
+objects after source errors. Seven bundled-source scenarios verify native diagnostics for
 unsupported CSS, measurements, DOM properties, async handlers, host data and navigation.
 Archives, callbacks and frames remain under
 `artifacts/javascript-roundtrip`.
