@@ -3,7 +3,7 @@
 
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { dirname, extname, relative, resolve } from "node:path";
+import { dirname, extname, isAbsolute, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { javascriptHostJSON } from "./javascript-data.ts";
@@ -77,9 +77,14 @@ export async function bundleJavascript(
                 );
               return undefined;
             });
+            // Bun resolves literal absolute route paths itself. Relative
+            // imports in virtual scripts retain the script's original base.
             builder.onResolve({ filter: /.*/ }, (args) =>
-              args.importer === entry
-                ? { path: Bun.resolveSync(args.path, resolveDir) }
+              args.importer === entry && !isAbsolute(args.path)
+                ? {
+                    path: Bun.resolveSync(args.path, resolveDir),
+                    namespace: "astro-fyne-source",
+                  }
                 : undefined,
             );
             builder.onLoad({ filter: /.*/, namespace: "astro-fyne" }, () => ({
@@ -112,34 +117,39 @@ export async function bundleJavascript(
                 resolveDir: dirname(args.path),
               };
             });
-            builder.onLoad(
-              { filter: /\.(?:[cm]?[jt]sx?|json|css)$/ },
-              async (args) => {
-                if (args.path.endsWith(".css"))
-                  throw new Error(
-                    "CSS imports need a native stylesheet adapter; use supported inline styles",
-                  );
-                const text = await readFile(args.path, "utf8");
-                sources.set(
-                  relative(root, args.path).replaceAll("\\", "/"),
-                  hash(text),
+            const loadSource: Parameters<typeof builder.onLoad>[1] = async (
+              args,
+            ) => {
+              if (args.path.endsWith(".css"))
+                throw new Error(
+                  "CSS imports need a native stylesheet adapter; use supported inline styles",
                 );
-                const extension = extname(args.path).slice(1);
-                return {
-                  contents: text,
-                  loader:
-                    extension === "tsx"
-                      ? "tsx"
-                      : extension === "jsx"
-                        ? "jsx"
-                        : extension === "ts"
-                          ? "ts"
-                          : extension === "json"
-                            ? "json"
-                            : "js",
-                };
-              },
-            );
+              const text = await readFile(args.path, "utf8");
+              sources.set(
+                relative(root, args.path).replaceAll("\\", "/"),
+                hash(text),
+              );
+              const extension = extname(args.path).slice(1);
+              return {
+                contents: text,
+                loader:
+                  extension === "tsx"
+                    ? "tsx"
+                    : extension === "jsx"
+                      ? "jsx"
+                      : extension === "ts"
+                        ? "ts"
+                        : extension === "json"
+                          ? "json"
+                          : "js",
+                resolveDir: dirname(args.path),
+              };
+            };
+            for (const namespace of ["file", "astro-fyne-source"])
+              builder.onLoad(
+                { filter: /\.(?:[cm]?[jt]sx?|json|css)$/, namespace },
+                loadSource,
+              );
           },
         },
       ],
