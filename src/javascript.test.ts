@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 import { expect, test } from "bun:test";
-import { mkdtemp, writeFile, readFile, stat, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  readFile,
+  stat,
+  rm,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compile } from "./parser.ts";
@@ -159,5 +166,37 @@ test("JavaScript bundling diagnoses missing platform assets before writing", asy
     ).rejects.toThrow("frontmatter");
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("JavaScript bundling supports Astro route filenames and relative processed scripts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "afy-route-path-"));
+  try {
+    for (const route of ["[id]", "[...locale]"]) {
+      const directory = join(root, route);
+      await mkdir(directory);
+      await writeFile(join(directory, "value.ts"), "export const value=12;");
+      await writeFile(
+        join(directory, "logic.ts"),
+        'import{value}from"./value.ts";export const label=String(value+4);',
+      );
+      const source = join(directory, "Page.astro");
+      await writeFile(
+        source,
+        '<p id="label">Hello</p><script>import{label}from"./logic.ts";document.getElementById("label").textContent=label;</script>',
+      );
+      const archive = await bundleJavascript(source);
+      for (const path of ["Page.astro", "logic.ts", "value.ts"])
+        expect(archive.sources.some((source) => source.path === path)).toBe(
+          true,
+        );
+      await writeFile(
+        source,
+        "---\nexport const prerender=false;\n---\n<p>Hello</p>",
+      );
+      await expect(bundleJavascript(source)).rejects.toThrow("route exports");
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
