@@ -218,8 +218,9 @@ export function createRuntime(host, archive) {
         });
       }
       const dispatch = (event) => {
-        dom.dispatch(event);
+        const prevented = dom.dispatch(event);
         drain();
+        return prevented;
       };
       try {
         preact.render(
@@ -261,8 +262,9 @@ export function createRuntime(host, archive) {
             throw new Error("JavaScript history exceeds 10000 events");
           dispatching = true;
           try {
-            dispatch(event);
+            const prevented = dispatch(event);
             events.push(JSON.parse(json(event)));
+            return prevented;
           } catch (error) {
             failed = true;
             throw error;

@@ -18,6 +18,7 @@ import (
 type step struct {
 	ID    string  `json:"id"`
 	Value *string `json:"value,omitempty"`
+	Key   string  `json:"key,omitempty"`
 }
 type rejection struct{ Path, Event, Contains string }
 type scenario struct {
@@ -88,7 +89,16 @@ func main() {
 		if object == nil {
 			panic("missing native control " + step.ID)
 		}
-		if step.Value != nil {
+		if step.Key != "" {
+			field := object.(fyne.Focusable)
+			window.Canvas().Focus(field)
+			if step.Key == "Space" {
+				field.TypedRune(' ')
+			} else {
+				field.TypedKey(&fyne.KeyEvent{Name: fyne.KeyName(step.Key)})
+			}
+			window.Canvas().Unfocus()
+		} else if step.Value != nil {
 			field := object.(fyne.Focusable)
 			window.Canvas().Focus(field)
 			object.(fyne.Shortcutable).TypedShortcut(&fyne.ShortcutSelectAll{})

@@ -35,6 +35,9 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 				node.Kind = "container"
 			case "p", "h1", "h2", "h3", "h4", "h5", "h6", "span", "label":
 				node.Kind = "text"
+				if frame.Tag == "label" {
+					node.Kind = "label"
+				}
 			case "button":
 				node.Kind = "button"
 			case "a":
@@ -42,7 +45,9 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 				node.Href = frame.Attrs["href"]
 			case "input":
 				node.Kind = "input"
-				if kind := frame.Attrs["type"]; kind != "" && kind != "text" {
+				if frame.Attrs["type"] == "checkbox" {
+					node.Kind, node.Checked = "checkbox", frame.Checked
+				} else if kind := frame.Attrs["type"]; kind != "" && kind != "text" {
 					return nil, fmt.Errorf("javascript: input type %s requires a native control adapter", kind)
 				}
 			case "textarea":
@@ -55,6 +60,10 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 					return nil, fmt.Errorf("javascript: class styles require a native style adapter")
 				}
 				switch name {
+				case "checked":
+					if node.Kind != "checkbox" {
+						return nil, fmt.Errorf("javascript: checked requires a native checkbox")
+					}
 				case "id", "class", "type", "placeholder", "aria-label", "for", "href", "value":
 				default:
 					if !strings.HasPrefix(name, "data-") {
@@ -67,9 +76,12 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 			if err != nil {
 				return nil, fmt.Errorf("javascript: %s: %w", node.ID, err)
 			}
+			if node.Kind == "checkbox" && len(frame.Style) > 0 {
+				return nil, fmt.Errorf("javascript: checkbox styles require a native checkbox style adapter")
+			}
 			node.Value, node.Placeholder, node.Disabled = frame.Value, frame.Attrs["placeholder"], frame.Disabled
 			node.AccessibleLabel, node.LabelFor = frame.Attrs["aria-label"], frame.Attrs["for"]
-			if node.Kind == "text" || node.Kind == "button" || node.Kind == "link" {
+			if node.Kind == "text" || node.Kind == "label" || node.Kind == "button" || node.Kind == "link" {
 				for _, child := range frame.Children {
 					if child.Tag != "#text" {
 						return nil, fmt.Errorf("javascript: rich text in <%s> requires a native rich-text adapter", frame.Tag)
@@ -84,6 +96,12 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 			}
 			// Clicks on native controls bubble through their virtual DOM ancestors.
 			if node.Kind == "button" || node.Kind == "link" {
+				node.OnTap = func() { w.dispatch(frame.UID, "click", nil) }
+			}
+			if node.Kind == "checkbox" {
+				node.OnChecked = func(bool) { w.dispatch(frame.UID, "click", nil) }
+			}
+			if frame.Tag == "label" && node.LabelFor != "" {
 				node.OnTap = func() { w.dispatch(frame.UID, "click", nil) }
 			}
 			if node.Kind == "input" || node.Kind == "textarea" {
