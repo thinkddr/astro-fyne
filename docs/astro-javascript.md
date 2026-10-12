@@ -28,10 +28,26 @@ archives work in the same way as component-module entries.
 
 Frontmatter executes once per mounted Astro instance and caches its returned tree.
 Imported hydrated Preact components use real hooks and update their own native widgets;
-their events do not reexecute the containing frontmatter. Default `<slot>` content
-evaluates lazily when used, with its fallback when no slot was supplied. `Astro.slots.has`
-is supported. Props named `children`, `key` or `ref` remain Astro data, separate from
+their events do not reexecute the containing frontmatter. Default and statically named
+slots group direct children with `slot="name"`, including `<Fragment slot="name">` and
+forwarded `<slot name="source" slot="destination"/>` outlets. Duplicate names concatenate
+in source order. `Astro.slots.has(name)` and the boolean `Astro.slots[name]` properties
+are supported. Props named `children`, `key` or `ref` remain Astro data, separate from
 slot/reconciliation metadata. Internal `_afyAstro*` names are reserved.
+
+Slot preparation follows the pinned Astro renderer: each supplied slot evaluates once
+when its component instance is created, including unused slots. The first outlet consumes
+that prepared value; later outlets evaluate the provider again while rendering. Fallback
+template expressions evaluate while constructing the containing template, even when a
+slot is filled. Functions and object rendering remain deferred until their content is
+actually rendered, so ignored slot content and unselected fallback functions do not run.
+Frontmatter and rendered slot contents stay stable across hydrated child state updates.
+
+Names must be quoted static literals. Entity spellings retain Astro 7's literal slot-key
+semantics: `slot="a&amp;b"` matches `name="a&amp;b"` and `Astro.slots.has("a&amp;b")`.
+Dynamic slot routing, spread-provided labels, and reserved method/prototype names require
+a further slot adapter. Only directly owned slot labels are consumed; labels on ordinary
+HTML children receive diagnostics. `Astro.slots.render()` still needs an async HTML adapter.
 
 Expressions preserve Astro's scalar, function and synchronous iterable rendering,
 including visible `true` and `NaN`, omitted false/null/undefined, array/Set children,
@@ -42,7 +58,7 @@ JS components require `client:load` or `client:only="preact"`. This profile repr
 their settled hydrated state. Props crossing that hydration boundary transfer by finite
 JSON value, including loss of shared-object aliases; functions, cycles and other Astro
 serialization types need an explicit renderer adapter. Compatible static/nested `.astro`
-components retain their own server-style props and default slots.
+components retain their own server-style props and default/named slots.
 
 ## Processed scripts
 
@@ -63,7 +79,7 @@ independent Preact renderer require additional module/renderer adapters.
 Native containers, text and controls retain the engine's documented sizing/style contract.
 Astro inline styles require supported CSS objects with explicit pixel strings for nonzero
 dimensions; Astro itself does not add JSX's implicit pixel units. Stylesheets, CSS cascade,
-document shells/metadata, named slots, hydrated HTML slots, event attributes and deferred
+document shells/metadata, dynamic slots, hydrated HTML slots, event attributes and deferred
 hydration have explicit diagnostics. They are not silently discarded or made interactive.
 
 Async frontmatter, response returns, route exports, request/URL/site APIs and other SSR
@@ -82,9 +98,11 @@ and universal pixel equivalence remain pending explicit platform and rendering c
 `bun ci/javascript-roundtrip.ts --astro` starts from the original `.astro` source, builds
 actual Go widgets, exports an intermediate state, continues in Chromium, exports again
 and regenerates Go. It compares 11 browser and 11 generated-Go frames. The fixture uses
-imported private-field arithmetic, default slots and props, hydrated hooks/editors, shared
+imported private-field arithmetic, default/named/forwarded slots and props, hydrated hooks/editors, shared
 props that lose aliases across hydration, and an imported script dependency with a retained
-counter. Repeating the script's component must not multiply its event handlers.
+counter. Repeating the script's component must not multiply its event handlers. Named-slot
+checks retain side effects from preparation and fallback expressions, repeated provider
+evaluation, ignored throwing functions, literal/entity keys and boolean slot presence.
 
 `capture/astro-javascript.ts` compares seven further states from the unmodified, built
 Astro page and seven from the regenerated Astro island with the same native trace. This
