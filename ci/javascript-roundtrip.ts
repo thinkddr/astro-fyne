@@ -232,6 +232,22 @@ if (!astro) {
     "2",
     "Astro repeated a hoisted script for repeated components",
   );
+  for (const [id, expected] of Object.entries({
+    "astro-js-slot-start": "4",
+    "astro-js-slot-parent": "4",
+    "astro-js-slot-after": "6",
+    "astro-js-header-first": "23",
+    "astro-js-header-again": "78",
+    "astro-js-slot-default": "D-1",
+    "astro-js-slot-missing": "M-9",
+    "astro-js-slot-empty": "E",
+    "astro-js-forward": "true|falseENTITY",
+  }))
+    assert.equal(
+      frameValues(nativeResult.frames[0])[id],
+      expected,
+      `Astro slot lifecycle differs at ${id}`,
+    );
 }
 await writeFile(
   join(evidence, "native.json"),
