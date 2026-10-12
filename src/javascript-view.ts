@@ -102,6 +102,14 @@ export function createJavascriptComponent(
           for (const frame of frames) {
             const element = ctx.refs.get(frame.uid);
             if (
+              element instanceof HTMLInputElement &&
+              element.type === "checkbox" &&
+              element.checked !== frame.checked
+            )
+              throw new Error(
+                `Commit checkbox state before exporting: ${frame.attrs?.id} DOM=${element.checked} frame=${frame.checked}`,
+              );
+            if (
               (element instanceof HTMLInputElement ||
                 element instanceof HTMLTextAreaElement) &&
               element.value !== frame.value
@@ -121,13 +129,14 @@ export function createJavascriptComponent(
     ) => {
       ctx.dirty = true;
       try {
-        ctx.api.dispatch({
+        const prevented = ctx.api.dispatch({
           node: frame.uid,
           type,
           ...(value === undefined ? {} : { value }),
         });
         ctx.api.flush();
         setFrames(ctx.api.snapshot());
+        return prevented;
       } catch (error) {
         ctx.error = error;
         throw error;
@@ -153,18 +162,30 @@ export function createJavascriptComponent(
       if (frame.tag === "input" || frame.tag === "textarea") {
         props.value = frame.value;
         props.disabled = frame.disabled;
-        props.onInput = (event: Event) =>
-          dispatch(
-            frame,
-            "input",
-            (event.currentTarget as HTMLInputElement).value,
-          );
-        props.onChange = (event: Event) =>
-          dispatch(
-            frame,
-            "change",
-            (event.currentTarget as HTMLInputElement).value,
-          );
+        if (frame.tag === "input" && frame.attrs?.type === "checkbox") {
+          props.checked = frame.checked;
+          props.onClick = (event: Event) => {
+            if (dispatch(frame, "click") === true) event.preventDefault();
+          };
+        } else {
+          props.onInput = (event: Event) =>
+            dispatch(
+              frame,
+              "input",
+              (event.currentTarget as HTMLInputElement).value,
+            );
+          props.onChange = (event: Event) =>
+            dispatch(
+              frame,
+              "change",
+              (event.currentTarget as HTMLInputElement).value,
+            );
+        }
+      } else if (frame.tag === "label" && frame.attrs?.for) {
+        props.onClick = (event: Event) => {
+          event.preventDefault();
+          dispatch(frame, "click");
+        };
       } else if (frame.tag === "button") props.disabled = frame.disabled;
       return h(frame.tag, props, ...(frame.children ?? []).map(render));
     };

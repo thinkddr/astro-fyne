@@ -19,6 +19,7 @@ export interface JavascriptFrame {
   style?: Record<string, string | number>;
   value?: string;
   disabled?: boolean;
+  checked?: boolean;
   events?: string[];
   children?: JavascriptFrame[];
 }
@@ -36,7 +37,7 @@ export interface JavascriptArchive {
 }
 export interface JavascriptAPI {
   snapshot(): JavascriptFrame[];
-  dispatch(event: JavascriptEvent): void;
+  dispatch(event: JavascriptEvent): boolean | void;
   replay(event: JavascriptEvent): void;
   finishReplay(): void;
   flush(): void;

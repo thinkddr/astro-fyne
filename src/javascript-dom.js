@@ -24,6 +24,8 @@ export function createDocument() {
       });
       this._value = "";
       this._valueDirty = false;
+      this._checked = false;
+      this._checkedDirty = false;
       this.disabled = false;
       this.listeners = {};
       this._propertyHandlers = {};
@@ -85,6 +87,12 @@ export function createDocument() {
     get value() {
       if (!["input", "textarea", "button"].includes(this.localName))
         throw new Error("DOM value reads require a native control adapter");
+      if (
+        this.localName === "input" &&
+        this.attrs.type === "checkbox" &&
+        !this._valueDirty
+      )
+        return this.attrs.value ?? "on";
       return this._value;
     }
     set value(value) {
@@ -97,6 +105,32 @@ export function createDocument() {
     set defaultValue(value) {
       this.attrs.value = validJavascriptText(String(value));
       if (!this._valueDirty) this._value = this.attrs.value;
+    }
+    get checked() {
+      if (this.localName !== "input")
+        throw new Error("DOM checked requires a native checkable control");
+      return this._checked;
+    }
+    set checked(value) {
+      if (this.localName !== "input")
+        throw new Error("DOM checked requires a native checkable control");
+      this._checked = !!value;
+      this._checkedDirty = true;
+    }
+    get defaultChecked() {
+      if (this.localName !== "input")
+        throw new Error(
+          "DOM defaultChecked requires a native checkable control",
+        );
+      return Object.hasOwn(this.attrs, "checked");
+    }
+    set defaultChecked(value) {
+      if (this.localName !== "input")
+        throw new Error(
+          "DOM defaultChecked requires a native checkable control",
+        );
+      if (value) this.setAttribute("checked", "");
+      else this.removeAttribute("checked");
     }
     get firstChild() {
       return this.childNodes[0] || null;
@@ -167,9 +201,11 @@ export function createDocument() {
     }
     setAttribute(name, value) {
       this.attrs[name] = validJavascriptText(String(value));
+      if (name === "checked" && !this._checkedDirty) this._checked = true;
     }
     removeAttribute(name) {
       delete this.attrs[name];
+      if (name === "checked" && !this._checkedDirty) this._checked = false;
     }
     getAttribute(name) {
       return Object.hasOwn(this.attrs, name) ? this.attrs[name] : null;
@@ -237,7 +273,13 @@ export function createDocument() {
       tag: node.localName,
       attrs: node.attrs,
       style: { ...node.style },
-      value: String(node._value),
+      value:
+        node.localName === "input" && node.attrs.type === "checkbox"
+          ? node.value
+          : String(node._value),
+      ...(node.localName === "input" && node.attrs.type === "checkbox"
+        ? { checked: node._checked }
+        : {}),
       disabled: !!node.disabled,
       events: Object.keys(node.listeners).filter(
         (key) => node.listeners[key].length,
@@ -245,14 +287,20 @@ export function createDocument() {
       children: node.childNodes.map(snapshot),
     };
   }
-  function dispatch(event) {
-    const target = find((node) => node.uid === event.node);
+  function dispatch(event, activatingTarget) {
+    const target = activatingTarget ?? find((node) => node.uid === event.node);
     if (!target) throw new Error("Cannot dispatch to a missing native element");
     if (!["click", "input", "change"].includes(event.type))
       throw new Error("Unsupported native event");
-    if (target.disabled)
+    if (target.disabled && !activatingTarget)
       throw new Error("Cannot dispatch to a disabled element");
     if (event.value !== undefined) target.value = String(event.value);
+    const checkboxClick =
+      event.type === "click" &&
+      target.localName === "input" &&
+      target.attrs.type === "checkbox";
+    const wasChecked = target._checked;
+    if (checkboxClick) target.checked = !wasChecked;
     const path = [];
     for (let node = target; node; node = node.parentNode) path.push(node);
     let stopped = false,
@@ -309,6 +357,27 @@ export function createDocument() {
         if (stopped) break;
       }
     payload.currentTarget = null;
+    if (checkboxClick) {
+      if (payload.defaultPrevented) target._checked = wasChecked;
+      else {
+        dispatch({ node: target.uid, type: "input" }, target);
+        dispatch({ node: target.uid, type: "change" }, target);
+      }
+    }
+    if (
+      event.type === "click" &&
+      target.localName === "label" &&
+      target.attrs.for &&
+      !payload.defaultPrevented
+    ) {
+      const control = find((node) => node.id === target.attrs.for);
+      if (
+        control?.localName === "input" &&
+        control.attrs.type === "checkbox" &&
+        !control.disabled
+      )
+        dispatch({ node: control.uid, type: "click" });
+    }
     if (
       target.localName === "a" &&
       target.attrs.href &&
@@ -317,6 +386,7 @@ export function createDocument() {
       throw new Error(
         "Link navigation requires a named platform action and preventDefault()",
       );
+    return payload.defaultPrevented;
   }
   return {
     document,
