@@ -86,6 +86,7 @@ test("CSS imports retain transitive source bytes and unsupported rules are diagn
       ".a:hover{color:red}",
       ".a{& .b{color:red}}",
       "@font-face{font-family:A;src:url(font.woff2)}",
+      ".a{color:red;color:}",
     ]) {
       await writeFile(join(dir, "a.css"), text);
       await expect(

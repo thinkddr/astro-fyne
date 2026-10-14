@@ -128,6 +128,10 @@ export async function compileJavascriptCSS(
           const name = item.property.startsWith("--")
             ? item.property
             : item.property.toLowerCase();
+          if (!name.startsWith("--") && !css.generate(item.value).trim())
+            throw new Error(
+              "Empty CSS declarations require an invalid-value adapter",
+            );
           css.walk(item.value, (part: any) => {
             if (part.type === "Url")
               throw new Error(
