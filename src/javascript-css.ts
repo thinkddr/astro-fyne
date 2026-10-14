@@ -18,12 +18,26 @@ export async function compileJavascriptCSS(
   if (Buffer.byteLength(text) > 16 * 1024 * 1024)
     throw new Error("CSS source exceeds 16MiB");
   record(file, text);
-  const ast = css.parse(text, {
-    positions: true,
-    onParseError(error: Error) {
-      throw error;
-    },
-  });
+  let ast;
+  try {
+    ast = css.parse(text, {
+      positions: true,
+      onParseError(error: Error) {
+        throw error;
+      },
+    });
+  } catch (error) {
+    const failure = error as {
+      message?: string;
+      line?: number;
+      column?: number;
+      offset?: number;
+    };
+    const at = failure.offset ?? 0;
+    throw new Error(
+      `CSS syntax requires a parser adapter at ${file}:${failure.line ?? 0}:${failure.column ?? 0}: ${failure.message ?? error}; near ${JSON.stringify(text.slice(Math.max(0, at - 32), at + 80))}`,
+    );
+  }
   const result: any[] = [];
   let anonymous = 0,
     importsAllowed = true;
