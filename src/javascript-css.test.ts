@@ -70,6 +70,27 @@ test("CSS variables inherit computed values and selectors follow live DOM state"
     },
   );
 });
+test("CSS class and attribute tokens use HTML ASCII whitespace", async () => {
+  await withCSS(
+    `.token{color:red}[data-tags~=token]{background:blue}[data-tags~="token\u00a0other"]{padding:3px}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("div");
+      node.className = "token\u00a0other";
+      node.setAttribute("data-tags", "token\u00a0other");
+      root.appendChild(node);
+      let style = snapshot()[0].style;
+      expect(style.color).toBeUndefined();
+      expect(style.backgroundColor).toBeUndefined();
+      expect(style.paddingTop).toBe("3px");
+      node.className = "token\tother";
+      node.setAttribute("data-tags", "token\nother");
+      style = snapshot()[0].style;
+      expect(style.color).toBe("red");
+      expect(style.backgroundColor).toBe("blue");
+      expect(style.paddingTop).toBeUndefined();
+    },
+  );
+});
 test("CSS imports retain transitive source bytes and unsupported rules are diagnosed", async () => {
   const dir = await mkdtemp(join(tmpdir(), "afy-css-import-"));
   try {
