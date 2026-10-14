@@ -154,6 +154,12 @@ try {
             width: item.width,
             height: item.height,
           });
+        // client:only islands can mount after navigation and load have finished.
+        // Retain the complete inventory check before measuring fonts or geometry.
+        await page!.waitForFunction(
+          (ids) => ids.every((id) => document.getElementById(id) !== null),
+          ids,
+        );
         await page!.evaluate(async () => {
           await document.fonts.ready;
           for (const image of document.querySelectorAll("img")) {
