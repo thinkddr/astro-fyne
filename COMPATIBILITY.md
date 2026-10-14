@@ -21,6 +21,12 @@ click cancellation, disabled behavior and input/change events across continuatio
 styling and measured rendering profiles remain diagnosed; functional state tests do not
 certify their pixels.
 
+Local CSS side-effect imports now preserve an explicit cascade for the JavaScript mode:
+supported selectors, flat layers, specificity/order/importance, variables and declared
+inheritance are reevaluated after source state changes. Original-browser computed styles
+are compared with native frames. General CSS layout, media/state/font/resource adapters
+and pixel equivalence remain pending.
+
 [Astro entries in the JavaScript engine](docs/astro-javascript.md) now preserve synchronous
 frontmatter lifetime, default/named/forwarded slots, compatible hydrated islands and processed script
 deduplication/module state. Original Astro pages and regenerated islands are compared with

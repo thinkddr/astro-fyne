@@ -1,0 +1,26 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 Astro Fyne contributors. */
+@layer base, theme;
+:root {
+  --css-accent: #1769aa;
+}
+@layer base {
+  .css-theme {
+    color: #11232b;
+    font-size: 18px;
+    line-height: 24px;
+  }
+  .css-button {
+    font-size: inherit;
+    line-height: inherit;
+    padding: 4px 10px;
+    border-width: 1px;
+    border-style: solid;
+    border-color: #11232b;
+    color: #ffffff;
+    background-color: var(--css-accent);
+  }
+  .css-button {
+    color: #dd1100 !important;
+  }
+}
