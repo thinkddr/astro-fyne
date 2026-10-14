@@ -60,7 +60,7 @@ export function createCSSCascade() {
           );
         if (kind === "IdSelector") return node.attrs.id === name;
         if (kind === "ClassSelector")
-          return (node.attrs.class ?? "").split(/\s+/).includes(name);
+          return (node.attrs.class ?? "").split(/[\t\n\f\r ]+/).includes(name);
         if (kind === "attribute") {
           let actual = node.getAttribute(name),
             expected = value;
@@ -74,8 +74,8 @@ export function createCSSCascade() {
           if (operator === "~=")
             return (
               !!expected &&
-              !/\s/.test(expected) &&
-              actual.split(/\s+/).includes(expected)
+              !/[\t\n\f\r ]/.test(expected) &&
+              actual.split(/[\t\n\f\r ]+/).includes(expected)
             );
           if (operator === "|=")
             return actual === expected || actual.startsWith(expected + "-");
