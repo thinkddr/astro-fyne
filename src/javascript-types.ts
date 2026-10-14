@@ -20,6 +20,7 @@ export interface JavascriptFrame {
   value?: string;
   disabled?: boolean;
   checked?: boolean;
+  css?: boolean;
   events?: string[];
   children?: JavascriptFrame[];
 }

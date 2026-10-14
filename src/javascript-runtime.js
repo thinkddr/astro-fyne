@@ -119,6 +119,7 @@ export function createRuntime(host, archive) {
     throw new Error(`${name} requires an explicit platform adapter`);
   };
   const environment = {
+    _afyCssInstall: dom.installCSS,
     Object,
     Function,
     Array,
