@@ -1,0 +1,33 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 Astro Fyne contributors. */
+@import "./javascript-css-palette.css";
+@layer theme {
+  .css-theme[data-mode="alt"] {
+    --css-accent: #b91c1c;
+  }
+  .css-theme > p {
+    color: var(--css-accent);
+  }
+  .css-button {
+    padding-left: 14px;
+  }
+  .css-button.alt {
+    background-color: #007744;
+  }
+  .css-button:disabled {
+    background-color: #888888;
+  }
+  .css-button {
+    color: #000099 !important;
+  }
+}
+.css-button {
+  color: #ee00ee !important;
+}
+#css-count {
+  padding-left: 2px;
+  padding: 3px 5px;
+}
+.css-theme p {
+  white-space: nowrap;
+}

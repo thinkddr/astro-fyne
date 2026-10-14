@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { javascriptHostJSON } from "./javascript-data.ts";
 import { astroJavascript } from "./javascript-astro.ts";
+import { compileJavascriptCSS } from "./javascript-css.ts";
 
 import type { JavascriptArchive } from "./javascript-types.ts";
 export type { JavascriptArchive } from "./javascript-types.ts";
@@ -21,6 +22,7 @@ export async function bundleJavascript(
   selected = "default",
   props: Record<string, unknown> = {},
   actions: string[] = [],
+  stylesheets: string[] = [],
 ): Promise<JavascriptArchive> {
   source = resolve(source);
   if (![".astro", ".tsx", ".jsx", ".ts", ".js"].includes(extname(source)))
@@ -37,6 +39,16 @@ export async function bundleJavascript(
     );
   const sources = new Map<string, string>(),
     root = dirname(source);
+  const externalStyles = [];
+  for (const file of stylesheets) {
+    if (extname(file) !== ".css")
+      throw new Error("Stylesheet input must be a local CSS file");
+    externalStyles.push(
+      ...(await compileJavascriptCSS(file, (path, text) =>
+        sources.set(relative(root, path).replaceAll("\\", "/"), hash(text)),
+      )),
+    );
+  }
   const scripts = new Map<string, { contents: string; directory: string }>();
   async function build(
     entry: string,
@@ -120,10 +132,26 @@ export async function bundleJavascript(
             const loadSource: Parameters<typeof builder.onLoad>[1] = async (
               args,
             ) => {
-              if (args.path.endsWith(".css"))
-                throw new Error(
-                  "CSS imports need a native stylesheet adapter; use supported inline styles",
+              if (args.path.endsWith(".css")) {
+                if (args.path.endsWith(".module.css"))
+                  throw new Error(
+                    "CSS modules require a native class-export adapter",
+                  );
+                const rules = await compileJavascriptCSS(
+                  args.path,
+                  (file, text) => {
+                    sources.set(
+                      relative(root, file).replaceAll("\\", "/"),
+                      hash(text),
+                    );
+                  },
                 );
+                return {
+                  contents: `globalThis._afyCssInstall(${JSON.stringify(rules)});`,
+                  loader: "js" as const,
+                  resolveDir: dirname(args.path),
+                };
+              }
               const text = await readFile(args.path, "utf8");
               sources.set(
                 relative(root, args.path).replaceAll("\\", "/"),
@@ -190,7 +218,7 @@ export async function bundleJavascript(
     resolve(fileURLToPath(import.meta.resolve("preact")), "../../LICENSE"),
     "utf8",
   );
-  const code = `/* Bundled Preact: ${license.replaceAll("*/", "* / ")} */\nfunction(host,archive){const globalThis={};${runtime}\nconst runtime=globalThis._afyRuntime(host,archive);return(function(environment){const{document,window,self,globalThis,Math,Date,setTimeout,clearTimeout,requestAnimationFrame,cancelAnimationFrame,queueMicrotask,fetch,setInterval,getComputedStyle,console}=environment;${scriptFactories.length ? `globalThis._afyAstroScripts={${scriptFactories.join(",")}};` : ""}${program}\nreturn runtime.bind(globalThis._afyComponent,globalThis._afyPreact);})(runtime.environment);}`;
+  const code = `/* Bundled Preact: ${license.replaceAll("*/", "* / ")} */\nfunction(host,archive){const globalThis={};${runtime}\nconst runtime=globalThis._afyRuntime(host,archive);${stylesheets.length ? `runtime.environment._afyCssInstall(${JSON.stringify(externalStyles)});` : ""}return(function(environment){const{document,window,self,globalThis,Math,Date,setTimeout,clearTimeout,requestAnimationFrame,cancelAnimationFrame,queueMicrotask,fetch,setInterval,getComputedStyle,console}=environment;${scriptFactories.length ? `globalThis._afyAstroScripts={${scriptFactories.join(",")}};` : ""}${program}\nreturn runtime.bind(globalThis._afyComponent,globalThis._afyPreact);})(runtime.environment);}`;
   const archive: JavascriptArchive = {
     schema: 1,
     kind: "astro-fyne-javascript",

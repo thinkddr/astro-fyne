@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 import { validJavascriptText } from "./javascript-data.ts";
+import { createCSSCascade } from "./javascript-css-runtime.js";
 
 /** A Preact DOM adapter backed by native objects, never a browser renderer. */
 export function createDocument() {
   let next = 0;
+  const css = createCSSCascade();
   class Element {
     constructor(name, text) {
       this.uid = String(++next);
@@ -16,10 +18,26 @@ export function createDocument() {
       this.childNodes = [];
       this.data = text || "";
       this.attrs = Object.create(null);
-      this.style = Object.create(null);
+      this._stylePriority = Object.create(null);
+      this.style = new Proxy(Object.create(null), {
+        set: (target, key, value) => {
+          delete target[key];
+          target[key] = value;
+          delete this._stylePriority[key];
+          return true;
+        },
+        deleteProperty: (target, key) => {
+          delete target[key];
+          delete this._stylePriority[key];
+          return true;
+        },
+      });
       Object.defineProperty(this.style, "setProperty", {
-        value: (key, value) => {
+        value: (key, value, priority = "") => {
+          if (priority !== "" && String(priority).toLowerCase() !== "important")
+            return;
           this.style[key] = value;
+          if (priority) this._stylePriority[key] = true;
         },
       });
       this._value = "";
@@ -250,7 +268,9 @@ export function createDocument() {
       return document.body;
     },
   };
+  document.documentElement = document.createElement("html");
   document.body = document.createElement("body");
+  document.documentElement.appendChild(document.body);
   const root = document.createElement("div");
   root.id = "astro-fyne-root";
   document.body.appendChild(root);
@@ -265,14 +285,20 @@ export function createDocument() {
     }
     return walk(root);
   }
-  function snapshot(node) {
+  function snapshot(node, inheritedStyle) {
     if (node.nodeType === 3)
       return { uid: node.uid, tag: "#text", text: node.data };
+    const resolved = css.active ? css.compute(node, inheritedStyle) : null;
+    if (!resolved && Object.keys(node._stylePriority).length)
+      throw new Error(
+        "Inline CSS priorities require the stylesheet cascade adapter",
+      );
     return {
       uid: node.uid,
       tag: node.localName,
       attrs: node.attrs,
-      style: { ...node.style },
+      style: resolved ? resolved.style : { ...node.style },
+      ...(resolved ? { css: true } : {}),
       value:
         node.localName === "input" && node.attrs.type === "checkbox"
           ? node.value
@@ -284,7 +310,7 @@ export function createDocument() {
       events: Object.keys(node.listeners).filter(
         (key) => node.listeners[key].length,
       ),
-      children: node.childNodes.map(snapshot),
+      children: node.childNodes.map((child) => snapshot(child, resolved)),
     };
   }
   function dispatch(event, activatingTarget) {
@@ -391,7 +417,16 @@ export function createDocument() {
   return {
     document,
     root,
-    snapshot: () => root.childNodes.map(snapshot),
+    snapshot: () => {
+      const inheritedStyle = css.active
+        ? css.compute(
+            root,
+            css.compute(document.body, css.compute(document.documentElement)),
+          )
+        : null;
+      return root.childNodes.map((child) => snapshot(child, inheritedStyle));
+    },
+    installCSS: css.install,
     dispatch,
   };
 }

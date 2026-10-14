@@ -44,6 +44,7 @@ type Frame struct {
 	Value    string            `json:"value,omitempty"`
 	Disabled bool              `json:"disabled,omitempty"`
 	Checked  bool              `json:"checked,omitempty"`
+	CSS      bool              `json:"css,omitempty"`
 	Events   []string          `json:"events,omitempty"`
 	Children []Frame           `json:"children,omitempty"`
 }

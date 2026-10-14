@@ -30,6 +30,9 @@ bun run check --javascript \
 
 Use `--export` for a named export; the default is `default`. `--props <json-file>`
 provides initial data. `--package <identifier>` defaults to `generated`.
+`--stylesheet <local.css>` adds a prebuilt stylesheet (for example, Tailwind output)
+before source-module CSS imports. It is part of the source digests and program hash;
+restoring a saved archive cannot replace it with a different stylesheet.
 `--actions` is a comma-separated list of callback props, bound by the native host:
 
 ```go
@@ -147,16 +150,29 @@ programmatic focus, raw HTML, SVG, additional controls and general DOM APIs need
 
 Supported inline styles use the native prototype sizing/direction contract: finite
 pixel dimensions, spacing, solid colors/borders, typography and row/column direction.
-CSS imports, class-based styling, general cascade/layout and rich text require native
-contracts. Mixed padding/background shorthands and longhands are diagnosed until ordered
-CSS is retained.
+Local side-effect CSS imports and recursive local `@import` retain their source hashes
+and install ordered source rules in the shared Goja/browser runtime. Supported selectors
+include element/class/ID/attributes, descendant/child/sibling combinators, `:is`, `:where`,
+`:not`, `:root`, checked/disabled/enabled and simple child/empty states. Flat named layers,
+specificity, source order, `!important`, inline priorities, inheritance, variables/fallbacks
+and ordered padding/background declarations are retained through dynamic class changes
+and continuation. CSS syntax is parsed at build time with pinned MIT-licensed CSS Tree;
+the runtime does not require it, Bun or a browser. Native properties still use the supported
+prototype sizing/paint contract. Control typography needs explicit declarations or `inherit`
+when matching browser control defaults matters.
+
+CSS modules, media/feature queries, nesting, dynamic pointer/focus states, fonts and URL
+resources, general layout and rich text still require native adapters. Invalid/unresolved
+variables and unsupported initial/revert semantics are diagnosed. Explicit zero sizing
+and zero default control padding require presence-aware native sizing; they are not
+silently replaced by widget defaults. Full CSS and pixel equivalence remain pending.
 [Astro source entries](astro-javascript.md) support synchronous frontmatter, nested Astro
 components, default/named/forwarded slots, compatible hydrated Preact islands and processed scripts.
 General SSR/routing and browser services require further adapters. Astro output uses a hydrated
 Preact island, with private helper files excluded from page routing.
 
 Universal conversion remains pending these platform contracts and the independent
-pixel-equivalence gates. Goja expands executable JavaScript; it does not implement CSS
+pixel-equivalence gates. Goja expands executable JavaScript; it does not implement full CSS
 or turn arbitrary browser/Go application effects into portable native behavior.
 
 ## Evidence
@@ -167,9 +183,10 @@ Its conformance source uses private class fields, reducers, spreading, array met
 closures, module mutations, refs, context, hooks/effect cleanup, capture/bubbling,
 controlled/uncontrolled editors, direct event properties, programmatic clicks and keyed
 remounts. Its checkbox scenario also exercises preactivation, cancellation, disabled and
-controlled/local state, labels, programmatic activation and Space. It compares 51 browser
-frames (21 from the unmodified original component) and 30 generated-Go frames, and proves
-that restoration repeats zero host effects.
+controlled/local state, labels, programmatic activation and Space. It compares 61 browser
+frames (25 from the unmodified original component) and 36 generated-Go frames, and proves
+that restoration repeats zero host effects. The CSS scenario additionally compares native
+cascade values against Chromium's original computed styles in an isolated shadow tree.
 Remote CI also checks two actual
 Astro hydration/event frames, bounded VM execution and preservation of valid native
 objects after source errors. Seven bundled-source scenarios verify native diagnostics for

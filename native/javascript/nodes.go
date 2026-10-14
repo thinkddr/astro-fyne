@@ -56,7 +56,7 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 				return nil, fmt.Errorf("javascript: element <%s> requires a native element adapter", frame.Tag)
 			}
 			for name, value := range frame.Attrs {
-				if name == "class" && value != "" {
+				if name == "class" && value != "" && !frame.CSS {
 					return nil, fmt.Errorf("javascript: class styles require a native style adapter")
 				}
 				switch name {
@@ -75,6 +75,21 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 			node.Style, err = sourceStyle(frame.Style)
 			if err != nil {
 				return nil, fmt.Errorf("javascript: %s: %w", node.ID, err)
+			}
+			if frame.CSS {
+				for _, name := range []string{"width", "height", "fontSize", "lineHeight", "borderRadius"} {
+					if value, ok := frame.Style[name]; ok && (value == float64(0) || value == "0px" || value == "0") {
+						return nil, fmt.Errorf("javascript: CSS zero %s requires presence-aware native sizing", name)
+					}
+				}
+				if node.Style.PaddingLeft == 0 && node.Style.PaddingRight == 0 && (node.Kind == "button" || node.Kind == "input" || node.Kind == "textarea") {
+					if _, left := frame.Style["paddingLeft"]; left {
+						return nil, fmt.Errorf("javascript: CSS zero control padding requires a native control style adapter")
+					}
+					if _, right := frame.Style["paddingRight"]; right {
+						return nil, fmt.Errorf("javascript: CSS zero control padding requires a native control style adapter")
+					}
+				}
 			}
 			if node.Kind == "checkbox" && len(frame.Style) > 0 {
 				return nil, fmt.Errorf("javascript: checkbox styles require a native checkbox style adapter")
