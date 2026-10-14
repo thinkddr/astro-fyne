@@ -22,6 +22,7 @@ interface Options {
   direction: "native" | "web";
   selected?: string;
   props?: string;
+  stylesheet?: string;
   actions?: string[];
   actionsModule?: string;
   packageName?: string;
@@ -44,7 +45,10 @@ export async function generateJavascript(options: Options) {
     throw new Error(
       "JavaScript mode requires exactly one --source or --program",
     );
-  if (options.program && (options.props || options.selected || options.actions))
+  if (
+    options.program &&
+    (options.props || options.selected || options.actions || options.stylesheet)
+  )
     throw new Error("Program input already declares props, export and actions");
   const archive = options.program
     ? await validateJavascriptArchive(
@@ -60,6 +64,7 @@ export async function generateJavascript(options: Options) {
             )) as Record<string, unknown>)
           : {},
         options.actions ?? [],
+        options.stylesheet ? [resolve(options.stylesheet)] : [],
       );
   const output = resolve(options.out),
     artifacts: Artifact[] = [];
@@ -226,6 +231,7 @@ export async function javascriptMain(
         "--name",
         "--export",
         "--props",
+        "--stylesheet",
         "--actions",
         "--actions-module",
         "--package",
@@ -241,6 +247,7 @@ export async function javascriptMain(
     else if (flag === "--name") options.name = value;
     else if (flag === "--export") options.selected = value;
     else if (flag === "--props") options.props = value;
+    else if (flag === "--stylesheet") options.stylesheet = value;
     else if (flag === "--actions") options.actions = value.split(",");
     else if (flag === "--actions-module") options.actionsModule = value;
     else options.packageName = value;

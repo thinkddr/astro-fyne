@@ -84,6 +84,7 @@ const scenario = astro
         ),
         { id: "js-check-controlled", key: "Space" },
         ...tap("js-programmatic"),
+        ...tap("css-increment", "css-mode", "css-increment", "css-disabled"),
         ...tap("js-reorder", "js-a-increment"),
       ],
       follow: [
@@ -96,6 +97,8 @@ const scenario = astro
           "js-check-local",
           "js-check-programmatic",
           "js-check-label",
+          "css-mode",
+          "css-increment",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -321,14 +324,25 @@ assert.equal(
   built.logs.map((log) => log.message).join("\n"),
 );
 const code = await built.outputs[0]!.text();
+const originalCSS = (
+  await Promise.all(
+    built.outputs
+      .filter((output) => output.type.startsWith("text/css"))
+      .map((output) => output.text()),
+  )
+).join("\n");
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   fetch(request) {
+    if (new URL(request.url).pathname === "/probe.css")
+      return new Response(originalCSS, {
+        headers: { "Content-Type": "text/css" },
+      });
     return new URL(request.url).pathname === "/probe.js"
       ? new Response(code, { headers: { "Content-Type": "text/javascript" } })
       : new Response(
-          '<html><body><div id="probe"></div><script type="module" src="/probe.js"></script></body></html>',
+          '<html><head><link rel="stylesheet" href="/probe.css"></head><body><div id="probe"></div><script type="module" src="/probe.js"></script></body></html>',
           { headers: { "Content-Type": "text/html" } },
         );
   },
@@ -433,6 +447,7 @@ try {
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
     const originalValues: Record<string, string>[] = [];
+    const originalStyles: unknown[] = [];
     const originalCapture = () =>
       page.evaluate(() =>
         Object.fromEntries(
@@ -454,6 +469,56 @@ try {
         frameValues(nativeResult.frames[i]),
         "Original browser source differs from native JavaScript",
       );
+      // Canonicalize the native cascade in an isolated shadow tree, so the
+      // original stylesheet cannot hide a wrong native specificity decision.
+      const cssFrames: { id: string; style: Record<string, unknown> }[] = [];
+      const collectCSS = (frames: JavascriptFrame[]) => {
+        for (const frame of frames) {
+          if (frame.attrs?.id?.startsWith("css-"))
+            cssFrames.push({ id: frame.attrs.id, style: frame.style ?? {} });
+          collectCSS(frame.children ?? []);
+        }
+      };
+      collectCSS(nativeResult.frames[i]);
+      const compared = await page.evaluate((frames) => {
+        const host = document.createElement("div"),
+          shadow = host.attachShadow({ mode: "open" });
+        document.body.appendChild(host);
+        try {
+          return frames.map(({ id, style }) => {
+            const actual = document.getElementById(id)!;
+            const expected = document.createElement("div");
+            shadow.appendChild(expected);
+            for (const [key, value] of Object.entries(style))
+              (expected.style as any)[key] =
+                typeof value === "number" &&
+                !["lineHeight", "fontWeight", "opacity"].includes(key)
+                  ? value + "px"
+                  : value;
+            const a = getComputedStyle(actual),
+              b = getComputedStyle(expected),
+              keys = Object.keys(style);
+            return {
+              id,
+              actual: Object.fromEntries(
+                keys.map((key) => [key, (a as any)[key]]),
+              ),
+              native: Object.fromEntries(
+                keys.map((key) => [key, (b as any)[key]]),
+              ),
+            };
+          });
+        } finally {
+          host.remove();
+        }
+      }, cssFrames);
+      for (const item of compared)
+        assert.deepEqual(
+          item.actual,
+          item.native,
+          `Original CSS cascade differs at ${item.id}, step ${i}`,
+        );
+      originalStyles.push(compared);
       originalValues.push(values as Record<string, string>);
     }
     assert.deepEqual(
@@ -463,7 +528,11 @@ try {
     );
     await writeFile(
       join(evidence, "original-browser.json"),
-      JSON.stringify({ frames: originalValues }, null, 2) + "\n",
+      JSON.stringify(
+        { frames: originalValues, styles: originalStyles },
+        null,
+        2,
+      ) + "\n",
     );
   }
   assert.deepEqual(errors, [], "Browser runtime errors");

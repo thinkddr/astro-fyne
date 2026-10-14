@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
+  "overrides": {
+    "http-cache-semantics": "4.3.0"
+  },
   "scripts": {
     "generate": "bun src/cli.ts generate",
     "check": "bun src/cli.ts check",
@@ -24,6 +27,7 @@
   },
   "dependencies": {
     "@astrojs/compiler": "4.0.0",
+    "css-tree": "3.2.1",
     "entities": "8.1.0",
     "typescript": "6.0.3"
   },

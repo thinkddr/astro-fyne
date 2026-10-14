@@ -3,6 +3,7 @@
 
 import { createContext } from "preact";
 import { JavascriptCheckboxes } from "./JavascriptCheckboxes";
+import { JavascriptCSS } from "./JavascriptCSS";
 import {
   useCallback,
   useContext,
@@ -108,6 +109,7 @@ export function JavascriptConformance({
       onClick={() => observe("bubble")}
     >
       <JavascriptCheckboxes observe={observe} />
+      <JavascriptCSS />
       <p id="js-count">{count}</p>
       <p id="js-standard">
         {String(

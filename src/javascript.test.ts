@@ -149,13 +149,16 @@ test("JavaScript output rejects invalid history and preserves handwritten files"
 test("JavaScript bundling diagnoses missing platform assets before writing", async () => {
   const directory = await mkdtemp(join(tmpdir(), "afy-javascript-css-"));
   try {
-    await writeFile(join(directory, "style.css"), "p{color:red}");
+    await writeFile(
+      join(directory, "style.css"),
+      "@media(min-width:1px){p{color:red}}",
+    );
     await writeFile(
       join(directory, "Page.tsx"),
       "import './style.css';export default function Page(){return <p>Hello</p>}",
     );
     await expect(bundleJavascript(join(directory, "Page.tsx"))).rejects.toThrow(
-      "CSS imports",
+      "CSS @media",
     );
     await writeFile(
       join(directory, "Page.astro"),
@@ -200,3 +203,58 @@ test("JavaScript bundling supports Astro route filenames and relative processed 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("external generated stylesheets are bound to source digests and generated archives", async () => {
+  const root = await mkdtemp(join(tmpdir(), "afy-external-css-"));
+  try {
+    const source = join(root, "View.tsx"),
+      stylesheet = join(root, "generated.css");
+    await writeFile(
+      source,
+      'export default function View(){return <p class="text">Hello</p>}',
+    );
+    await writeFile(stylesheet, ".text{color:red}");
+    const first = await bundleJavascript(
+      source,
+      "default",
+      {},
+      [],
+      [stylesheet],
+    );
+    expect(first.sources.some((item) => item.path === "generated.css")).toBe(
+      true,
+    );
+    await writeFile(stylesheet, ".text{color:blue}");
+    const second = await bundleJavascript(
+      source,
+      "default",
+      {},
+      [],
+      [stylesheet],
+    );
+    expect(second.codeHash).not.toBe(first.codeHash);
+    await generateJavascript({
+      source,
+      stylesheet,
+      out: join(root, "native"),
+      name: "Styled",
+      direction: "native",
+    });
+    expect(
+      await readFile(join(root, "native/Styled.gen.go"), "utf8"),
+    ).toContain(second.codeHash);
+    const program = join(root, "program.json");
+    await writeFile(program, JSON.stringify(second));
+    await expect(
+      generateJavascript({
+        program,
+        stylesheet,
+        out: join(root, "native"),
+        name: "Styled",
+        direction: "native",
+      }),
+    ).rejects.toThrow("already declares");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 60000);
