@@ -125,3 +125,18 @@ Forward and inverse comparisons had the same counts. Native scene reconstruction
 was exact at both DPRs for all three variants. Both candidates failed the
 zero-tolerance browser/native gate; neither is certified or adopted by this
 experiment. The artifacts retain every mismatch for further investigation.
+
+## Validated legacy sampler
+
+[Run 38890512586](https://github.com/thinkddr/astro-fyne/actions/runs/38890512586)
+compiled and tested the `skia-legacy` candidate at
+`78c51dd119e2756769a9bcb06e37e0511b0fe946`. All six full-frame comparisons
+passed with zero changed pixels: forward conversion, inverse conversion and native
+reconstruction, each at DPR 1 and 2. Candidate unit tests, native race tests and
+source/resource/provenance checks also passed.
+
+This validates the retained software-renderer profile, including odd RGB and
+alpha. The production dependency remains unchanged; the result applies to the
+isolated patched renderer. The candidate still uses the broader bilinear fallback
+outside its bounded helper, so this result does not validate that fallback or
+universal conversion. The original failing variants remain available.

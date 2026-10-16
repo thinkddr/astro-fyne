@@ -67,9 +67,12 @@ the actual lowp candidate pixels exactly. This narrows the new hypothesis withou
 changing source images, offsets, tolerances, expected screenshots or any failing
 initial candidate.
 
-The staged Go implementation still requires its own remote compile, analytical
-tests and complete strict browser/native forward and inverse comparisons at DPR
-1 and 2. Passing analytical vectors or reconstructing one native scene does not
-certify browser parity. Arbitrary backgrounds, nonuniform/fractional enlargement,
+[Hosted run 38890512586](https://github.com/thinkddr/astro-fyne/actions/runs/38890512586)
+compiled and tested this implementation at converter commit
+`78c51dd119e2756769a9bcb06e37e0511b0fe946`. All six complete forward, inverse
+and reconstructed-native frames passed with zero changed pixels at DPR 1 and 2.
+Unit tests, native race tests, source/resource checks and provenance checks passed.
+The production dependency remains unchanged; this evidence applies to the
+isolated experimental renderer and its retained corpus. Arbitrary backgrounds, nonuniform/fractional enlargement,
 JPEG, ICC/color management, SVG, GPU renderers and other platforms remain outside
 this experiment's evidence.
