@@ -26,6 +26,10 @@ controls. Generated files remain Go and embed the JavaScript program. Its record
 archives continue closures, module state and events through Fyne → Astro → Fyne; CSS and
 browser APIs still require native contracts.
 
+[CSS migration works in both directions within the documented subset](docs/css-roundtrip.md).
+The guide separates retained stylesheet behavior from exported scene styles;
+full CSS and universal visual parity remain unfinished.
+
 The same route now accepts [Astro source files](docs/astro-javascript.md), including
 synchronous frontmatter, nested components/default and named slots, hydrated Preact islands and
 processed scripts. CI compares their native continuation with the original Astro page.

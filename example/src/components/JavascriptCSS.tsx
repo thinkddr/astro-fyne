@@ -16,6 +16,19 @@ export function JavascriptCSS() {
       <p id="css-token-whitespace">Whole values and token lists</p>
       <p id="css-token-rgb">RGB channel substitution</p>
       <p id="css-token-fallback">Selected and inactive fallbacks</p>
+      <input
+        id="css-case-input"
+        class="CaseToken"
+        type={mode ? "text" : "TEXT"}
+        data-case={mode ? "mixed" : "MiXeD"}
+        defaultValue="initial"
+      />
+      <p id="css-case-misapplied" {...{ type: mode ? "brief" : "BRIEF" }}>
+        Attribute comparison without an HTML effect
+      </p>
+      <p id="css-case-ascii" data-case="Ä">
+        ASCII folding only
+      </p>
       <section class="css-cycle-parent">
         <p id="css-cycle-inherited">Inherited computed value</p>
       </section>

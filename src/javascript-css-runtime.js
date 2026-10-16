@@ -19,6 +19,55 @@ const controlDefaults = new Set([
   "font-weight",
   "line-height",
 ]);
+// HTML defines these value comparisons independently of an attribute's effect.
+const htmlInsensitiveAttributes = new Set([
+  "accept",
+  "accept-charset",
+  "align",
+  "alink",
+  "axis",
+  "bgcolor",
+  "charset",
+  "checked",
+  "clear",
+  "codetype",
+  "color",
+  "compact",
+  "declare",
+  "defer",
+  "dir",
+  "direction",
+  "disabled",
+  "enctype",
+  "face",
+  "frame",
+  "hreflang",
+  "http-equiv",
+  "lang",
+  "language",
+  "link",
+  "media",
+  "method",
+  "multiple",
+  "nohref",
+  "noresize",
+  "noshade",
+  "nowrap",
+  "readonly",
+  "rel",
+  "rev",
+  "rules",
+  "scope",
+  "scrolling",
+  "selected",
+  "shape",
+  "target",
+  "text",
+  "type",
+  "valign",
+  "valuetype",
+  "vlink",
+]);
 const camel = (name) =>
   name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
 const kebab = (name) =>
@@ -66,9 +115,12 @@ export function createCSSCascade() {
             expected = value;
           if (actual === null) return false;
           if (!operator) return true;
-          if (flags === "i") {
-            actual = actual.replace(/[A-Z]/g, (c) => c.toLowerCase());
-            expected = expected.replace(/[A-Z]/g, (c) => c.toLowerCase());
+          if (
+            flags === "i" ||
+            (!flags && htmlInsensitiveAttributes.has(asciiLower(name)))
+          ) {
+            actual = asciiLower(actual);
+            expected = asciiLower(expected);
           }
           if (operator === "=") return actual === expected;
           if (operator === "~=")

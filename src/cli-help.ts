@@ -66,6 +66,7 @@ Required:
   --program <file>         Portable generated program, used instead of --scene.
   --javascript            Use a bundled JavaScript archive or --source component.
   --source <file>          Astro/TSX/JSX/TS/JS entry for --javascript.
+  --stylesheet <file>      Local CSS for --javascript --source input.
   --export <identifier>    JavaScript named export. Default: default.
   --props <file>           Initial JSON data for a JavaScript source entry.
   --actions <names>        Comma-separated JavaScript action props.
@@ -112,6 +113,7 @@ JavaScript execution:
   bun run to-fyne --javascript --program <archive> --out <directory> --name <Name>
   --export <identifier>    Named component export. Default: default.
   --props <file>           Initial JSON props for source input.
+  --stylesheet <file>      Local CSS for --javascript --source input.
   --actions <names>        Comma-separated callback names bound by the Go host.
   Generated Go embeds JavaScript executed in Goja, with native Fyne controls.
   See docs/javascript-runtime.md for replay and native platform boundaries.

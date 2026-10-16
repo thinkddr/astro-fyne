@@ -216,6 +216,15 @@ the runtime does not require it, Bun or a browser. Native properties still use t
 prototype sizing/paint contract. Control typography needs explicit declarations or `inherit`
 when matching browser control defaults matters.
 
+Attribute values use HTML's default ASCII case-insensitive list, including `type`,
+without changing the stored attribute spelling. Other values, including data,
+class and ID attributes, remain case-sensitive unless `i` is explicit. Both `i`
+and `I` select ASCII folding. The `s`/`S` override has native specification tests;
+the pinned Chromium profile does not enable that flag, so those tests do not
+establish browser parity for it. See the
+[HTML selector rules](https://html.spec.whatwg.org/multipage/semantics-other.html#case-sensitivity-of-selectors)
+and [bidirectional CSS contract](css-roundtrip.md).
+
 CSS modules, media/feature queries, nesting, dynamic pointer/focus states, fonts and URL
 resources, general layout and rich text still require native adapters. Invalid/unresolved
 variables and unsupported initial/revert semantics are diagnosed. Explicit zero sizing

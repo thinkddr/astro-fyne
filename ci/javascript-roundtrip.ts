@@ -69,6 +69,7 @@ const scenario = astro
         { id: "js-data-dirty", value: "edited" },
         { id: "js-textcontent-input", value: "edited" },
         { id: "js-textcontent-dirty", value: "edited" },
+        { id: "css-case-input", value: "edited" },
       ],
       suffix: [
         ...tap(
@@ -172,6 +173,7 @@ const scenario = astro
         { id: "js-data-dirty", value: "continued" },
         { id: "js-textcontent-input", value: "continued" },
         { id: "js-textcontent-dirty", value: "continued" },
+        { id: "css-case-input", value: "continued" },
         ...tap(
           "js-insert-invalid",
           "js-insert-move",
@@ -390,6 +392,117 @@ const frameValues = (frames: JavascriptFrame[]) => {
   walk(frames);
   return values;
 };
+const cssCaseIDs = [
+  "css-case-input",
+  "css-case-misapplied",
+  "css-case-ascii",
+] as const;
+type CSSCaseState = { mode: boolean; value: string };
+const cssCaseStep = (
+  state: CSSCaseState,
+  step: { id: string; value?: string },
+): CSSCaseState => {
+  if (step.id === "css-mode") return { ...state, mode: !state.mode };
+  if (step.id === "css-case-input") {
+    assert.equal(typeof step.value, "string", "CSS case edit needs a value");
+    return { ...state, value: step.value! };
+  }
+  return state;
+};
+function assertCSSCaseTimeline(
+  frames: JavascriptFrame[][],
+  steps: { id: string; value?: string }[],
+  initial: CSSCaseState,
+  label: string,
+) {
+  assert.equal(
+    frames.length,
+    steps.length + 1,
+    `Missing CSS case frames: ${label}`,
+  );
+  const identities = new Map<string, string>();
+  let state = initial,
+    changes = 0;
+  for (const [index, roots] of frames.entries()) {
+    if (index) {
+      const step = steps[index - 1]!;
+      state = cssCaseStep(state, step);
+      if (step.id === "css-mode") changes++;
+    }
+    const nodes: JavascriptFrame[] = [];
+    const visit = (children: JavascriptFrame[]) => {
+      for (const frame of children) {
+        if (cssCaseIDs.some((id) => id === frame.attrs?.id)) nodes.push(frame);
+        visit(frame.children ?? []);
+      }
+    };
+    visit(roots);
+    assert.deepEqual(
+      nodes.map((frame) => frame.attrs!.id),
+      cssCaseIDs,
+      `CSS case nodes/order differ: ${label}, frame ${index}`,
+    );
+    for (const frame of nodes) {
+      const id = frame.attrs!.id!;
+      assert.ok(frame.uid, `Missing CSS case UID ${id}: ${label}`);
+      if (!identities.has(id)) identities.set(id, frame.uid);
+      assert.equal(
+        frame.uid,
+        identities.get(id),
+        `CSS case identity ${id}: ${label}`,
+      );
+      assert.equal(
+        frame.css,
+        true,
+        `Missing authored CSS marker ${id}: ${label}`,
+      );
+    }
+    const [input, misapplied, ascii] = nodes;
+    assert.deepEqual(
+      {
+        type: input!.attrs!.type,
+        data: input!.attrs!["data-case"],
+        class: input!.attrs!.class,
+        raw: input!.attrs!.value,
+        live: input!.value,
+        misappliedType: misapplied!.attrs!.type,
+        unicode: ascii!.attrs!["data-case"],
+      },
+      {
+        type: state.mode ? "text" : "TEXT",
+        data: state.mode ? "mixed" : "MiXeD",
+        class: "CaseToken",
+        raw: "initial",
+        live: state.value,
+        misappliedType: state.mode ? "brief" : "BRIEF",
+        unicode: "Ä",
+      },
+      `CSS case raw/default/live attributes differ: ${label}, frame ${index}`,
+    );
+    const expectations: Record<string, Record<string, string>> = {
+      "css-case-input": {
+        color: "#123456",
+        backgroundColor: "#ddeeff",
+        paddingTop: "2px",
+        paddingRight: "9px",
+        paddingBottom: "2px",
+        paddingLeft: state.mode ? "7px" : "4px",
+      },
+      "css-case-misapplied": { color: "#345678" },
+      "css-case-ascii": { color: "#456789" },
+    };
+    for (const frame of nodes)
+      for (const [property, expected] of Object.entries(
+        expectations[frame.attrs!.id!]!,
+      ))
+        assert.equal(
+          frame.style?.[property],
+          expected,
+          `CSS attribute comparison ${frame.attrs!.id}.${property}: ${label}, frame ${index}`,
+        );
+  }
+  assert.equal(changes, 1, `Missing CSS case mutation: ${label}`);
+}
 type InsertionResult =
   | "ready"
   | {
@@ -1819,6 +1932,17 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
 }
 if (!astro) {
   assert.equal(
+    nativeResult.cssCaseIdentityChecked,
+    true,
+    "Native CSS case pointer checks did not run",
+  );
+  assertCSSCaseTimeline(
+    nativeResult.frames,
+    scenario.suffix,
+    { mode: false, value: "edited" },
+    "native suffix",
+  );
+  assert.equal(
     nativeResult.textContentIdentityChecked,
     true,
     "Native textContent pointer checks did not run",
@@ -2011,6 +2135,7 @@ const normalize = (calls: unknown[][]) =>
   );
 let exported: JavascriptArchive;
 const inputReflections: unknown[] = [];
+const cssCaseObservations: unknown[] = [];
 try {
   const page = await browser.newPage();
   page.on("pageerror", (error) => errors.push(error.message));
@@ -2040,6 +2165,117 @@ try {
     ? null
     : await page.locator('[id="js-removal-input"]').elementHandle();
   let browserRemovalState = removalStart();
+  const captureCSSCaseHandles = () =>
+    Promise.all(
+      cssCaseIDs.map((id) =>
+        page.locator(`[id=${JSON.stringify(id)}]`).elementHandle(),
+      ),
+    );
+  let cssCaseHandles = astro ? [] : await captureCSSCaseHandles();
+  let browserCSSCaseState: CSSCaseState = { mode: false, value: "edited" };
+  let cssCaseStage = "restored";
+  const assertBrowserCSSCase = async (label: string) => {
+    if (astro) return;
+    const actual = [];
+    for (const [index, handle] of cssCaseHandles.entries()) {
+      const id = cssCaseIDs[index];
+      assert.ok(handle && id, `Missing CSS case browser handle: ${label}`);
+      actual.push(
+        await handle.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            id: element.id,
+            same: document.getElementById(element.id) === element,
+            count: document.querySelectorAll(
+              `[id=${JSON.stringify(element.id)}]`,
+            ).length,
+            type: element.getAttribute("type"),
+            data: element.getAttribute("data-case"),
+            class: element.getAttribute("class"),
+            raw: element.getAttribute("value"),
+            default:
+              element instanceof HTMLInputElement ? element.defaultValue : null,
+            live: element instanceof HTMLInputElement ? element.value : null,
+            style:
+              element.id === "css-case-input"
+                ? {
+                    color: style.color,
+                    backgroundColor: style.backgroundColor,
+                    paddingTop: style.paddingTop,
+                    paddingRight: style.paddingRight,
+                    paddingBottom: style.paddingBottom,
+                    paddingLeft: style.paddingLeft,
+                  }
+                : { color: style.color },
+          };
+        }),
+      );
+    }
+    assert.deepEqual(
+      actual,
+      [
+        {
+          id: "css-case-input",
+          same: true,
+          count: 1,
+          type: browserCSSCaseState.mode ? "text" : "TEXT",
+          data: browserCSSCaseState.mode ? "mixed" : "MiXeD",
+          class: "CaseToken",
+          raw: "initial",
+          default: "initial",
+          live: browserCSSCaseState.value,
+          style: {
+            color: "rgb(18, 52, 86)",
+            backgroundColor: "rgb(221, 238, 255)",
+            paddingTop: "2px",
+            paddingRight: "9px",
+            paddingBottom: "2px",
+            paddingLeft: browserCSSCaseState.mode ? "7px" : "4px",
+          },
+        },
+        {
+          id: "css-case-misapplied",
+          same: true,
+          count: 1,
+          type: browserCSSCaseState.mode ? "brief" : "BRIEF",
+          data: null,
+          class: null,
+          raw: null,
+          default: null,
+          live: null,
+          style: { color: "rgb(52, 86, 120)" },
+        },
+        {
+          id: "css-case-ascii",
+          same: true,
+          count: 1,
+          type: null,
+          data: "Ä",
+          class: null,
+          raw: null,
+          default: null,
+          live: null,
+          style: { color: "rgb(69, 103, 137)" },
+        },
+      ],
+      `CSS attribute matching/raw state differs: ${label}`,
+    );
+    cssCaseObservations.push({ stage: cssCaseStage, label, nodes: actual });
+  };
+  const cssAttributeFlags = astro
+    ? null
+    : await page.evaluate(() => ({
+        i: CSS.supports('selector([type="text" i])'),
+        I: CSS.supports('selector([type="text" I])'),
+        s: CSS.supports('selector([type="text" s])'),
+        S: CSS.supports('selector([type="text" S])'),
+      }));
+  if (!astro)
+    assert.deepEqual(
+      cssAttributeFlags,
+      { i: true, I: true, s: false, S: false },
+      "Pinned Chromium attribute flag support changed",
+    );
   const captureCharacterHandles = () =>
     Promise.all(
       characterIDs.map((id) =>
@@ -2526,6 +2762,7 @@ try {
   await assertBrowserCharacter("restored browser initial");
   await assertBrowserTextContent("restored browser initial");
   await assertBrowserInputReflection("restored browser initial");
+  await assertBrowserCSSCase("restored browser initial");
   assert.deepEqual(
     await page.evaluate(() => window.afyJavascript.calls()),
     [],
@@ -2560,6 +2797,7 @@ try {
       browserRemovalState = removalStep(browserRemovalState, step);
       browserCharacterState = characterStep(browserCharacterState, step);
       browserTextContentState = textContentStep(browserTextContentState, step);
+      browserCSSCaseState = cssCaseStep(browserCSSCaseState, step);
       if (step.id === "js-attrs-step") browserAttributePhase++;
       await assertBrowserInsertion(`after ${step.id}`);
       await assertBrowserHierarchy(`after ${step.id}`);
@@ -2568,6 +2806,7 @@ try {
       await assertBrowserCharacter(`after ${step.id}`);
       await assertBrowserTextContent(`after ${step.id}`);
       await assertBrowserInputReflection(`after ${step.id}`);
+      await assertBrowserCSSCase(`after ${step.id}`);
     }
   };
   for (const step of scenario.suffix) {
@@ -2579,6 +2818,13 @@ try {
     nativeResult.frames,
     "Browser and generated Go frames differ",
   );
+  if (!astro)
+    assertCSSCaseTimeline(
+      frames,
+      scenario.suffix,
+      { mode: false, value: "edited" },
+      "restored browser suffix",
+    );
   if (!astro)
     assertInsertionTimeline(
       frames,
@@ -2651,6 +2897,12 @@ try {
   }
   const followCalls = await page.evaluate(() => window.afyJavascript.calls());
   if (!astro) {
+    assertCSSCaseTimeline(
+      follow,
+      scenario.follow,
+      { mode: true, value: "edited" },
+      "restored browser follow",
+    );
     assertTextContentTimeline(
       follow,
       scenario.follow,
@@ -2741,6 +2993,10 @@ try {
       .locator('[id="js-removal-input"]')
       .elementHandle();
     browserRemovalState = { value: "initial", result: "ready" };
+    for (const handle of cssCaseHandles) await handle?.dispose();
+    cssCaseHandles = await captureCSSCaseHandles();
+    browserCSSCaseState = { mode: false, value: "initial" };
+    cssCaseStage = "original";
     for (const handle of characterHandles) await handle.dispose();
     characterHandles = await captureCharacterHandles();
     browserCharacterState = { data: "seed", dirty: "seed", result: "ready" };
@@ -2763,6 +3019,7 @@ try {
     await assertBrowserCharacter("original browser initial");
     await assertBrowserTextContent("original browser initial");
     await assertBrowserInputReflection("original browser initial");
+    await assertBrowserCSSCase("original browser initial");
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
     const originalValues: Record<string, string>[] = [];
@@ -3008,6 +3265,7 @@ try {
           styles: originalStyles,
           follow: originalFollowValues,
           followCalls: originalFollowCalls,
+          cssAttributeFlags,
         },
         null,
         2,
@@ -3021,6 +3279,15 @@ try {
       join(evidence, "browser-input-reflection.json"),
       JSON.stringify({ schema: 1, observations: inputReflections }, null, 2) +
         "\n",
+    );
+  if (!astro)
+    await writeFile(
+      join(evidence, "browser-css-attributes.json"),
+      JSON.stringify(
+        { schema: 1, observations: cssCaseObservations },
+        null,
+        2,
+      ) + "\n",
     );
   await browser.close();
   server.stop(true);
@@ -3048,6 +3315,17 @@ const webResult = JSON.parse(
   await readFile(join(evidence, "browser.json"), "utf8"),
 );
 if (!astro) {
+  assert.equal(
+    restored.cssCaseIdentityChecked,
+    true,
+    "Restored native CSS case pointer checks did not run",
+  );
+  assertCSSCaseTimeline(
+    restored.frames,
+    scenario.follow,
+    { mode: true, value: "edited" },
+    "restored native follow",
+  );
   assert.equal(
     restored.textContentIdentityChecked,
     true,
@@ -3156,6 +3434,15 @@ await writeFile(
       externalEffectsReplayed: 0,
       ...(!astro
         ? {
+            cssAttributes: {
+              suffixModeChanges: 1,
+              followModeChanges: 1,
+              nativeObjectIdentityChecked: true,
+              browserElementIdentityChecked: true,
+              observations: cssCaseObservations.length,
+              explicitSensitiveFlag:
+                "spec-unit-only; pinned Chromium flag disabled",
+            },
             insertion: {
               suffixOperations: 4,
               followOperations: 4,
