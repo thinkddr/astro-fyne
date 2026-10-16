@@ -12,7 +12,8 @@ convert arbitrary Astro, JavaScript, CSS or Go applications. Unsupported feature
 errors. Universal 1:1 conversion is the project goal, not a capability of this release.
 
 [Compatibility](COMPATIBILITY.md) · [Native integration](docs/native-runtime.md) ·
-[Reverse conversion](docs/reverse-conversion.md) · [Visual verification](docs/visual-verification.md)
+[Reverse conversion](docs/reverse-conversion.md) · [Visual verification](docs/visual-verification.md) ·
+[Image enlargement experiment](docs/image-enlargement.md)
 
 The source compiler lowers supported logic into Go with native state and widgets.
 Nullable property/index chains such as `profile?.details.name ?? "Guest"` retain

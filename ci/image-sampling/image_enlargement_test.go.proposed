@@ -1,0 +1,52 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright 2026 Fyne contributors.
+// Distributed under the BSD 3-Clause license in LICENSE-Fyne.txt.
+
+package software_test
+
+import (
+	"image"
+	"image/color"
+	"testing"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/internal/painter/software"
+	"fyne.io/fyne/v2/test"
+)
+
+func TestPainterImageEnlargementUsesLinearSampleCenters(t *testing.T) {
+	for _, item := range []struct {
+		name string
+		mode canvas.ImageScale
+		want [4]uint8
+	}{
+		{"smooth", canvas.ImageScaleSmooth, [4]uint8{64, 96, 160, 192}},
+		{"pixels", canvas.ImageScalePixels, [4]uint8{64, 64, 192, 192}},
+		{"fastest", canvas.ImageScaleFastest, [4]uint8{64, 96, 160, 192}},
+	} {
+		t.Run(item.name, func(t *testing.T) {
+			source := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+			source.SetNRGBA(0, 0, color.NRGBA{R: 64, G: 64, B: 64, A: 255})
+			source.SetNRGBA(1, 0, color.NRGBA{R: 192, G: 192, B: 192, A: 255})
+			img := canvas.NewImageFromImage(source)
+			img.FillMode, img.ScaleMode = canvas.ImageFillStretch, item.mode
+			c := test.NewCanvas()
+			c.SetPadded(false)
+			c.SetContent(img)
+			c.Resize(fyne.NewSize(4, 1))
+			actual := software.NewPainter().Paint(c)
+			if actual.Bounds() != image.Rect(0, 0, 4, 1) {
+				t.Fatalf("unexpected physical image bounds: %v", actual.Bounds())
+			}
+			// Linear pixel-center sampling clamps the ends, then samples at 1/4 and 3/4.
+			for x, level := range item.want {
+				got := color.NRGBAModel.Convert(actual.At(x, 0)).(color.NRGBA)
+				want := color.NRGBA{R: level, G: level, B: level, A: 255}
+				if got != want {
+					t.Fatalf("sample %d: got %v, want %v", x, got, want)
+				}
+			}
+		})
+	}
+}

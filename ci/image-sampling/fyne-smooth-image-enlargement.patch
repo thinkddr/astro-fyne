@@ -1,0 +1,44 @@
+diff --git a/internal/painter/software/draw.go b/internal/painter/software/draw.go
+--- a/internal/painter/software/draw.go
++++ b/internal/painter/software/draw.go
+@@ -152,10 +152,10 @@
+ 	}
+ 
+ 	cornerRadius := fyne.Min(painter.GetMaximumRadius(bounds), img.CornerRadius)
+-	drawPixels(scaledX, scaledY, width, height, img.ScaleMode, base, rawImg, clip, img.Alpha(), cornerRadius*c.Scale())
+-}
+-
+-func drawPixels(x, y, width, height int, mode canvas.ImageScale, base *image.NRGBA, origImg image.Image, clip image.Rectangle, alpha float64, radius float32) {
++	drawPixels(scaledX, scaledY, width, height, img.ScaleMode, base, rawImg, clip, img.Alpha(), cornerRadius*c.Scale(), true)
++}
++
++func drawPixels(x, y, width, height int, mode canvas.ImageScale, base *image.NRGBA, origImg image.Image, clip image.Rectangle, alpha float64, radius float32, linearImageEnlargement bool) {
+ 	if origImg.Bounds().Dx() == width && origImg.Bounds().Dy() == height && radius < 0.5 {
+ 		// do not scale or duplicate image since not needed, draw directly
+ 		drawTex(x, y, width, height, base, origImg, clip, alpha)
+@@ -173,7 +173,15 @@
+ 		if mode != canvas.ImageScaleSmooth {
+ 			fyne.LogError(fmt.Sprintf("Invalid canvas.ImageScale value (%d), using canvas.ImageScaleSmooth as default value", mode), nil)
+ 		}
+-		draw.CatmullRom.Scale(scaledImg, scaledBounds, origImg, origImg.Bounds(), draw.Over, nil)
++		sourceBounds := origImg.Bounds()
++		if linearImageEnlargement && mode == canvas.ImageScaleSmooth &&
++			width >= sourceBounds.Dx() && height >= sourceBounds.Dy() &&
++			(width > sourceBounds.Dx() || height > sourceBounds.Dy()) {
++			// Smooth images magnify linearly, as the GL image path does.
++			draw.BiLinear.Scale(scaledImg, scaledBounds, origImg, sourceBounds, draw.Over, nil)
++		} else {
++			draw.CatmullRom.Scale(scaledImg, scaledBounds, origImg, sourceBounds, draw.Over, nil)
++		}
+ 	}
+ 
+ 	if radius > 0.5 {
+@@ -298,7 +306,7 @@
+ 
+ 	pix := rast.Generator(width, height)
+ 	if pix.Bounds().Bounds().Dx() != width || pix.Bounds().Dy() != height {
+-		drawPixels(scaledX, scaledY, width, height, rast.ScaleMode, base, pix, clip, 1.0, 0.0)
++		drawPixels(scaledX, scaledY, width, height, rast.ScaleMode, base, pix, clip, 1.0, 0.0, false)
+ 	} else {
+ 		drawTex(scaledX, scaledY, width, height, base, pix, clip, 1.0)
+ 	}

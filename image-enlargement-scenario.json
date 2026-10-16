@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "viewport": {
+    "width": 160,
+    "height": 80
+  },
+  "cases": [
+    {
+      "name": "scale-1",
+      "entry": "ImageEnlargement",
+      "scale": 1
+    },
+    {
+      "name": "scale-2",
+      "entry": "ImageEnlargement",
+      "scale": 2
+    }
+  ],
+  "assets": [
+    {
+      "id": "even-image",
+      "path": "example/public/images/enlargement-even.png",
+      "src": "/images/enlargement-even.png",
+      "hash": "506316196b4ebd733350c574c6da0b162ee616176a3174f56baa4c8d83c82b35",
+      "mediaType": "image/png",
+      "width": 16,
+      "height": 16,
+      "x": 16,
+      "y": 16,
+      "renderWidth": 32,
+      "renderHeight": 32
+    },
+    {
+      "id": "odd-image",
+      "path": "example/public/images/enlargement-odd.png",
+      "src": "/images/enlargement-odd.png",
+      "hash": "854d8fc8527e601afe8d5ca1a0b3dc2186c6a5fbb33ffd3a81f24b0d84a493e8",
+      "mediaType": "image/png",
+      "width": 16,
+      "height": 16,
+      "x": 64,
+      "y": 16,
+      "renderWidth": 32,
+      "renderHeight": 32
+    },
+    {
+      "id": "alpha-image",
+      "path": "example/public/images/enlargement-alpha.png",
+      "src": "/images/enlargement-alpha.png",
+      "hash": "aca46fbd93ab6c8f99abc375fb663a2c2676be4ed640fcbee290c80c47e675fa",
+      "mediaType": "image/png",
+      "width": 16,
+      "height": 16,
+      "x": 112,
+      "y": 16,
+      "renderWidth": 32,
+      "renderHeight": 32
+    }
+  ]
+}

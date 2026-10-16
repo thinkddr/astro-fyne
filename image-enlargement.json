@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "package": "generated",
+  "entries": [
+    {
+      "name": "ImageEnlargement",
+      "source": "example/src/components/ImageEnlargementConformance.tsx",
+      "export": "ImageEnlargementConformance",
+      "output": "native/.image-enlargement-source/image_enlargement.gen.go",
+      "publicDir": "example/public"
+    }
+  ]
+}
