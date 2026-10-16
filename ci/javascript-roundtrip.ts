@@ -762,11 +762,16 @@ try {
     JSON.stringify(exported),
   );
   await validateJavascriptArchive(exported);
+  assert.ok(exported.frame, "Browser archive is missing its current frame");
   await page.evaluate(() => window.afyJavascript.clear());
-  const follow = [exported.frame];
+  const follow: JavascriptFrame[][] = [exported.frame];
   for (const step of scenario.follow) {
     await perform(step);
-    follow.push(await page.evaluate(() => window.afyJavascript.export().frame));
+    const frame: JavascriptFrame[] | undefined = await page.evaluate(
+      () => window.afyJavascript.export().frame,
+    );
+    assert.ok(frame, `Browser archive is missing its frame after ${step.id}`);
+    follow.push(frame);
   }
   const followCalls = await page.evaluate(() => window.afyJavascript.calls());
   if (!astro)
@@ -949,9 +954,11 @@ try {
         attributePhase,
         `original follow, frame ${i}`,
       );
+      const followFrame = follow[i];
+      assert.ok(followFrame, `Missing restored browser follow frame ${i}`);
       assert.deepEqual(
         values,
-        frameValues(follow[i]),
+        frameValues(followFrame),
         `Original browser source differs from restored follow, frame ${i}`,
       );
       originalFollowValues.push(values as Record<string, string>);
