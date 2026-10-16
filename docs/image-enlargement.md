@@ -186,10 +186,12 @@ tags, without a test-name filter:
 ./internal/painter/software ./internal/painter ./canvas
 ```
 
-It runs once under the converter-resolved module graph, including x/image
-v0.46.0, and once under the fork's own resolved graph. The actual selected versions
-are recorded before and after both runs; the fork's declared version is not
-assumed to be the final MVS selection. In a hosted x86 environment, this mode is:
+It runs once under a probe graph seeded with the converter's selected versions,
+including x/image v0.46.0, and once under the fork's own resolved graph. The probe
+starts from the fork module and can retain additional direct or test requirements;
+it does not assert that the complete graphs are identical. Actual selected
+versions are recorded before and after both runs; the fork's declared version is
+not assumed to be the final MVS selection. In a hosted x86 environment, this mode is:
 
 ```sh
 ASTRO_FYNE_IMAGE_REGRESSIONS_ONLY=1 bash ci/image-enlargement.sh native-legacy
@@ -203,7 +205,7 @@ graphs run even if one fails. The x86 choice matches existing fixture provenance
 it does not weaken the ARM64 browser/native comparisons or excuse failed tests.
 
 The same run passed all three complete packages under both dependency graphs:
-the converter resolved x/image v0.46.0 and the fork resolved v0.24.0, before and
+the probe resolved x/image v0.46.0 and the fork resolved v0.24.0, before and
 after testing. All eight regression phases passed. Existing image, Raster,
 Pixels, Fastest, alpha and clipping goldens remained unchanged; no failed fixture
 images were produced.
