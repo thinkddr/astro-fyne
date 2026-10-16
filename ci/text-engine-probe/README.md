@@ -131,36 +131,62 @@ CSS line layout, bidi, Unicode editing, variation-selector or color-font support
 
 ## Native policy versus browser proof
 
-`policy.json` declares `headless-full-independent-remainder`: request Full
-hinting from the pinned headless-shell source default, now tied to the actual
-observed executable/revision with no kernel hinting override. The remaining
-values are independently declared Skia defaults: no auto-hint override, no
-embedded bitmaps, no subpixel or linear metrics, grayscale AA, baseline snap
-and unknown pixel geometry. They are not inferred browser preferences.
-Gamma/contrast are read from the pinned SkSurfaceProps public defaults and
-recorded as actual numbers. The report describes these as explicit SkFont and
-surface requests; the effective internal scaler/hint-engine/mask is not yet
-instrumented. No value is selected by comparing reference pixels.
+`policy.json` declares `headless-host-fontconfig-rgb-independent-positioning`.
+It uses one guarded host-query/source profile, with no parameter search:
+
+- Full hinting follows the pinned headless default and renderer override.
+- Anti-aliasing, RGB order, embedded bitmaps and auto-hint requests follow the
+  standalone host's actual empty Fontconfig query and the pinned Blink/GFX mapping.
+- Gamma 1.2 and contrast 0.2 follow Chromium's Linux build configuration.
+- Subpixel positioning and linear metrics remain independently disabled;
+  baseline snap remains enabled. Browser-global cached device scale is unobserved.
+
+[Run 38916428319](https://github.com/thinkddr/astro-fyne/actions/runs/38916428319)
+observed `antialias=1`, `autohint=0`, `embeddedbitmap=1`, `hinting=1`,
+`hintstyle=1` and `rgba=1`, each present with a successful property result.
+The next run must reproduce those typed values before using this request policy.
+The observer binds its report to the exact policy bytes; the strict comparator
+requires that binding and current observer/source identities. A changed query
+fails rather than silently selecting a different policy.
+
+The pinned [Blink mapping](https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/platform/fonts/web_font_render_style.cc#L93-L113)
+selects subpixel AA for anti-aliasing plus subpixel rendering, and the
+[GFX mapping](https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/ui/gfx/font_render_params.cc#L12-L28)
+maps RGB to horizontal RGB geometry. Web-font construction uses an empty family;
+the platform path then retains default render preferences. The bitmap request
+also agrees with the pinned platform's default bitmap-avoidance flag.
+
+Gamma and contrast come from the pinned Linux
+[build configuration](https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/skia/BUILD.gn#L112-L118).
+`LegacyDisplayGlobals` initializes these values from the compile macros; its
+setter changes them only on Windows. These are declared source/host-query
+requests, not observations of the browser's effective font policy. The browser
+can disable LCD through `ComputeSurfaceProps(false)`, and its actual linked
+Fontconfig, LinuxUi settings, cached scale and renderer preferences remain
+unobserved. Native scaler masks and pre-blend application also remain unverified.
+
+The first complete render used `headless-full-independent-remainder`, with
+SkSurfaceProps public defaults: gamma 0 (the sRGB sentinel), contrast 0.5,
+grayscale AA, unknown geometry and bitmaps disabled. Its original failure and
+unchanged observer/control outputs remain retained. No pixel gain is inferred
+from a source-derived request change. Linux does not define Android's
+`SK_GAMMA_APPLY_TO_A8`; the scaler can ignore or alter requests according to
+its mask and flags.
 
 Pinned Fontations `onFilterRec` collapses Full to Normal for non-LCD masks.
-This grayscale/unknown-geometry experiment therefore makes a Full request but
-must not claim an effective Full scaler or a pixel change from the former
-Normal request. No pixel result was used to choose the request. See the
-observed [browser run](https://github.com/thinkddr/astro-fyne/actions/runs/38902460924).
-The pinned [headless default](https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/headless/public/headless_browser.h#L136-L138)
-sets Full; [web contents](https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/headless/lib/browser/headless_web_contents_impl.cc#L458-L462)
-passes that request to the renderer. The pinned [Fontations filter](https://github.com/google/skia/blob/9d07e5bad9e3e21da2426946e589daa647218271/src/ports/SkTypeface_fontations.cpp#L310-L330)
-defines the non-LCD demotion.
+That applied to the original grayscale request; neither the new RGB request nor
+its metadata proves that LCD survives the actual draw path. No origin, advance,
+mask, gamma or contrast is chosen by minimizing reference-image error. See the
+observed [browser run](https://github.com/thinkddr/astro-fyne/actions/runs/38902460924),
+pinned [headless default](https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/headless/public/headless_browser.h#L136-L138),
+[renderer override](https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/headless/lib/browser/headless_web_contents_impl.cc#L458-L462)
+and [Fontations filter](https://github.com/google/skia/blob/9d07e5bad9e3e21da2426946e589daa647218271/src/ports/SkTypeface_fontations.cpp#L310-L330).
 
-This is **not asserted to be Chromium's effective policy**, and specifically
-does not claim to reproduce its observed RGB-edge glyphs. Its value is to
-compile the genuine hinted-font/Skia-strike/HarfBuzz/raster pipeline and produce
-honest native evidence. An effective Chromium policy requires the separate
-instrumentation of renderer preferences, OTS output, SkFont flags, shaping,
-scaler masks and surface properties. Instrumented and uninstrumented browser
-builds would also need strict comparisons with the original binary. Changing a
-declared policy requires source evidence; do not search policy values against
-screenshots.
+This is **not asserted to be Chromium's effective policy**. Proving that would
+require separate observation of renderer preferences, OTS output, SkFont flags,
+shaping, scaler masks, surface properties and the compositor. Instrumented and
+uninstrumented browser builds would also need strict comparisons with the
+original binary. Reports keep `browserEffectivePolicyVerified: false`.
 
 ## Proof and limitations
 
@@ -223,15 +249,21 @@ with maximum channel differences of 125 and 144. The browser PNGs were
 byte-identical to the prior observed oracle. Equal total advances and baselines
 do not establish equal glyph positions, outlines, masks or compositing.
 
-The next diagnostic observes the hosted system's actual empty Fontconfig query
+The hosted diagnostic observes the system's actual empty Fontconfig query
 with `observe-fontconfig.py`. It follows the pinned Chromium substitution
 sequence, retains loaded configuration bytes and the bound shared-library hash,
-and verifies those inputs stayed unchanged during the query. Twelve exact
+and verifies those inputs stayed unchanged during the query. Sixteen exact
 Chromium source files are retained with Git-blob and SHA-256 pins. The observer
-does not select a family through `FcFontMatch` or apply its results to the
-native policy. Its separate process cannot reveal the browser's linked library,
+does not select a family through `FcFontMatch` or apply a native policy itself;
+it verifies the declared profile expectations before the driver uses that policy. Its separate process cannot reveal the browser's linked library,
 startup configuration, LinuxUi defaults, cached device scale, renderer
 preferences or effective SkFont/scaler/surface. Those remain unobserved.
+
+[Run 38916428319](https://github.com/thinkddr/astro-fyne/actions/runs/38916428319)
+retained 38 loaded configuration files and one directory listing. Both original
+browser PNGs, both native PNGs and all native metrics remained identical to the
+first complete render. The observer therefore caused no output change in this
+bounded control. It does not prove browser-internal policy.
 
 Remaining boundaries include strict pixel equality, per-glyph browser internals,
 actual Fyne integration and editing behavior. Compilation and this diagnostic

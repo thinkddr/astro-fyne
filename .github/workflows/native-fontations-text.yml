@@ -47,7 +47,8 @@ jobs:
           bun install --frozen-lockfile --ignore-scripts
           bunx --no-install playwright install --with-deps chromium
           python3 ci/text-engine-probe/observe-fontconfig.py --out "$task_evidence/fontconfig" \
-            --sources "$RUNNER_TEMP/native-text/sources.json"
+            --sources "$RUNNER_TEMP/native-text/sources.json" \
+            --request-policy ci/text-engine-probe/policy.json
           bun run build:web
           bunx --no-install astro preview --ignore-lock --root example --host 127.0.0.1 --port 4321 > "$task_evidence/preview.log" 2>&1 &
           task_preview=$!

@@ -7,6 +7,9 @@ import argparse, hashlib, json, pathlib, subprocess
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
 def frame_scales(frames, label, browser=False):
     if not isinstance(frames, list) or len(frames) != 2:
         raise RuntimeError(label + " must contain exactly two frames")
@@ -34,6 +37,35 @@ def main():
     for name in ["sourceHash", "probeHash", "fixtureHash", "fontHash"]:
         if browser[name] != native[name]:
             raise RuntimeError("Native/browser original-source identity differs: " + name)
+    prototype = pathlib.Path(__file__).resolve().parent
+    policy_bytes = (prototype / "policy.json").read_bytes()
+    policy = json.loads(policy_bytes)
+    if native.get("policyHash") != hashlib.sha256(policy_bytes).hexdigest() or canonical(native.get("requestedPolicy")) != canonical(policy):
+        raise RuntimeError("Native request policy differs from the current policy bytes")
+    config_binding = None
+    expected = policy.get("fontconfigExpected")
+    if expected is not None:
+        keys = {"antialias", "autohint", "embeddedbitmap", "hinting", "hintstyle", "rgba"}
+        if not isinstance(expected, dict) or set(expected) != keys or any(type(value) is not int for value in expected.values()):
+            raise RuntimeError("Invalid native Fontconfig expectations")
+        config_path = root / "fontconfig/fontconfig.json"
+        config = json.loads(config_path.read_text())
+        binding = config.get("requestPolicyBinding")
+        if (type(config.get("schema")) is not int or config["schema"] != 1
+            or config.get("diagnosticOnly") is not True or config.get("browserEffectivePolicyVerified") is not False
+            or config.get("pixelPerfectVerified") is not False
+            or config.get("policyAppliedToNative") is not False or config.get("configEntriesStable") is not True
+            or not isinstance(binding, dict) or binding.get("sha256") != native["policyHash"]
+            or binding.get("expectedPropertiesMatched") is not True or canonical(binding.get("expectedProperties")) != canonical(expected)):
+            raise RuntimeError("Fontconfig observation is not bound to the current native request policy")
+        if config.get("observerHash") != digest(prototype / "observe-fontconfig.py") or canonical(config.get("sourcePins")) != canonical(json.loads((prototype / "font-policy-source-pin.json").read_text())):
+            raise RuntimeError("Fontconfig observer or source pins differ from current inputs")
+        for name, value in expected.items():
+            actual = config["emptyQueryResult"]["properties"].get(name)
+            if (not isinstance(actual, dict) or type(actual.get("result")) is not int or actual["result"] != 0
+                or actual.get("present") is not True or type(actual.get("value")) is not int or actual["value"] != value):
+                raise RuntimeError("Fontconfig observation differs from the declared native request: " + name)
+        config_binding = {"reportHash": digest(config_path), "requestPolicyHash": binding["sha256"], "expectedPropertiesMatched": True}
     failed = False
     results = []
     for scale in [1, 2]:
@@ -69,7 +101,7 @@ def main():
         (out / "pixels.json").write_text(json.dumps(result, indent=2) + "\n")
         results.append({"scale": scale, **result})
         failed = failed or changed != 0
-    (root / "summary.json").write_text(json.dumps({"schema": 1, "diagnosticOnly": True, "pixelPerfectVerified": False, "browserEffectivePolicyVerified": False, "scope": "Standalone native Fontations/Skia/HarfBuzz/OTS probe; no Fyne widget, editor, inverse or GPU claim", "frames": results}, indent=2) + "\n")
+    (root / "summary.json").write_text(json.dumps({"schema": 1, "diagnosticOnly": True, "pixelPerfectVerified": False, "browserEffectivePolicyVerified": False, "fontconfigBinding": config_binding, "scope": "Standalone native Fontations/Skia/HarfBuzz/OTS probe; no Fyne widget, editor, inverse or GPU claim", "frames": results}, indent=2) + "\n")
     raise SystemExit(1 if failed else 0)
 
 if __name__ == "__main__":

@@ -1,17 +1,25 @@
 {
   "schema": 1,
-  "name": "headless-full-independent-remainder",
+  "name": "headless-host-fontconfig-rgb-independent-positioning",
   "diagnosticOnly": true,
   "browserEffectivePolicyVerified": false,
-  "reason": "Full hinting request follows the pinned headless default for the observed executable with no command-line hint override; all remaining values are independently declared Skia defaults, not measured browser policy",
+  "reason": "Full hinting follows the pinned headless default, gamma 1.2/contrast 0.2 the pinned Linux build, and AA/RGB/bitmap/autohint requests the guarded standalone host Fontconfig query and pinned Blink/GFX mapping. Positioning, linear metrics and baseline snap remain independent; browser effective policy and native scaler internals remain unobserved.",
   "hinting": 3,
   "auto_hint": 0,
-  "embedded_bitmaps": 0,
+  "embedded_bitmaps": 1,
   "subpixel": 0,
   "linear_metrics": 0,
-  "edging": 1,
+  "edging": 2,
   "baseline_snap": 1,
-  "pixel_geometry": 0,
-  "contrast": "skia-public-default",
-  "gamma": "skia-public-default"
+  "pixel_geometry": 1,
+  "contrast": 0.2,
+  "gamma": 1.2,
+  "fontconfigExpected": {
+    "antialias": 1,
+    "autohint": 0,
+    "embeddedbitmap": 1,
+    "hinting": 1,
+    "hintstyle": 1,
+    "rgba": 1
+  }
 }

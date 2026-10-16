@@ -20,6 +20,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=pathlib.Path, required=True)
     parser.add_argument("--sources", type=pathlib.Path, required=True)
+    parser.add_argument("--request-policy", type=pathlib.Path)
     args = parser.parse_args()
     if platform.system() != "Linux":
         raise RuntimeError("This diagnostic requires the hosted Linux environment")
@@ -161,6 +162,20 @@ def main():
             fc.FcPatternDel(result, name)
         checked(fc.FcConfigSubstituteWithPat(config, result, query, 1), "FcMatchFont substitution")
         observed = pattern(result)
+        request_binding = None
+        if args.request_policy:
+            policy_bytes = args.request_policy.read_bytes()
+            expected = json.loads(policy_bytes).get("fontconfigExpected")
+            if expected is not None:
+                keys = {"antialias", "autohint", "embeddedbitmap", "hinting", "hintstyle", "rgba"}
+                if not isinstance(expected, dict) or set(expected) != keys or any(type(value) is not int for value in expected.values()):
+                    raise RuntimeError("Invalid typed Fontconfig request-policy expectations")
+                for name, value in expected.items():
+                    actual = observed["properties"][name]
+                    if actual["result"] != 0 or actual["present"] is not True or actual["value"] != value:
+                        raise RuntimeError("Current host query differs from request-policy evidence: " + name)
+            request_binding = {"sha256": sha(policy_bytes), "expectedProperties": expected,
+                               "expectedPropertiesMatched": expected is not None}
         after = config_entries(config)
         if before != after or sha(library.read_bytes()) != sha(library_bytes):
             raise RuntimeError("Fontconfig library/configuration changed during observation")
@@ -179,6 +194,7 @@ def main():
             "configurationBinding": "Every reported loaded file's bytes and each reported directory's immediate names/types/symlink targets; not a recursive hash of unrelated files",
             "initialPattern": initial, "defaultSubstitutedPattern": substituted,
             "emptyQueryResult": observed,
+            "requestPolicyBinding": request_binding,
             "policyAppliedToNative": False,
             "missingPropertiesUseBrowserDefaults": "Not resolved here: LinuxUi defaults, global device scale, startup environment and browser-linked Fontconfig remain unobserved",
         }

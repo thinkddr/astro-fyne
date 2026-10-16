@@ -49,6 +49,22 @@
     "skia/ext/legacy_display_globals.h": {
       "gitBlob": "5be86d55961dc2fd873e478f34b7694f8fabcd00",
       "sha256": "f01711ca4d7c57919c84647e0c7614ae4de1b14b4d3e0fcb1a88eda27552b1a3"
+    },
+    "skia/BUILD.gn": {
+      "gitBlob": "1c58dd668bc45b9f180672bada7838b671bef031",
+      "sha256": "a22ba2038b4fcea6c3ad7aff50fb99df5950000b0f5e3e5d07e26690cdd0549d"
+    },
+    "skia/config/SkUserConfig.h": {
+      "gitBlob": "8ba62b2d7b2190e68ae74c0361baa7b7d79f6cc0",
+      "sha256": "39e533b9fdad201467ac31f538c0de708490c5b5124ffe1727d7d50800ad36be"
+    },
+    "third_party/blink/renderer/platform/fonts/font_custom_platform_data.cc": {
+      "gitBlob": "def3822e697b0373c59ed09a3a98bd4fde1077f5",
+      "sha256": "c3dbccb489ac206eb6bc2c5b5ccc868ed241d49abe2d4da6922f968071eccf8a"
+    },
+    "third_party/blink/renderer/platform/fonts/font_platform_data.h": {
+      "gitBlob": "07e92cc924311d73bb9e98fbaa8df9dd38e92803",
+      "sha256": "7a33d64cb27c20a5937737edefad564cf8c254c44af71f6689199d8b87353fd4"
     }
   }
 }
