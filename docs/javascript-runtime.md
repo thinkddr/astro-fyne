@@ -161,9 +161,12 @@ include element/class/ID/attributes, descendant/child/sibling combinators, `:is`
 `:not`, `:root`, checked/disabled/enabled and simple child/empty states. Flat named layers,
 specificity, source order, `!important`, inline priorities, inheritance, variables/fallbacks
 and ordered padding/background declarations are retained through dynamic class changes
-and continuation. Custom-property dependency cycles, including references inside unused
-fallbacks, invalidate each cycle member before a consuming fallback is selected. Inherited
-custom properties retain their already computed values. CSS syntax is parsed at build time
+and continuation. Variable resolution follows the selected fallback path and invalidates
+active cycle participants. Unused fallbacks are not evaluated. Inherited custom properties
+retain their already computed values; explicit `inherit`, `unset` and `initial` are supported.
+Escaped variable functions/names, dynamic first arguments, custom-property `revert` and
+`revert-layer`, and CSS-wide keywords produced by custom-property substitution require
+further token/property adapters and receive diagnostics. CSS syntax is parsed at build time
 with pinned MIT-licensed CSS Tree;
 the runtime does not require it, Bun or a browser. Native properties still use the supported
 prototype sizing/paint contract. Control typography needs explicit declarations or `inherit`
@@ -193,11 +196,13 @@ controlled/uncontrolled editors, direct event properties, programmatic clicks an
 remounts. Its checkbox scenario also exercises preactivation, cancellation, disabled and
 controlled/local state, labels, programmatic activation and Space. Its listener scenario also
 checks options, duplicate registration, one-shot callbacks,
-passive cancellation, object receivers, removal during dispatch and direct handler ordering.
-It compares 76 browser frames (31 from the unmodified original component) and 45 generated-Go
+passive cancellation, object receivers, removal during dispatch, direct handler ordering and
+programmatic click reentry.
+It compares 81 browser frames (33 from the unmodified original component) and 48 generated-Go
 frames, and proves that restoration repeats zero host effects. The CSS scenario additionally compares native
 cascade values against Chromium's original computed styles in an isolated shadow tree,
-including self/mutual cycles, fallback-only dependencies, live cycle removal and inherited values.
+including self/mutual cycles, selected/unused fallbacks, comments and function-name boundaries,
+live cycle removal and explicit custom-property inheritance.
 Remote CI also checks two actual
 Astro hydration/event frames, bounded VM execution and preservation of valid native
 objects after source errors. Seven bundled-source scenarios verify native diagnostics for

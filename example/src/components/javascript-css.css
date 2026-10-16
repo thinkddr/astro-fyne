@@ -60,3 +60,31 @@
   --inherited-two: var(--inherited-one);
   color: var(--inherited-two);
 }
+
+#css-cycle-comment {
+  --comment-ready: #112233;
+  --comment-ink: var(--comment-ready, /*var(--comment-ink)*/ #445566);
+  color: var(--comment-ink, #cc3300);
+}
+#css-cycle-function {
+  --function-ready: #112233;
+  --function-ink: var(--function-ready, notvar(--function-ink));
+  color: var(--function-ink, #cc3300);
+}
+
+.css-keyword-parent {
+  --keyword-ink: #112233;
+  color: #445566;
+}
+#css-keyword-inherit {
+  --keyword-ink: inherit;
+  color: var(--keyword-ink);
+}
+#css-keyword-unset {
+  --keyword-ink: unset;
+  color: var(--keyword-ink);
+}
+#css-keyword-initial {
+  --keyword-ink: initial;
+  color: var(--keyword-ink, #cc3300);
+}

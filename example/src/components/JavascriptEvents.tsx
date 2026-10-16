@@ -10,6 +10,7 @@ export function JavascriptEvents({
   const options = useRef<HTMLButtonElement>(null);
   const mutation = useRef<HTMLButtonElement>(null);
   const property = useRef<HTMLButtonElement>(null);
+  const recursive = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     const first = options.current!;
     const once = () => observe("listener-once");
@@ -53,6 +54,15 @@ export function JavascriptEvents({
     third.onclick = null;
     third.onclick = handler;
 
+    const fourth = recursive.current!;
+    const nested = () => {
+      observe("listener-recursive-once");
+      fourth.click();
+    };
+    const tail = () => observe("listener-recursive-tail");
+    fourth.addEventListener("click", nested, { once: true });
+    fourth.addEventListener("click", tail);
+
     return () => {
       first.removeEventListener("click", once);
       first.removeEventListener("click", capture, true);
@@ -63,6 +73,8 @@ export function JavascriptEvents({
       second.removeEventListener("click", late);
       third.onclick = null;
       third.removeEventListener("click", regular);
+      fourth.removeEventListener("click", nested);
+      fourth.removeEventListener("click", tail);
     };
   }, [observe]);
   return (
@@ -75,6 +87,15 @@ export function JavascriptEvents({
       </button>
       <button id="js-events-property" ref={property}>
         Event property ordering
+      </button>
+      <button id="js-events-recursive-target" ref={recursive}>
+        Programmatic target
+      </button>
+      <button
+        id="js-events-recursive"
+        onClick={() => recursive.current!.click()}
+      >
+        Programmatic reentry
       </button>
     </section>
   );

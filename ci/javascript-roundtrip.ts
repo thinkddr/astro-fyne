@@ -91,6 +91,8 @@ const scenario = astro
           "js-events-mutation",
           "js-events-property",
           "js-events-property",
+          "js-events-recursive",
+          "js-events-recursive",
         ),
         ...tap("css-increment", "css-mode", "css-increment", "css-disabled"),
         ...tap("js-reorder", "js-a-increment"),
@@ -110,6 +112,7 @@ const scenario = astro
           "js-events-options",
           "js-events-mutation",
           "js-events-property",
+          "js-events-recursive",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -257,7 +260,8 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
     mutate = ["listener-mutate"],
     late = ["listener-late"],
     regular = ["listener-regular"],
-    property = ["listener-property"];
+    property = ["listener-property"],
+    recursive = ["listener-recursive-tail"];
   const expected =
     phase === "suffix"
       ? [
@@ -275,8 +279,11 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
           property,
           regular,
           property,
+          ["listener-recursive-once"],
+          recursive,
+          recursive,
         ]
-      : [capture, passive, object, mutate, late, regular, property];
+      : [capture, passive, object, mutate, late, regular, property, recursive];
   assert.deepEqual(
     calls.filter((args) => String(args[0]).startsWith("listener-")),
     expected,

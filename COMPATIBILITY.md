@@ -368,16 +368,16 @@ the round-trip image. Both comparisons use the same zero-difference policy as fo
 
 ## Roadmap toward broad compatibility
 
-The following are engineering stages, not implemented features or delivery dates.
+The following are ongoing engineering areas. Each has implemented subsets and remaining
+work; they are not delivery dates or a universal compatibility claim.
 
-1. **Behavioral semantics.** Extend the differential corpus to nested components, keyed lists,
-   batched updates, closures, controlled inputs, refs, context, effects, cleanup and unmounts.
-   Separate JSX child rendering from JavaScript conversion rules and preserve ECMAScript
-   strings, missing values, coercion and short-circuit evaluation. A Go lowering must implement
-   these rules explicitly. For arbitrary JavaScript and third-party Preact libraries, evaluate
-   an embedded ECMAScript engine with a Preact host renderer as a separate architecture decision;
-   it would add a scripting runtime and platform bridges. A syntax parser alone cannot supply
-   general JavaScript execution semantics.
+1. **Behavioral semantics.** Expand the differential corpus beyond the current declarative
+   compiler and opt-in Goja/Preact runtime. Their existing scenarios cover nested components,
+   keyed lists, batched updates, closures, editors, refs, context, effects and cleanup.
+   Further browser APIs, asynchronous work and compatible third-party libraries need explicit
+   native host contracts and original-browser comparisons. Keep the declarative Go lowering's
+   supported ECMAScript rules and the embedded engine's execution boundary documented
+   separately; JavaScript execution alone cannot supply a complete browser platform.
 2. **Styles and responsive layout.** Build a versioned CSS cascade and formatting-box model:
    selectors, inherited values, custom properties, units, flexbox, grid, inline formatting,
    intrinsic sizing, wrapping, clipping, scroll containers, positioning and stacking. Continue
@@ -420,5 +420,5 @@ boxes and native painting described by their upstream implementations:
 - [Preact hooks](https://preactjs.com/guide/v10/hooks/): state, context, effects and lifecycle behavior.
 - [CSS Display specification](https://www.w3.org/TR/css-display-3/): formatting box generation.
 - [Fyne custom widgets](https://docs.fyne.io/extend/custom-widget/): stateful widgets and native renderers.
-- [QuickJS](https://bellard.org/quickjs/): an example ECMAScript engine to evaluate, not a current dependency.
+- [Goja](https://github.com/dop251/goja): the opt-in pure-Go ECMAScript engine.
 - [Web Platform Tests](https://web-platform-tests.org/): a model for versioned platform conformance.
