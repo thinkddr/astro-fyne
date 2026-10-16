@@ -168,7 +168,7 @@ declare a nonnegative pixel `flexBasis`, `minWidth: 0`, `minHeight: 0` and
 factors remain zero. Sizes and spacing use numbers or `px`, not the prototype mapper's
 14px `rem` assumption. A dimension of zero remains distinct from an omitted dimension.
 
-Supported main axes are `row` and `column`, with one equal `gap` between items.
+Supported main axes are `row`, `row-reverse`, `column` and `column-reverse`, with one equal `gap` between items. Source and object order remain unchanged. This contract requires LTR horizontal writing.
 `justifyContent` accepts `flex-start`, `flex-end`, `center`, `space-between`,
 `space-around` and `space-evenly`. `alignItems` and `alignSelf` accept `flex-start`,
 `flex-end`, `center` and `stretch`; `alignSelf: "auto"` inherits the container's setting.
@@ -203,7 +203,7 @@ and zero padding, border and radius. The responsive bitmap corpus uses the sourc
 natural 16×16 size and scale 1; it does not certify image interpolation at another size or scale.
 
 This mode does not implement text or control intrinsic sizes, automatic/content/percentage
-bases, automatic minima, nonzero margins, wrapping, reverse directions, `order`, baseline alignment,
+bases, automatic minima, nonzero/auto margins, wrapping, RTL/vertical writing, `order`, baseline alignment,
 min/max constraints, the CSS cascade, external stylesheets or arbitrary percentage sizing.
 Unsupported declarations or tree shapes fail explicitly. Measured profiles keep their
 existing exact-viewport restriction.
@@ -248,7 +248,7 @@ remain frozen exports rather than an inferred responsive web program.
 | Feature              | Current boundary                                                                                                                                                                      |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Geometry             | CSS pixel dimensions; viewport coordinates for roots; parent border-box coordinates for children                                                                                      |
-| Layout               | Recorded positions for one viewport and state; source-only row/column layouts within the supported style subset                                                                       |
+| Layout               | Recorded positions for one viewport and state; source-only four-direction LTR Flexbox within the supported style subset                                                               |
 | Paint                | Supported solid colors, uniform borders and uniform radii; the backend and zero-difference gate decide actual equivalence                                                             |
 | Opacity              | Measured group opacity must be 1; translucent colors require correct composition from the backend                                                                                     |
 | Typography           | Explicit loaded browser fonts and corresponding native resources; supported text alignment, line height and whitespace                                                                |

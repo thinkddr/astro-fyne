@@ -1,0 +1,13 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+import { ResponsiveReverseFlexHost } from "../components/ResponsiveReverseFlexConformance";
+const sourceHash = process.env.ASTRO_FYNE_REVERSE_FLEX_SOURCE_HASH ?? "";
+---
+<html lang="en" data-reverse-flex-source-hash={sourceHash}>
+  <head><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+  <body><ResponsiveReverseFlexHost client:only="preact" /></body>
+</html>
+<style is:global>
+  @font-face { font-family: AstroNoto; src: url("/fonts/NotoSans-Regular.ttf"); font-weight: 400; font-style: normal; }
+  html, body { margin: 0; padding: 0; background: #ffffff; overflow: hidden; }
+</style>

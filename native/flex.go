@@ -15,7 +15,7 @@ import (
 // from auto. Dimensions and bases use border-box CSS pixels.
 //
 // The tree requires a width:100% root with fixed height, pixel item bases and min0.
-// Intrinsic sizing, wrap/order/reverse, nonzero margins/minima, percentage bases
+// Intrinsic sizing, wrap/order, RTL, nonzero margins/minima, percentage bases
 // and max constraints are unsupported. Text/control/bitmap leaves need explicit styles.
 type FlexStyle struct {
 	Grow           *float32 `json:"grow,omitempty"`
@@ -91,6 +91,9 @@ func validateFlexTree(nodes []Node) error {
 		var checkLegacy func([]Node) error
 		checkLegacy = func(nodes []Node) error {
 			for _, node := range nodes {
+				if flexReverse(node.Style) {
+					return fmt.Errorf("webui: reverse direction on %q requires a responsive flex root", node.ID)
+				}
 				f := node.Style.Flex
 				if f != nil && (f.Grow != nil || f.Shrink != nil || f.Basis != nil || f.MinWidth != nil || f.MinHeight != nil ||
 					f.WidthPercent != nil || f.HeightPercent != nil || f.JustifyContent != "" || f.AlignItems != "" ||
@@ -165,8 +168,8 @@ func validateFlexTree(nodes []Node) error {
 		if len(node.Children) > 0 && s.Display != "flex" {
 			return fail("a container with children must use display:flex")
 		}
-		if s.Direction != "" && s.Direction != "row" && s.Direction != "column" {
-			return fail("only row and column directions are supported")
+		if s.Direction != "" && s.Direction != "row" && s.Direction != "column" && s.Direction != "row-reverse" && s.Direction != "column-reverse" {
+			return fail("unsupported flex direction")
 		}
 		if s.X != 0 || s.Y != 0 {
 			return fail("position offsets are not source flex declarations")
@@ -274,7 +277,10 @@ func alignSupported(value string, self bool) bool {
 
 func horizontalDecoration(s Style) float32 { return s.PaddingLeft + s.PaddingRight + 2*s.BorderWidth }
 func verticalDecoration(s Style) float32   { return s.PaddingTop + s.PaddingBottom + 2*s.BorderWidth }
-func flexRow(s Style) bool                 { return s.Direction != "column" }
+func flexRow(s Style) bool                 { return s.Direction != "column" && s.Direction != "column-reverse" }
+func flexReverse(s Style) bool {
+	return s.Direction == "row-reverse" || s.Direction == "column-reverse"
+}
 
 // A host may move, resize or hide actual Fyne objects without changing their
 // source declarations. Frozen snapshots preserve that frame, but a responsive
@@ -441,7 +447,7 @@ type flexFrame struct {
 // flexFrames is shared by live layout and source-frame validation. Computing a
 // proposed tree must not mutate the last valid objects or evaluate callbacks.
 func flexFrames(children []*element, parent Style, content fyne.Size, origin fyne.Position) ([]flexFrame, error) {
-	row := flexRow(parent)
+	row, reverse := flexRow(parent), flexReverse(parent)
 	main, cross := content.Height, content.Width
 	if row {
 		main, cross = content.Width, content.Height
@@ -454,7 +460,15 @@ func flexFrames(children []*element, parent Style, content fyne.Size, origin fyn
 	free := float64(main) - used
 	var offset, extraGap float64
 	switch parent.Flex.JustifyContent {
-	case "end", "flex-end":
+	case "start":
+		if reverse {
+			offset = free
+		}
+	case "end":
+		if !reverse {
+			offset = free
+		}
+	case "flex-end":
 		offset = free
 	case "center":
 		offset = free / 2
@@ -466,11 +480,16 @@ func flexFrames(children []*element, parent Style, content fyne.Size, origin fyn
 		if free >= 0 && len(children) > 0 {
 			extraGap = free / float64(len(children))
 			offset = extraGap / 2
+		} else if reverse {
+			// Chromium's supported LTR profile falls back to physical start.
+			offset = free
 		}
 	case "space-evenly":
 		if free >= 0 {
 			extraGap = free / float64(len(children)+1)
 			offset = extraGap
+		} else if reverse {
+			offset = free
 		}
 	}
 	frames := make([]flexFrame, len(children))
@@ -494,10 +513,14 @@ func flexFrames(children []*element, parent Style, content fyne.Size, origin fyn
 		case "center":
 			crossOffset = (cross - crossSize) / 2
 		}
-		position := fyne.NewPos(origin.X+crossOffset, origin.Y+float32(offset))
+		mainPosition := offset
+		if reverse {
+			mainPosition = float64(main) - offset - float64(sizes[i])
+		}
+		position := fyne.NewPos(origin.X+crossOffset, origin.Y+float32(mainPosition))
 		size := fyne.NewSize(crossSize, sizes[i])
 		if row {
-			position = fyne.NewPos(origin.X+float32(offset), origin.Y+crossOffset)
+			position = fyne.NewPos(origin.X+float32(mainPosition), origin.Y+crossOffset)
 			size = fyne.NewSize(sizes[i], crossSize)
 		}
 		if !finite(position.X) || !finite(position.Y) || !finite(size.Width) || !finite(size.Height) || size.Width < 0 || size.Height < 0 {

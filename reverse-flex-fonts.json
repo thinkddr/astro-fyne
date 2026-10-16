@@ -1,0 +1,9 @@
+[
+  {
+    "family": "AstroNoto",
+    "weight": 400,
+    "style": "normal",
+    "source": "example/public/fonts/NotoSans-Regular.ttf",
+    "webSrc": "/fonts/NotoSans-Regular.ttf"
+  }
+]

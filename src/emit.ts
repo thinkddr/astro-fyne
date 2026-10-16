@@ -721,9 +721,16 @@ function style(
       if (["Background", "Color", "BorderColor", "Direction"].includes(field)) {
         if (typeof val.value !== "string")
           throw new Error(`${node.id}: ${property} requires a string.`);
-        if (field === "Direction" && !["row", "column"].includes(val.value))
+        if (
+          field === "Direction" &&
+          ![
+            "row",
+            "column",
+            ...(responsive ? ["row-reverse", "column-reverse"] : []),
+          ].includes(val.value)
+        )
           throw new Error(
-            `${node.id}: CSS flexDirection requires row/column; reverse requires capture.`,
+            `${node.id}: CSS flexDirection requires row/column or a supported responsive reverse direction.`,
           );
         values[field] = val.value;
       } else {

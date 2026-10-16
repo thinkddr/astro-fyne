@@ -91,14 +91,15 @@ arbitrary custom controls and every formatting model remain part of the compatib
 An additional source-only mode generates a responsive native Flexbox layout from literal
 inline styles. The same generated widget recalculates its rectangles when the Fyne canvas
 resizes; it does not consume browser measurements. This mode currently accepts a single
-full-width root with a fixed height, nested row/column flex containers, rectangular items,
+full-width root with a fixed height, nested row/column flex containers in either main-axis direction, rectangular items,
 one-line text, buttons, single-line inputs and bitmap images. Use explicit pixel bases, `minWidth: 0`, `minHeight: 0` and
 `boxSizing: "border-box"` on every item. Growth, weighted shrinkage, gaps, main-axis
 distribution and cross-axis alignment are handled by the native layout engine. The
 [responsive layout contract](../COMPATIBILITY.md#responsive-source-layout) lists the exact
 requirements and exclusions. Text and controls need explicit fonts, dimensions and reset styles. Wrapping, intrinsic
 sizing and horizontal input scrolling remain unsupported; typography pixels are not yet
-certified.
+certified. See the [reverse-direction conformance contract](reverse-flex.md) for the
+source-order and bidirectional resize checks.
 
 Local `<img src="/images/example.png" alt="…" />` nodes generate embedded native resources
 and `canvas.Image` renderers. `NewNameResources()` exposes the resources by source path.

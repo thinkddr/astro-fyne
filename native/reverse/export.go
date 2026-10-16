@@ -819,7 +819,7 @@ func validateStyle(s webui.Style) error {
 	for name, pair := range map[string]struct {
 		value   string
 		allowed []string
-	}{"direction": {s.Direction, []string{"", "row", "column"}}, "fontStyle": {s.FontStyle, []string{"", "normal", "italic"}}, "textAlign": {s.TextAlign, []string{"", "left", "start", "center", "right", "end"}}, "whiteSpace": {s.WhiteSpace, []string{"", "normal", "nowrap"}}, "display": {s.Display, []string{"", "none", "block", "flex", "inline", "inline-block"}}} {
+	}{"direction": {s.Direction, []string{"", "row", "column", "row-reverse", "column-reverse"}}, "fontStyle": {s.FontStyle, []string{"", "normal", "italic"}}, "textAlign": {s.TextAlign, []string{"", "left", "start", "center", "right", "end"}}, "whiteSpace": {s.WhiteSpace, []string{"", "normal", "nowrap"}}, "display": {s.Display, []string{"", "none", "block", "flex", "inline", "inline-block"}}} {
 		found := false
 		for _, allowed := range pair.allowed {
 			found = found || pair.value == allowed
