@@ -6,6 +6,7 @@ package webui
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"strings"
 	"unicode"
 
@@ -133,7 +134,32 @@ type primitiveEditor struct {
 	cursor, anchor              int
 	active, disabled, multiline bool
 	onChange                    func(string)
-	editErr                     error
+	editErr, lineStyleErr       error
+}
+
+func editorLineStyle(backend Backend, authored Style) (Style, error) {
+	provider, ok := backend.(EditorLineStyler)
+	if !ok {
+		return authored, nil
+	}
+	used, err := provider.EditorLineStyle(authored)
+	if err != nil {
+		return Style{}, err
+	}
+	if used.LineHeight <= 0 || math.IsNaN(float64(used.LineHeight)) || math.IsInf(float64(used.LineHeight), 0) {
+		return Style{}, fmt.Errorf("editor backend returned an invalid internal line height")
+	}
+	authored.LineHeight = used.LineHeight
+	return authored, nil
+}
+
+func (e *primitiveEditor) lineStyle() (Style, error) {
+	if e.multiline {
+		return e.style, nil
+	}
+	style, err := editorLineStyle(e.backend, e.style)
+	e.lineStyleErr = err
+	return style, err
 }
 
 func (b FyneBackend) Editor(multiline bool, style Style, onChange func(string)) Editor {
@@ -194,7 +220,11 @@ func (e *primitiveEditor) replace(value string) {
 			e.editErr = fmt.Errorf("single-line input cannot contain control characters")
 			return
 		}
-		if err := validateResponsiveLine(e.backend, e.style, value, e.Size()); err != nil {
+		style, err := e.lineStyle()
+		if err != nil {
+			return
+		}
+		if err := validateResponsiveLine(e.backend, style, value, e.Size()); err != nil {
 			e.editErr = err
 			return
 		}
@@ -294,6 +324,10 @@ func (e *primitiveEditor) Tapped(event *fyne.PointEvent) {
 	if event == nil {
 		return
 	}
+	style, err := e.lineStyle()
+	if err != nil {
+		return
+	}
 	lines := strings.Split(e.text, "\n")
 	row := 0
 	if e.multiline && e.style.LineHeight > 0 {
@@ -301,8 +335,8 @@ func (e *primitiveEditor) Tapped(event *fyne.PointEvent) {
 	}
 	runes := []rune(lines[row])
 	x := event.Position.X
-	width := e.backend.Measure(lines[row], e.style).Width
-	switch e.style.TextAlign {
+	width := e.backend.Measure(lines[row], style).Width
+	switch style.TextAlign {
 	case "center":
 		x -= (e.Size().Width - width) / 2
 	case "right", "end":
@@ -311,7 +345,7 @@ func (e *primitiveEditor) Tapped(event *fyne.PointEvent) {
 	cursor := len(runes)
 	previous := float32(0)
 	for i := range runes {
-		advance := e.backend.Measure(string(runes[:i+1]), e.style).Width
+		advance := e.backend.Measure(string(runes[:i+1]), style).Width
 		if x < (previous+advance)/2 {
 			cursor = i
 			break
@@ -342,18 +376,23 @@ func (e *primitiveEditor) CreateRenderer() fyne.WidgetRenderer {
 
 type editorRenderer struct {
 	editor            *primitiveEditor
+	style             Style
 	lines             []*canvas.Text
 	cursor, selection *canvas.Rectangle
 	objects           []fyne.CanvasObject
 }
 
-func (r *editorRenderer) MinSize() fyne.Size           { return fyne.NewSize(0, r.editor.style.LineHeight) }
+func (r *editorRenderer) MinSize() fyne.Size           { return fyne.NewSize(0, r.style.LineHeight) }
 func (r *editorRenderer) Objects() []fyne.CanvasObject { return r.objects }
 func (r *editorRenderer) Destroy()                     {}
 func (r *editorRenderer) IsClip()                      {}
 func (r *editorRenderer) Refresh() {
 	e := r.editor
-	s := e.style
+	s, err := e.lineStyle()
+	if err != nil {
+		return
+	}
+	r.style = s
 	text := e.text
 	if text == "" {
 		text = e.placeholder
@@ -377,7 +416,7 @@ func (r *editorRenderer) Refresh() {
 }
 func (r *editorRenderer) Layout(size fyne.Size) {
 	e := r.editor
-	s := e.style
+	s := r.style
 	y := float32(0)
 	if !e.multiline {
 		y = (size.Height - s.LineHeight) / 2

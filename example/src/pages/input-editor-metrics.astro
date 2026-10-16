@@ -1,0 +1,82 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Astro Fyne contributors.
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { resolve } from "node:path";
+import probe from "../../../input-editor-metrics.json";
+
+const digest = (bytes: Uint8Array | string) =>
+  createHash("sha256").update(bytes).digest("hex");
+const probeHash = digest(await readFile(resolve("input-editor-metrics.json")));
+const fixtureHash = digest(await readFile(resolve(probe.fixture)));
+const fontHash = digest(await readFile(resolve(probe.font.path)));
+const sourceHash = digest(JSON.stringify([probeHash, fixtureHash, fontHash]));
+---
+
+<!doctype html>
+<html lang="en" dir="ltr" data-editor-source-hash={sourceHash}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Single-line editor metric evidence</title>
+    <style is:inline>
+      @font-face {
+        font-family: "AstroNoto";
+        font-weight: 400;
+        font-style: normal;
+        font-display: block;
+        src: url("/fonts/NotoSans-Regular.ttf") format("truetype");
+      }
+    </style>
+  </head>
+  <body style={{ margin: 0, padding: 0, backgroundColor: probe.background }}>
+    <main
+      id={probe.id}
+      style={{
+        position: "relative",
+        width: `${probe.viewport.width}px`,
+        height: `${probe.viewport.height}px`,
+        backgroundColor: probe.background,
+      }}
+    >
+      {probe.samples.map((sample) => (
+        <input
+          id={sample.id}
+          type="text"
+          value={sample.text}
+          aria-label={sample.id}
+          style={{
+            position: "absolute",
+            left: `${sample.x}px`,
+            top: `${sample.y}px`,
+            width: `${sample.width}px`,
+            height: `${sample.height}px`,
+            boxSizing: "border-box",
+            appearance: "none",
+            display: "block",
+            margin: 0,
+            padding: `${sample.padding}px`,
+            borderWidth: `${sample.border}px`,
+            borderStyle: "solid",
+            borderColor: "#8899aa",
+            borderRadius: 0,
+            outline: "none",
+            boxShadow: "none",
+            opacity: 1,
+            backgroundColor: probe.background,
+            color: probe.foreground,
+            fontFamily: probe.font.family,
+            fontWeight: probe.font.weight,
+            fontStyle: probe.font.style,
+            fontSize: `${sample.fontSize}px`,
+            lineHeight: `${sample.lineHeight}px`,
+            textAlign: "left",
+            whiteSpace: "nowrap",
+            textRendering: "auto",
+          }}
+        />
+      ))}
+    </main>
+  </body>
+</html>
