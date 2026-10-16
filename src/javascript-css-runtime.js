@@ -105,7 +105,7 @@ export function createCSSCascade() {
         const [kind, name, operator, value, flags] = test;
         if (kind === "TypeSelector")
           return (
-            name === "*" || node.localName.toLowerCase() === name.toLowerCase()
+            name === "*" || asciiLower(node.localName) === asciiLower(name)
           );
         if (kind === "IdSelector") return node.attrs.id === name;
         if (kind === "ClassSelector")

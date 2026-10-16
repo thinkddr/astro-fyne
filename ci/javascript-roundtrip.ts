@@ -246,12 +246,20 @@ for (const sheet of initial.stylesheets ?? [])
     `Bundled CSS bytes changed: ${sheet.path}`,
   );
 const rejectionCSSImport = `import ${JSON.stringify(join(root, "example/src/components/javascript-css.css"))};`;
+const rejectionASCIIPath = join(evidence, "reject-css-ascii.css");
+await writeFile(rejectionASCIIPath, "p{bacKground:red}\n");
 for (const [name, source, event, contains] of [
   [
     "css",
     `export default function Page(){return <p style={{position:"absolute"}}>No adapter</p>}`,
     "",
     "CSS property position",
+  ],
+  [
+    "css-ascii-property",
+    `import ${JSON.stringify(rejectionASCIIPath)};export default function Page(){return <p>No Unicode property alias</p>}`,
+    "",
+    "CSS property bacKground",
   ],
   [
     "css-token-width",
@@ -502,7 +510,11 @@ function assertCSSCaseTimeline(
         paddingLeft: state.mode ? "7px" : "4px",
       },
       "css-case-misapplied": { color: "#345678" },
-      "css-case-ascii": { color: "#456789" },
+      "css-case-ascii": {
+        color: "#456789",
+        backgroundColor: "#dce7f2",
+        paddingLeft: "5px",
+      },
     };
     for (const frame of nodes)
       for (const [property, expected] of Object.entries(
@@ -2154,6 +2166,7 @@ const normalize = (calls: unknown[][]) =>
 let exported: JavascriptArchive;
 const inputReflections: unknown[] = [];
 const cssCaseObservations: unknown[] = [];
+const cssIdentifierObservations: { stage: string; actual: unknown }[] = [];
 try {
   const page = await browser.newPage();
   page.on("pageerror", (error) => errors.push(error.message));
@@ -2224,7 +2237,13 @@ try {
                     paddingBottom: style.paddingBottom,
                     paddingLeft: style.paddingLeft,
                   }
-                : { color: style.color },
+                : element.id === "css-case-ascii"
+                  ? {
+                      color: style.color,
+                      backgroundColor: style.backgroundColor,
+                      paddingLeft: style.paddingLeft,
+                    }
+                  : { color: style.color },
           };
         }),
       );
@@ -2273,7 +2292,11 @@ try {
           raw: null,
           default: null,
           live: null,
-          style: { color: "rgb(69, 103, 137)" },
+          style: {
+            color: "rgb(69, 103, 137)",
+            backgroundColor: "rgb(220, 231, 242)",
+            paddingLeft: "5px",
+          },
         },
       ],
       `CSS attribute matching/raw state differs: ${label}`,
@@ -2294,6 +2317,66 @@ try {
       { i: true, I: true, s: false, S: false },
       "Pinned Chromium attribute flag support changed",
     );
+  const assertBrowserCSSIdentifiers = async (stage: string) => {
+    if (astro) return;
+    const actual = await page.evaluate(() => {
+      const element = document.createElement("k");
+      element.id = "K";
+      element.className = "K";
+      element.setAttribute("data-case", "K");
+      element.style.setProperty("bacKground", "red");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = true;
+      return {
+        property: {
+          asciiSupported: CSS.supports("BACKGROUND-COLOR", "#dce7f2"),
+          unicodeSupported: CSS.supports("bacKground", "red"),
+          unknownValue: element.style.getPropertyValue("bacKground"),
+          backgroundColor: element.style.backgroundColor,
+          declarationCount: element.style.length,
+        },
+        pseudo: {
+          asciiChecked: checkbox.matches(":CHECKED"),
+          unicodeSupported: CSS.supports("selector(:checKed)"),
+        },
+        type: { ascii: element.matches("K"), unicode: element.matches("K") },
+        identity: {
+          id: element.id,
+          class: element.className,
+          data: element.getAttribute("data-case"),
+          asciiID: element.matches("#k"),
+          asciiClass: element.matches(".k"),
+          insensitiveData: element.matches("[data-case=k i]"),
+        },
+      };
+    });
+    cssIdentifierObservations.push({ stage, actual });
+    assert.deepEqual(
+      actual,
+      {
+        property: {
+          asciiSupported: true,
+          unicodeSupported: false,
+          unknownValue: "",
+          backgroundColor: "",
+          declarationCount: 0,
+        },
+        pseudo: { asciiChecked: true, unicodeSupported: false },
+        type: { ascii: true, unicode: false },
+        identity: {
+          id: "K",
+          class: "K",
+          data: "K",
+          asciiID: false,
+          asciiClass: false,
+          insensitiveData: false,
+        },
+      },
+      `Pinned Chromium CSS identifier matching changed: ${stage}`,
+    );
+  };
+  await assertBrowserCSSIdentifiers("restored");
   const captureCharacterHandles = () =>
     Promise.all(
       characterIDs.map((id) =>
@@ -3043,6 +3126,7 @@ try {
     await assertBrowserTextContent("original browser initial");
     await assertBrowserInputReflection("original browser initial");
     await assertBrowserCSSCase("original browser initial");
+    await assertBrowserCSSIdentifiers("original");
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
     const originalValues: Record<string, string>[] = [];
@@ -3295,6 +3379,12 @@ try {
       ) + "\n",
     );
   }
+  if (!astro)
+    assert.deepEqual(
+      cssIdentifierObservations.map(({ stage }) => stage),
+      ["restored", "original"],
+      "Missing original/restored CSS identifier observations",
+    );
   assert.deepEqual(errors, [], "Browser runtime errors");
 } finally {
   if (!astro)
@@ -3308,6 +3398,15 @@ try {
       join(evidence, "browser-css-attributes.json"),
       JSON.stringify(
         { schema: 1, observations: cssCaseObservations },
+        null,
+        2,
+      ) + "\n",
+    );
+  if (!astro)
+    await writeFile(
+      join(evidence, "browser-css-identifiers.json"),
+      JSON.stringify(
+        { schema: 1, observations: cssIdentifierObservations },
         null,
         2,
       ) + "\n",
@@ -3523,6 +3622,7 @@ await writeFile(
               nativeObjectIdentityChecked: true,
               browserElementIdentityChecked: true,
               observations: cssCaseObservations.length,
+              identifierObservations: cssIdentifierObservations.length,
               explicitSensitiveFlag:
                 "spec-unit-only; pinned Chromium flag disabled",
             },

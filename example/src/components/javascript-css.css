@@ -156,3 +156,11 @@
 #css-case-ascii[data-case="ä" i] {
   color: #ff0000;
 }
+
+/* prettier-ignore */
+P#css-case-ascii:NOT(.off) {
+  --Inset: 5px;
+  --inset: 11px;
+  BACKGROUND-COLOR: #dce7f2;
+  padding-left: var(--Inset);
+}
