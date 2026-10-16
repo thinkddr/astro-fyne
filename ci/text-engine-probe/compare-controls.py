@@ -157,22 +157,35 @@ def finite(value):
     return type(value) in [int, float] and math.isfinite(value)
 
 
+def rounded_metric(value):
+    return math.copysign(math.floor(abs(value) + 0.5), value)
+
+
 def line_contract(line, expected_text, font_hash, policy):
     require(line.get("text") == expected_text and isinstance(expected_text, str) and expected_text,
             "Controls line differs from the actual state text")
     snapshot = line.get("snapshot", {})
+    metrics = snapshot.get("metrics", {})
+    require(set(metrics) == {"advanceCSS", "ascentCSS", "descentCSS", "leadingCSS", "baselineCSS"}
+            and all(finite(value) for value in metrics.values()), "Invalid native controls font metrics")
+    normal_editor = line.get("id") == "controls-input"
+    used_height = sum(rounded_metric(metrics[name]) for name in ["ascentCSS", "descentCSS", "leadingCSS"]) if normal_editor else 20
+    height_source = "normal-font-metrics" if normal_editor else "authored"
+    require(fyne.same_float(line.get("authoredLineHeightCSS"), 20) and line.get("lineHeightSource") == height_source
+            and finite(used_height) and used_height > 0, "Controls lost authored or used line-height provenance")
     require(snapshot.get("text") == expected_text and snapshot.get("sourceFontHash") == font_hash
             and isinstance(snapshot.get("effectiveFontHash"), str) and re.fullmatch(r"[0-9a-f]{64}", snapshot["effectiveFontHash"])
-            and fyne.same_float(snapshot.get("fontSizeCSS"), 14) and fyne.same_float(snapshot.get("lineHeightCSS"), 20),
+            and fyne.same_float(snapshot.get("fontSizeCSS"), 14) and fyne.same_float(snapshot.get("lineHeightCSS"), used_height),
             "Controls line changed font bytes or shaping size")
     same_policy(snapshot.get("policy"), policy)
-    position, size, metrics = line.get("position", {}), line.get("size", {}), snapshot.get("metrics", {})
+    position, size = line.get("position", {}), line.get("size", {})
+    expected_baseline = math.floor((used_height - rounded_metric(metrics["ascentCSS"]) - rounded_metric(metrics["descentCSS"])) / 2) + rounded_metric(metrics["ascentCSS"])
     require(set(position) == {"X", "Y"} and all(finite(value) for value in position.values())
             and set(size) == {"Width", "Height"} and all(finite(value) and value >= 0 for value in size.values())
-            and set(metrics) == {"advanceCSS", "ascentCSS", "descentCSS", "leadingCSS", "baselineCSS"}
-            and all(finite(value) for value in metrics.values()) and finite(line.get("baseline"))
-            and fyne.same_float(size["Height"], 20) and fyne.same_float(size["Width"], metrics["advanceCSS"])
-            and fyne.same_float(line["baseline"], metrics["baselineCSS"]), "Invalid native controls line geometry")
+            and finite(line.get("baseline")) and fyne.same_float(size["Height"], used_height)
+            and fyne.same_float(size["Width"], metrics["advanceCSS"])
+            and fyne.same_float(line["baseline"], metrics["baselineCSS"])
+            and fyne.same_float(line["baseline"], expected_baseline), "Invalid native controls line geometry")
     expected_color = {"R": 255, "G": 255, "B": 255, "A": 255} if line.get("id") in {
         "controls-commit", "controls-toggle-disabled"} else {"R": 17, "G": 35, "B": 43, "A": 255}
     ink = line.get("color", {})
@@ -298,6 +311,7 @@ def self_test():
     rejected(lambda: frame_contract(changed, cases, ids), "reordered source lines")
     policy = {key: 0 for key in POLICY_INTS + POLICY_FLOATS}
     line = {"id": "controls-title", "text": "A", "position": {"X": 16, "Y": 16}, "size": {"Width": 10, "Height": 20},
+            "authoredLineHeightCSS": 20, "lineHeightSource": "authored",
             "baseline": 15, "color": {"R": 17, "G": 35, "B": 43, "A": 255}, "snapshot": {
                 "text": "A", "sourceFontHash": "a" * 64, "effectiveFontHash": "b" * 64, "fontSizeCSS": 14, "lineHeightCSS": 20,
                 "policy": policy, "metrics": {"advanceCSS": 10, "ascentCSS": 15, "descentCSS": 5, "leadingCSS": 0, "baselineCSS": 15},
@@ -310,6 +324,24 @@ def self_test():
     changed = copy.deepcopy(line)
     changed["snapshot"]["glyphs"][0]["glyph"] = True
     rejected(lambda: line_contract(changed, "A", "a" * 64, policy), "boolean glyph alias")
+    editor = copy.deepcopy(line)
+    editor.update({"id": "controls-input", "lineHeightSource": "normal-font-metrics"})
+    editor["size"]["Height"] = editor["snapshot"]["lineHeightCSS"] = 19
+    editor["snapshot"]["metrics"].update({"ascentCSS": 14.966001, "descentCSS": 4.102})
+    line_contract(editor, "A", "a" * 64, policy)
+    for key, value in [("authoredLineHeightCSS", 19), ("authoredLineHeightCSS", True),
+                       ("lineHeightSource", "authored"), ("baseline", 16)]:
+        changed = copy.deepcopy(editor)
+        changed[key] = value
+        rejected(lambda: line_contract(changed, "A", "a" * 64, policy), "changed editor " + key)
+    changed = copy.deepcopy(editor)
+    changed["size"]["Height"] = changed["snapshot"]["lineHeightCSS"] = 20
+    rejected(lambda: line_contract(changed, "A", "a" * 64, policy), "authored height substituted for normal editor metrics")
+    leading = copy.deepcopy(editor)
+    leading["size"]["Height"] = leading["snapshot"]["lineHeightCSS"] = 21
+    leading["baseline"] = leading["snapshot"]["metrics"]["baselineCSS"] = 16
+    leading["snapshot"]["metrics"]["leadingCSS"] = 2
+    line_contract(leading, "A", "a" * 64, policy)
     pixels = {"width": 224, "height": 320, "totalPixels": 71680, "changedPixels": 0,
               "pixelsOverTolerance": 0, "maxChannelDelta": 0, "tolerance": {"channel": 0, "pixels": 0},
               "exact": True, "accepted": True}

@@ -53,6 +53,20 @@ Single-line editors use the existing native editing engine. Multiline editing,
 contextual caret mapping, generated-widget visual parity, reverse-conversion
 typography, GPU rendering and universal 1:1 conversion remain unverified.
 
+For responsive border-box inputs, the optional `webui.EditorLineStyler` interface
+separates the authored outer style from the internal text line. This provider
+follows the pinned Chromium plain-input rule: where that rule selects a normal
+line height, it derives the height from native font ascent, descent and leading.
+Text, caret, selection and hit testing use the same internal line style. Other
+backends keep their existing behavior. This does not establish auto-height input
+layout, clipped editor lines or focused rendering parity.
+
+The additive [`input-editor-metrics.json`](../../input-editor-metrics.json)
+profile checks six fixed input boxes at scales 1 and 2, including retained authored
+line heights and fractional font sizes. Hosted checks compare actual UA editor
+boxes and whole-frame pixels at zero tolerance. Browser measurements remain
+evidence and never become native layout inputs.
+
 The hosted generated-controls gate injects this backend into the ordinary
 `NewResponsiveControls` constructor. It keeps the original source, font and
 21 interaction actions, captures all 22 DPR 1 frames, and compares complete

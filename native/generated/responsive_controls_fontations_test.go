@@ -14,6 +14,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,13 +29,15 @@ import (
 )
 
 type controlsNativeLine struct {
-	ID       string              `json:"id"`
-	Text     string              `json:"text"`
-	Position fyne.Position       `json:"position"`
-	Size     fyne.Size           `json:"size"`
-	Baseline float32             `json:"baseline"`
-	Color    color.NRGBA         `json:"color"`
-	Snapshot fontations.Snapshot `json:"snapshot"`
+	ID                 string              `json:"id"`
+	Text               string              `json:"text"`
+	Position           fyne.Position       `json:"position"`
+	Size               fyne.Size           `json:"size"`
+	Baseline           float32             `json:"baseline"`
+	Color              color.NRGBA         `json:"color"`
+	Snapshot           fontations.Snapshot `json:"snapshot"`
+	AuthoredLineHeight float32             `json:"authoredLineHeightCSS"`
+	LineHeightSource   string              `json:"lineHeightSource"`
 }
 
 type controlsNativeFrame struct {
@@ -172,14 +175,23 @@ func controlsNativeLines(view *ResponsiveControlsWidget, state webui.ViewSnapsho
 				return fmt.Errorf("%s: native layout metrics or paint failed: %v", owner, err)
 			}
 			snapshot := line.Snapshot()
+			lineHeight, lineHeightSource := node.Node.Style.LineHeight, "authored"
+			if node.Node.Kind == "input" {
+				if node.Node.Style.Height != 32 || lineHeight != 20 {
+					return fmt.Errorf("%s: source input no longer has the fixed height that selects normal editor metrics", owner)
+				}
+				lineHeight = float32(math.Round(float64(snapshot.Metrics.Ascent)) + math.Round(float64(snapshot.Metrics.Descent)) + math.Round(float64(snapshot.Metrics.Leading)))
+				lineHeightSource = "normal-font-metrics"
+			}
 			if current.Text != text || current.FontSource == nil || controlsNativeHash(current.FontSource.Content()) != fontHash ||
 				current.TextSize != 14 || current.Alignment != fyne.TextAlignLeading || metrics != current.Size() ||
-				snapshot.Text != text || snapshot.SourceFontSHA256 != fontHash || snapshot.FontSize != 14 || snapshot.LineHeight != 20 ||
+				node.Node.Style.LineHeight != 20 || lineHeight <= 0 || metrics.Height != lineHeight ||
+				snapshot.Text != text || snapshot.SourceFontSHA256 != fontHash || snapshot.FontSize != 14 || snapshot.LineHeight != lineHeight ||
 				snapshot.Policy != policy || snapshot.Metrics.Baseline != baseline {
 				return fmt.Errorf("%s: native text changed its source, font, policy or line box", owner)
 			}
 			seen[owner] = true
-			lines = append(lines, controlsNativeLine{owner, current.Text, position, current.Size(), baseline, ink, snapshot})
+			lines = append(lines, controlsNativeLine{owner, current.Text, position, current.Size(), baseline, ink, snapshot, node.Node.Style.LineHeight, lineHeightSource})
 		case *fyne.Container:
 			for _, child := range current.Objects {
 				if err := walk(child, position, owner); err != nil {

@@ -15,6 +15,7 @@ on:
       - typography-probe.json
       - responsive-controls.json
       - responsive-controls-scenario.json
+      - input-editor-metrics.json
       - native/**
       - package.json
       - bun.lock
@@ -32,6 +33,7 @@ on:
       - typography-probe.json
       - responsive-controls.json
       - responsive-controls-scenario.json
+      - input-editor-metrics.json
       - native/**
       - package.json
       - bun.lock
@@ -171,11 +173,23 @@ jobs:
           printf '{"schema":1,"decoderTests":%s,"diagnosticCapture":%s,"nativeControls":%s}\n' \
             "$task_decoder_status" "$task_diagnostic_status" "$task_native_controls_status" \
             > "$task_diagnostic/phase-exit-codes.json"
+          task_editor_metrics="$task_evidence/input-editor-metrics"
+          mkdir -p "$task_editor_metrics"
+          task_editor_metrics_status=0
+          bun capture/input-editor-metrics.ts \
+            --url http://127.0.0.1:4321/input-editor-metrics \
+            --native "$task_evidence/fyne/input-editor-metrics" \
+            --out "$task_editor_metrics" \
+            --browser-provenance "$task_evidence/browser/browser-provenance.json" \
+            --comparator "$RUNNER_TEMP/native-text/compare" \
+            > "$task_editor_metrics/capture.stdout.log" 2> "$task_editor_metrics/capture.stderr.log" || task_editor_metrics_status=$?
+          printf '%s\n' "$task_editor_metrics_status" > "$task_editor_metrics/capture-exit-code.txt"
           test "$task_decoder_status" -eq 0
           test "$task_diagnostic_status" -eq 0
           test "$task_native_controls_status" -eq 0
           test "$task_trace_decoder_status" -eq 0
           test "$task_trace_capture_status" -eq 0
+          test "$task_editor_metrics_status" -eq 0
       - name: Retain exact failures, native binary, locks and upstream notices
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -200,6 +214,9 @@ jobs:
             capture/controls-layer-trace-source-pin.json
             capture/responsive-controls-layer-trace.ts
             src/controls-layer-trace-contract.test.ts
+            capture/input-editor-metrics.ts
+            input-editor-metrics.json
+            example/src/pages/input-editor-metrics.astro
             native/generated
             native/fontations
             responsive-controls.json
