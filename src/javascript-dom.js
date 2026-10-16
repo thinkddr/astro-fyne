@@ -286,6 +286,15 @@ export function createDocument() {
         error.name = "HierarchyRequestError";
         throw error;
       }
+      for (let ancestor = this; ancestor; ancestor = ancestor.parentNode) {
+        if (ancestor === child) {
+          const error = new Error(
+            "A node cannot be inserted into itself or its descendant",
+          );
+          error.name = "HierarchyRequestError";
+          throw error;
+        }
+      }
       if (before != null && before.parentNode !== this) {
         const error = new Error(
           "The reference node is not a child of this parent",

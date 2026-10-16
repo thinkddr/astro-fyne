@@ -152,8 +152,13 @@ retain the virtual node and native control. This bounded contract does not provi
 a global `DOMException` constructor or complete DOM hierarchy validation.
 Text nodes also reject child insertion with an error named `HierarchyRequestError`
 before reference validation or detachment. Elements still accept text children.
-Ancestor cycles, document/fragment rules and other hierarchy constraints remain outside
-this bounded correction.
+Self-insertion and insertion of an ancestor beneath its descendant also throw
+`HierarchyRequestError` before reference validation or detachment. This parent-chain
+check covers the current Element/Text trees; document/fragment, shadow-tree and
+other hierarchy constraints remain outside this bounded correction.
+Valid moves retain object identity, dirty input values and defaults. Ordinary DOM
+insertion is not a focus-preserving move; focus, selection and connection lifecycle
+semantics require their own adapters and are not certified by these checks.
 Restored browser inputs retain their raw value attribute separately from the live
 editor value, including attribute absence and an edited value with an unchanged default.
 Checkboxes preserve `checked`/`defaultChecked`, dirty local state, the default `on`
@@ -226,6 +231,9 @@ The insertion scenario checks rejected references and valid moves against fixed 
 expectations, stable virtual IDs, native object pointers and actual browser element identity.
 The separate hierarchy scenario catches Text-parent insertion errors before mutation and
 reference validation, then verifies valid Element-to-Text insertion across the same continuation.
+The ancestor scenario rejects self/ancestor insertion before a foreign reference,
+then moves the same edited input between parents and within one parent. It checks
+fixed tree/default/live values and actual browser/native object identity through continuation.
 The CSS scenario additionally compares native
 cascade values against Chromium's original computed styles in an isolated shadow tree,
 including self/mutual cycles, selected/unused fallbacks, comments and function-name boundaries,

@@ -125,7 +125,12 @@ return jsruntime.New(archive,actions,backends...)
       header +
         `import type {JavascriptFactory} from "./javascript-types.ts";declare const factory:JavascriptFactory;export default factory;\n`,
     );
-    for (const file of ["javascript-view.ts", "javascript-types.ts"])
+    for (const file of [
+      "javascript-view.ts",
+      "javascript-types.ts",
+      "javascript-managed-dom.ts",
+      "javascript-data.ts",
+    ])
       text(
         `${privateDir}/${file}`,
         header + (await readFile(new URL(file, import.meta.url), "utf8")),

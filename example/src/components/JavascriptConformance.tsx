@@ -3,6 +3,7 @@
 
 import { createContext } from "preact";
 import { JavascriptAttributes } from "./JavascriptAttributes";
+import { JavascriptAncestors } from "./JavascriptAncestors";
 import { JavascriptCheckboxes } from "./JavascriptCheckboxes";
 import { JavascriptCSS } from "./JavascriptCSS";
 import { JavascriptEvents } from "./JavascriptEvents";
@@ -118,6 +119,7 @@ export function JavascriptConformance({
       <JavascriptAttributes />
       <JavascriptInsertion />
       <JavascriptHierarchy />
+      <JavascriptAncestors />
       <p id="js-count">{count}</p>
       <p id="js-standard">
         {String(
