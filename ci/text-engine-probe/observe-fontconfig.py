@@ -81,7 +81,7 @@ def main():
     library = pathlib.Path(os.fsdecode(info.filename)).resolve(strict=True)
     library_bytes = library.read_bytes()
 
-    def config_files(config):
+    def config_entries(config):
         result = []
         entries = checked(fc.FcConfigGetConfigFiles(config), "config files")
         try:
@@ -91,18 +91,38 @@ def main():
                     break
                 requested = pathlib.Path(os.fsdecode(name))
                 resolved = requested.resolve(strict=True)
+                record = {"path": str(requested), "resolvedPath": str(resolved)}
+                if resolved.is_dir():
+                    listing = []
+                    for child in sorted(resolved.iterdir(), key=lambda entry: entry.name):
+                        if child.is_symlink():
+                            kind = "symlink"
+                        elif child.is_dir():
+                            kind = "directory"
+                        elif child.is_file():
+                            kind = "file"
+                        else:
+                            kind = "other"
+                        entry = {"name": child.name, "type": kind}
+                        if child.is_symlink():
+                            entry["target"] = os.readlink(child)
+                        listing.append(entry)
+                    encoded = json.dumps(listing, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+                    result.append({**record, "type": "directory", "entries": listing, "listingHash": sha(encoded)})
+                    continue
+                if not resolved.is_file():
+                    raise RuntimeError("Unexpected loaded Fontconfig entry type: " + str(requested))
                 data = resolved.read_bytes()
                 identity = sha(data)
                 target = output / "config-files" / (identity + ".conf")
                 target.parent.mkdir(exist_ok=True)
                 target.write_bytes(data)
-                result.append({"path": str(requested), "resolvedPath": str(resolved),
-                               "sha256": identity, "length": len(data),
+                result.append({**record, "type": "file", "sha256": identity, "length": len(data),
                                "retainedPath": target.relative_to(output).as_posix()})
         finally:
             fc.FcStrListDone(entries)
         if not result:
-            raise RuntimeError("Missing loaded Fontconfig configuration files")
+            raise RuntimeError("Missing loaded Fontconfig configuration entries")
         return result
 
     def pattern(pattern_):
@@ -128,7 +148,7 @@ def main():
     config = checked(fc.FcConfigReference(checked(fc.FcConfigGetCurrent(), "current config")), "config reference")
     query, result = None, None
     try:
-        before = config_files(config)
+        before = config_entries(config)
         query = checked(fc.FcPatternCreate(), "query creation")
         checked(fc.FcPatternAddBool(query, b"scalable", 1), "scalable query")
         checked(fc.FcPatternAddString(query, b"fontwrapper", b"SFNT"), "fontwrapper query")
@@ -141,7 +161,7 @@ def main():
             fc.FcPatternDel(result, name)
         checked(fc.FcConfigSubstituteWithPat(config, result, query, 1), "FcMatchFont substitution")
         observed = pattern(result)
-        after = config_files(config)
+        after = config_entries(config)
         if before != after or sha(library.read_bytes()) != sha(library_bytes):
             raise RuntimeError("Fontconfig library/configuration changed during observation")
         report = {
@@ -155,7 +175,8 @@ def main():
             "environment": {name: os.environ.get(name) for name in ["FONTCONFIG_FILE", "FONTCONFIG_PATH", "FONTCONFIG_SYSROOT", "FC_FONTATIONS", "FC_DEBUG", "LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "LC_MESSAGES"]},
             "processLocale": {"LC_CTYPE": locale.setlocale(locale.LC_CTYPE), "LC_MESSAGES": locale.setlocale(locale.LC_MESSAGES)},
             "fontconfigBooleanEncoding": {"false": 0, "true": 1, "dontCare": 2},
-            "configFiles": before, "configFilesStable": True,
+            "configEntries": before, "configEntriesStable": True,
+            "configurationBinding": "Every reported loaded file's bytes and each reported directory's immediate names/types/symlink targets; not a recursive hash of unrelated files",
             "initialPattern": initial, "defaultSubstitutedPattern": substituted,
             "emptyQueryResult": observed,
             "policyAppliedToNative": False,
