@@ -24,6 +24,8 @@ export interface JavascriptProps {
   ref?: Ref<JavascriptHandle>;
 }
 const emptyActions: JavascriptActions = {};
+const asciiLower = (value: string) =>
+  value.replace(/[A-Z]/g, (character) => character.toLowerCase());
 
 /** Render the same Preact program's native DOM representation in an Astro island. */
 export function createJavascriptComponent(
@@ -162,7 +164,10 @@ export function createJavascriptComponent(
       if (frame.tag === "input" || frame.tag === "textarea") {
         props.value = frame.value;
         props.disabled = frame.disabled;
-        if (frame.tag === "input" && frame.attrs?.type === "checkbox") {
+        if (
+          frame.tag === "input" &&
+          asciiLower(frame.attrs?.type ?? "text") === "checkbox"
+        ) {
           props.checked = frame.checked;
           props.onClick = (event: Event) => {
             if (dispatch(frame, "click") === true) event.preventDefault();
