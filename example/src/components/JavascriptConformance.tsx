@@ -6,6 +6,7 @@ import { JavascriptAttributes } from "./JavascriptAttributes";
 import { JavascriptCheckboxes } from "./JavascriptCheckboxes";
 import { JavascriptCSS } from "./JavascriptCSS";
 import { JavascriptEvents } from "./JavascriptEvents";
+import { JavascriptHierarchy } from "./JavascriptHierarchy";
 import { JavascriptInsertion } from "./JavascriptInsertion";
 import {
   useCallback,
@@ -116,6 +117,7 @@ export function JavascriptConformance({
       <JavascriptEvents observe={observe} />
       <JavascriptAttributes />
       <JavascriptInsertion />
+      <JavascriptHierarchy />
       <p id="js-count">{count}</p>
       <p id="js-standard">
         {String(
