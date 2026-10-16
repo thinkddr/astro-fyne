@@ -34,7 +34,8 @@ const header =
 const literal = (value: unknown) =>
   JSON.stringify(value)
     .replaceAll("\u2028", "\\u2028")
-    .replaceAll("\u2029", "\\u2029");
+    .replaceAll("\u2029", "\\u2029")
+    .replaceAll("\ufeff", "\\ufeff");
 
 export async function generateJavascript(options: Options) {
   if (
