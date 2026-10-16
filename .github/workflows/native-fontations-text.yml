@@ -9,6 +9,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: native-fontations-text-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   native-text:
     runs-on: ubuntu-24.04-arm
@@ -70,6 +73,7 @@ jobs:
             ${{ runner.temp }}/native-text/evidence
             ${{ runner.temp }}/native-text/sources.json
             ${{ runner.temp }}/native-text/cargo-metadata.json
+            ${{ runner.temp }}/native-text/assembly/Cargo.lock
             ${{ runner.temp }}/native-text/chromium-Cargo.lock
             ${{ runner.temp }}/native-text/notices
             ci/text-engine-probe
