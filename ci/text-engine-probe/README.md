@@ -65,6 +65,21 @@ native text layouts in every frame. Each capture retains its raw strict result,
 stderr and diff, including failures. These checks cover only the original DPR 1
 scenario and do not certify general editing or universal conversion.
 
+After the unchanged 22-frame browser collector, an additional hosted Linux
+observer captures the original page in three baseline states at DPR 1 and 2:
+initial, pointer focus in the input, and a pointer click on Commit. Separate
+uninstrumented and CDP-observed passes retain their complete PNGs and strict
+comparison results, including any observation or caret-timing differences. The
+observer records the genuine UA editor's computed style, boxes, text quads and
+used font, plus author layout, paint order and compositor-layer observations.
+It retains 19 verified Chromium source/protocol files and their license. Public
+CDP does not expose the editor's alphabetic baseline or effective glyph mask;
+those fields remain unobserved. None of these supplemental measurements feeds
+native layout or replaces an original reference. Decoder tests, the observer and
+the original native controls helper run independently; their exit codes and
+dedicated observer stdout/stderr are retained, and any nonzero phase fails the
+job after the original native helper has run.
+
 The workflow is `.github/workflows/native-fontations-text.yml`. It runs on pushes
 and pull requests affecting its source, inputs or comparator, and supports manual
 dispatch. Its timeout is 45 minutes. Run the build

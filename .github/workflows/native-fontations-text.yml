@@ -133,7 +133,30 @@ jobs:
             --provider-evidence "$RUNNER_TEMP/native-text/evidence/fyne" --comparator "$RUNNER_TEMP/native-text/compare"
           bun capture/responsive-controls.ts --url http://127.0.0.1:4321/responsive-controls \
             --out "$task_evidence/controls" --report native/generated/responsive_controls.gen.report.json
-          bash ci/text-engine-probe/test-controls-remote.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/native-text"
+          task_diagnostic="$task_evidence/controls-diagnostic"
+          mkdir -p "$task_diagnostic"
+          task_decoder_status=0
+          bun test src/controls-diagnostic-contract.test.ts \
+            > "$task_diagnostic/decoder.stdout.log" 2> "$task_diagnostic/decoder.stderr.log" || task_decoder_status=$?
+          printf '%s\n' "$task_decoder_status" > "$task_diagnostic/decoder-exit-code.txt"
+          task_diagnostic_status=0
+          bun capture/responsive-controls-diagnostic.ts \
+            --url http://127.0.0.1:4321/responsive-controls \
+            --out "$task_diagnostic" \
+            --report native/generated/responsive_controls.gen.report.json \
+            --reference "$task_evidence/controls" \
+            --comparator "$RUNNER_TEMP/native-text/compare" \
+            > "$task_diagnostic/capture.stdout.log" 2> "$task_diagnostic/capture.stderr.log" || task_diagnostic_status=$?
+          printf '%s\n' "$task_diagnostic_status" > "$task_diagnostic/capture-exit-code.txt"
+          task_native_controls_status=0
+          bash ci/text-engine-probe/test-controls-remote.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/native-text" || task_native_controls_status=$?
+          printf '%s\n' "$task_native_controls_status" > "$task_diagnostic/native-controls-exit-code.txt"
+          printf '{"schema":1,"decoderTests":%s,"diagnosticCapture":%s,"nativeControls":%s}\n' \
+            "$task_decoder_status" "$task_diagnostic_status" "$task_native_controls_status" \
+            > "$task_diagnostic/phase-exit-codes.json"
+          test "$task_decoder_status" -eq 0
+          test "$task_diagnostic_status" -eq 0
+          test "$task_native_controls_status" -eq 0
       - name: Retain exact failures, native binary, locks and upstream notices
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -150,6 +173,10 @@ jobs:
             ${{ runner.temp }}/native-text/font-policy-source
             ${{ runner.temp }}/native-text/notices
             ci/text-engine-probe
+            capture/controls-diagnostic-contract.ts
+            capture/controls-diagnostic-source-pin.json
+            capture/responsive-controls-diagnostic.ts
+            src/controls-diagnostic-contract.test.ts
             native/generated
             native/fontations
             responsive-controls.json

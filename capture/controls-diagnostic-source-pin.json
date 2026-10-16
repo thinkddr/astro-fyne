@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+  "diagnosticOnly": true,
+  "pixelPerfectVerified": false,
+  "files": [
+    {
+      "path": "LICENSE",
+      "gitBlob": "2249a28657f86c645f8978b75babc1bd52aca318",
+      "bytes": 1536,
+      "sha256": "368cca1106be99d39ecd32a38d8305585d802a475effb66380b91ffc9bcf709b",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/LICENSE"
+    },
+    {
+      "path": "third_party/blink/public/devtools_protocol/domains/CSS.pdl",
+      "gitBlob": "db3f29557ff1d24642fa1f053c29bea73843559f",
+      "bytes": 42724,
+      "sha256": "be7724f102548c0bf5054d11e47a5663b1776e18012e887159222e09a0692e07",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/public/devtools_protocol/domains/CSS.pdl"
+    },
+    {
+      "path": "third_party/blink/public/devtools_protocol/domains/DOM.pdl",
+      "gitBlob": "3509822ce06d43ab4b62e0069ec4b972e48b7c20",
+      "bytes": 32795,
+      "sha256": "e375015686dad69deea6ce6c07c7271fd5afe32f2f2b34e037cde8346423a5b2",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/public/devtools_protocol/domains/DOM.pdl"
+    },
+    {
+      "path": "third_party/blink/public/devtools_protocol/domains/DOMSnapshot.pdl",
+      "gitBlob": "ef470b7a1147c2a84508e2437104df292f2829d2",
+      "bytes": 14813,
+      "sha256": "6780c930eeeb4b05d5d0f9b81aa410f65c3c05caa59ba4fe5dd5a509b221cece",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/public/devtools_protocol/domains/DOMSnapshot.pdl"
+    },
+    {
+      "path": "third_party/blink/public/devtools_protocol/domains/LayerTree.pdl",
+      "gitBlob": "f4609b804ab5ffe256a19adce0c1a39b4f442393",
+      "bytes": 5958,
+      "sha256": "b829e1e699ad8eefa16fb87bda5bcc5e6fd215abd11721d71cdc697268c4104a",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/public/devtools_protocol/domains/LayerTree.pdl"
+    },
+    {
+      "path": "third_party/blink/renderer/core/html/forms/text_control_element.cc",
+      "gitBlob": "9cca28f445ec26e7e8a82dba8096dada19349127",
+      "bytes": 58018,
+      "sha256": "01cd7d9bdfb6849ffc11d6c7b34f367e4ac1c8b4b771184d6a418f6a66b4a282",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/html/forms/text_control_element.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/html/forms/text_control_inner_elements.cc",
+      "bytes": 13019,
+      "sha256": "42f1e1db47fde4e19c70ed42b20350450b8bc5d094dc5cba66654bd250c7f4ae",
+      "gitBlob": "192e5c616b1baa54a27b8edd783fcf8ec5809a91",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/html/forms/text_control_inner_elements.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/html/forms/text_field_input_type.cc",
+      "bytes": 38141,
+      "sha256": "d9faaac2c017a96048bce1aad7b52613f5f57f8c7259d611fd5bce686c47d9f4",
+      "gitBlob": "582a0e461081e9504d148e034a7f4e0448e652ca",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/html/forms/text_field_input_type.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/html/resources/html.css",
+      "bytes": 84906,
+      "sha256": "260d92ace193fc153f175f41fcd3943ba4fdc7daacc8ee248c5e680c4abd0308",
+      "gitBlob": "f42e37d9342ebef2502c93ae9a0f32e28fbc8e3b",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/html/resources/html.css"
+    },
+    {
+      "path": "third_party/blink/renderer/core/inspector/inspector_dom_agent.cc",
+      "bytes": 123588,
+      "gitBlob": "16cead4b4238b6715d35e9f6cdfe569d3f942703",
+      "sha256": "c9c4ea5c98881503050e9fdec3ef35d50baaa2c1d606fa742c565afbf8f183fd",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/inspector/inspector_dom_agent.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/inspector/inspector_dom_snapshot_agent.cc",
+      "gitBlob": "7542b8ceb89692d03746c3b36c5b874ed68d2142",
+      "bytes": 33036,
+      "sha256": "74aeaaaf22b0f5dc4855921dcff09919e93a77b9048991db1439173fab6705e6",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/inspector/inspector_dom_snapshot_agent.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/inspector/inspector_highlight.cc",
+      "bytes": 118167,
+      "gitBlob": "7c3d834f520584d91bcb005b2bc5106fd9928a62",
+      "sha256": "c5714e81a5ee7d205dc0b03e0c42f126c5af43e64a88b3dffb80ad9339c34af8",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/inspector/inspector_highlight.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/layout/block_layout_algorithm.cc",
+      "bytes": 196695,
+      "sha256": "48be7d54b2479418226908159d0dc8ba1bb4745677e5743978968a3e9779a4fd",
+      "gitBlob": "3f6ab3c370a22565558dfe041ba84adeb8e4d972",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/layout/block_layout_algorithm.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/layout/block_layout_algorithm_utils.cc",
+      "bytes": 12617,
+      "sha256": "80865cc7c50aa87998d1c75965d146c2ded62a97d8fc3a53cd3d85023365e9c8",
+      "gitBlob": "90efb934a1074fa928b9b1eba85077b39f2e7acf",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/layout/block_layout_algorithm_utils.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/layout/forms/layout_text_control.cc",
+      "bytes": 6930,
+      "sha256": "c26a30c3d1acbfc265e04c87f96a2b2fecd5bf5fcf118a6f8215c2e5f0e230c1",
+      "gitBlob": "c636fd88ea051b79cafeedcfb7d8f31f237ee629",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/layout/forms/layout_text_control.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/layout/forms/layout_text_control_inner_editor.cc",
+      "bytes": 4045,
+      "sha256": "db2f49494c781d0b3664c38f1383a2a6cc189a2ca5e888f3399cf379548c39a7",
+      "gitBlob": "0bb203a52fdec0e3266ee2691a925b96221721a6",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/layout/forms/layout_text_control_inner_editor.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/layout/forms/layout_text_control_single_line.cc",
+      "bytes": 2744,
+      "sha256": "c24732c6526144f4d9bb98c626a98883c8506167e77bf0b7afd2985be9227ea0",
+      "gitBlob": "f6be1718f10cc3e19aa06e39b7be623e0e9433d9",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/layout/forms/layout_text_control_single_line.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/platform/fonts/font_metrics.h",
+      "bytes": 9447,
+      "sha256": "8920de3f1f3d70810bd562103bc95598ecfee841a90f20a3d2b77f5aaa5daab7",
+      "gitBlob": "a757532b1a7ae1a36a0cceaf17d9877eb36be56a",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/platform/fonts/font_metrics.h"
+    },
+    {
+      "path": "third_party/blink/renderer/platform/fonts/simple_font_data.cc",
+      "bytes": 23809,
+      "sha256": "88e6be7dfe8b0abf9189273f04d35828dbaa8585d2acea08305472b1bc55b863",
+      "gitBlob": "2fa1abf402b85a7f6635e18c2ee4ebea3a90b739",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/platform/fonts/simple_font_data.cc"
+    }
+  ],
+  "notice": "Hosted captures retain each exact pinned upstream file and Chromium LICENSE. These sources retain their existing notices; authored collector code is Apache-2.0.",
+  "limits": [
+    "Protocol observations do not expose the actual internal alphabetic baseline or glyph mask.",
+    "DOMSnapshot intentionally excludes UA shadow trees; direct DOM/CSS queries observe the input editor.",
+    "Source-derived normal-line behavior remains a hypothesis until direct used rectangles and font metrics are collected."
+  ]
+}
