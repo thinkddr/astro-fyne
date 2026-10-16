@@ -60,7 +60,10 @@ const scenario = astro
       rejects: [] as { path: string; event: string; contains: string }[],
     }
   : {
-      prefix: tap("js-increment", "js-a-increment", "js-optional-increment"),
+      prefix: [
+        ...tap("js-increment", "js-a-increment", "js-optional-increment"),
+        { id: "js-insert-input", value: "edited" },
+      ],
       suffix: [
         ...tap(
           "js-reorder",
@@ -97,6 +100,12 @@ const scenario = astro
         ...tap("css-increment", "css-mode", "css-increment", "css-disabled"),
         ...tap(...Array<string>(6).fill("js-attrs-step")),
         ...tap("js-reorder", "js-a-increment"),
+        ...tap(
+          "js-insert-invalid",
+          "js-insert-move",
+          "js-insert-foreign-self",
+          "js-insert-self",
+        ),
       ],
       follow: [
         ...tap(
@@ -116,6 +125,13 @@ const scenario = astro
           "js-events-recursive",
           "js-attrs-step",
           "js-attrs-step",
+        ),
+        { id: "js-insert-input", value: "continued" },
+        ...tap(
+          "js-insert-invalid",
+          "js-insert-move",
+          "js-insert-foreign-self",
+          "js-insert-self",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -296,6 +312,180 @@ const frameValues = (frames: JavascriptFrame[]) => {
   walk(frames);
   return values;
 };
+type InsertionResult =
+  | "ready"
+  | {
+      operation: string;
+      error: string;
+      returned: boolean;
+      same: boolean;
+      parent: string;
+      value: string;
+      defaultValue: string;
+      left: string[];
+      right: string[];
+    };
+type InsertionState = {
+  value: string;
+  moved: boolean;
+  result: InsertionResult;
+};
+const insertionOrder = (moved: boolean) =>
+  moved
+    ? ["js-insert-anchor", "js-insert-input"]
+    : ["js-insert-input", "js-insert-anchor"];
+const insertionOutcomes: Record<
+  string,
+  { operation: string; error: string; returned: boolean }
+> = {
+  "js-insert-invalid": {
+    operation: "invalid",
+    error: "NotFoundError",
+    returned: false,
+  },
+  "js-insert-move": { operation: "move", error: "none", returned: true },
+  "js-insert-foreign-self": {
+    operation: "foreign-self",
+    error: "NotFoundError",
+    returned: false,
+  },
+  "js-insert-self": { operation: "self", error: "none", returned: true },
+};
+function insertionStep(
+  state: InsertionState,
+  step: { id: string; value?: string },
+): InsertionState {
+  if (step.id === "js-insert-input") {
+    assert.ok(typeof step.value === "string", "Insertion edit needs a value");
+    return { ...state, value: step.value };
+  }
+  const outcome = insertionOutcomes[step.id];
+  if (!outcome) return state;
+  const moved = state.moved || outcome.operation === "move";
+  return {
+    ...state,
+    moved,
+    result: {
+      ...outcome,
+      same: true,
+      parent: "js-insert-left",
+      value: state.value,
+      defaultValue: "initial",
+      left: insertionOrder(moved),
+      right: [],
+    },
+  };
+}
+const insertionStart = (): InsertionState => ({
+  value: "edited",
+  moved: false,
+  result: "ready",
+});
+const insertionFollowStart = () =>
+  insertionStep(
+    { value: "edited", moved: true, result: "ready" },
+    { id: "js-insert-self" },
+  );
+function assertInsertionValues(
+  values: Record<string, string>,
+  state: InsertionState,
+  label: string,
+) {
+  assert.equal(
+    values["js-insert-input"],
+    state.value,
+    `Insertion live value differs: ${label}`,
+  );
+  const result = values["js-insert-result"];
+  assert.ok(typeof result === "string", `Missing insertion result: ${label}`);
+  assert.deepEqual(
+    state.result === "ready" ? result : JSON.parse(result),
+    state.result,
+    `Insertion outcome differs: ${label}`,
+  );
+}
+function assertInsertionTimeline(
+  frames: JavascriptFrame[][],
+  steps: { id: string; value?: string }[],
+  state: InsertionState,
+  label: string,
+) {
+  assert.equal(
+    frames.length,
+    steps.length + 1,
+    `Missing insertion frames: ${label}`,
+  );
+  let uid: string | undefined;
+  let operations = 0;
+  for (const [index, roots] of frames.entries()) {
+    if (index) {
+      const step = steps[index - 1]!;
+      state = insertionStep(state, step);
+      if (insertionOutcomes[step.id]) operations++;
+    }
+    const nodes = new Map<
+      string,
+      { frame: JavascriptFrame; parent?: string }
+    >();
+    const visit = (children: JavascriptFrame[], parent?: string) => {
+      for (const frame of children) {
+        const id = frame.attrs?.id;
+        if (id?.startsWith("js-insert-")) {
+          assert.equal(
+            nodes.has(id),
+            false,
+            `Duplicate insertion node ${id}: ${label}`,
+          );
+          nodes.set(id, { frame, parent });
+        }
+        visit(frame.children ?? [], id);
+      }
+    };
+    visit(roots);
+    const input = nodes.get("js-insert-input");
+    assert.ok(input, `Missing insertion input: ${label}, frame ${index}`);
+    assert.ok(input.frame.uid, `Missing insertion UID: ${label}`);
+    uid ??= input.frame.uid;
+    assert.equal(
+      input.frame.uid,
+      uid,
+      `Insertion changed virtual identity: ${label}`,
+    );
+    assert.equal(
+      input.parent,
+      "js-insert-left",
+      `Insertion changed parent: ${label}`,
+    );
+    assert.equal(
+      input.frame.attrs?.value,
+      "initial",
+      `Insertion changed default value: ${label}`,
+    );
+    assert.equal(
+      input.frame.value,
+      state.value,
+      `Insertion changed live frame: ${label}`,
+    );
+    for (const [id, order] of [
+      ["js-insert-left", insertionOrder(state.moved)],
+      ["js-insert-right", []],
+    ] as const) {
+      const parent = nodes.get(id);
+      assert.ok(parent, `Missing insertion parent ${id}: ${label}`);
+      assert.deepEqual(
+        (parent.frame.children ?? []).map((child) => child.attrs?.id),
+        order,
+        `Insertion order differs: ${label}, frame ${index}`,
+      );
+    }
+    assertInsertionValues(
+      frameValues(roots),
+      state,
+      `${label}, frame ${index}`,
+    );
+  }
+  assert.equal(operations, 4, `Missing insertion operations: ${label}`);
+}
 const attributeFields = {
   input: [
     "tag",
@@ -570,6 +760,17 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
 }
 if (!astro) {
   assert.equal(
+    nativeResult.insertionIdentityChecked,
+    true,
+    "Native insertion pointer checks did not run",
+  );
+  assertInsertionTimeline(
+    nativeResult.frames,
+    scenario.suffix,
+    insertionStart(),
+    "native suffix",
+  );
+  assert.equal(
     assertAttributeTimeline(
       nativeResult.frames,
       scenario.suffix,
@@ -708,6 +909,63 @@ try {
         ),
     );
   await settle();
+  let insertionElement = astro
+    ? null
+    : await page.locator('[id="js-insert-input"]').elementHandle();
+  let browserInsertionState = insertionStart();
+  const assertBrowserInsertion = async (label: string) => {
+    if (astro) return;
+    assert.ok(insertionElement, `Missing browser insertion input: ${label}`);
+    const actual = await insertionElement.evaluate((element) => {
+      if (!(element instanceof HTMLInputElement))
+        throw new Error("Insertion target is not an input");
+      const order = (id: string) => {
+        const parent = document.getElementById(id);
+        if (!parent) throw new Error(`Missing insertion parent ${id}`);
+        return Array.from(parent.childNodes).map((child) => {
+          if (!(child instanceof HTMLElement))
+            throw new Error("Unexpected insertion child");
+          return child.id;
+        });
+      };
+      return {
+        same: document.getElementById("js-insert-input") === element,
+        count: document.querySelectorAll('[id="js-insert-input"]').length,
+        parent: element.parentElement?.id ?? null,
+        value: element.value,
+        defaultValue: element.defaultValue,
+        attr: element.getAttribute("value"),
+        left: order("js-insert-left"),
+        right: order("js-insert-right"),
+        result: document.getElementById("js-insert-result")?.textContent,
+      };
+    });
+    const { result, ...control } = actual;
+    assert.deepEqual(
+      control,
+      {
+        same: true,
+        count: 1,
+        parent: "js-insert-left",
+        value: browserInsertionState.value,
+        defaultValue: "initial",
+        attr: "initial",
+        left: insertionOrder(browserInsertionState.moved),
+        right: [],
+      },
+      `Browser insertion identity/tree/value differs: ${label}`,
+    );
+    assert.ok(
+      typeof result === "string",
+      `Missing browser insertion result: ${label}`,
+    );
+    assertInsertionValues(
+      { "js-insert-input": actual.value, "js-insert-result": result },
+      browserInsertionState,
+      label,
+    );
+  };
+  await assertBrowserInsertion("restored browser initial");
   assert.deepEqual(
     await page.evaluate(() => window.afyJavascript.calls()),
     [],
@@ -735,6 +993,10 @@ try {
         .locator(`[id=${JSON.stringify(step.id)}]`)
         .evaluate((element) => (element as HTMLElement).click());
     await settle();
+    if (!astro) {
+      browserInsertionState = insertionStep(browserInsertionState, step);
+      await assertBrowserInsertion(`after ${step.id}`);
+    }
   };
   for (const step of scenario.suffix) {
     await perform(step);
@@ -745,6 +1007,13 @@ try {
     nativeResult.frames,
     "Browser and generated Go frames differ",
   );
+  if (!astro)
+    assertInsertionTimeline(
+      frames,
+      scenario.suffix,
+      insertionStart(),
+      "restored browser suffix",
+    );
   const calls = await page.evaluate(() => window.afyJavascript.calls());
   if (!astro) assertListenerCalls(calls, "suffix");
   assert.deepEqual(
@@ -774,7 +1043,13 @@ try {
     follow.push(frame);
   }
   const followCalls = await page.evaluate(() => window.afyJavascript.calls());
-  if (!astro)
+  if (!astro) {
+    assertInsertionTimeline(
+      follow,
+      scenario.follow,
+      insertionFollowStart(),
+      "restored browser follow",
+    );
     assert.equal(
       assertAttributeTimeline(
         follow,
@@ -784,6 +1059,7 @@ try {
       ),
       8,
     );
+  }
   await writeFile(
     join(evidence, "browser.json"),
     JSON.stringify(
@@ -800,6 +1076,12 @@ try {
   if (!astro) {
     await page.evaluate(() => window.afyJavascript.original());
     await settle();
+    await insertionElement?.dispose();
+    insertionElement = await page
+      .locator('[id="js-insert-input"]')
+      .elementHandle();
+    browserInsertionState = { value: "initial", moved: false, result: "ready" };
+    await assertBrowserInsertion("original browser initial");
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
     const originalValues: Record<string, string>[] = [];
@@ -831,6 +1113,11 @@ try {
       assertAttributeValues(
         values as Record<string, string>,
         attributePhase,
+        `original suffix, frame ${i}`,
+      );
+      assertInsertionValues(
+        values as Record<string, string>,
+        browserInsertionState,
         `original suffix, frame ${i}`,
       );
       assert.deepEqual(
@@ -954,6 +1241,11 @@ try {
         attributePhase,
         `original follow, frame ${i}`,
       );
+      assertInsertionValues(
+        values as Record<string, string>,
+        browserInsertionState,
+        `original follow, frame ${i}`,
+      );
       const followFrame = follow[i];
       assert.ok(followFrame, `Missing restored browser follow frame ${i}`);
       assert.deepEqual(
@@ -1020,6 +1312,17 @@ const webResult = JSON.parse(
 );
 if (!astro) {
   assert.equal(
+    restored.insertionIdentityChecked,
+    true,
+    "Restored native insertion pointer checks did not run",
+  );
+  assertInsertionTimeline(
+    restored.frames,
+    scenario.follow,
+    insertionFollowStart(),
+    "restored native follow",
+  );
+  assert.equal(
     assertAttributeTimeline(
       restored.frames,
       scenario.follow,
@@ -1059,6 +1362,16 @@ await writeFile(
       platformDiagnostics: scenario.rejects.length,
       nativeFrames: nativeResult.frames.length + restored.frames.length,
       externalEffectsReplayed: 0,
+      ...(!astro
+        ? {
+            insertion: {
+              suffixOperations: 4,
+              followOperations: 4,
+              nativePointerIdentityChecked: true,
+              browserElementIdentityChecked: true,
+            },
+          }
+        : {}),
       codeHash: exported!.codeHash,
     },
     null,

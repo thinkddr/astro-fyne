@@ -281,6 +281,13 @@ export function createDocument() {
         this.appendChild(document.createTextNode(String(value)));
     }
     insertBefore(child, before) {
+      if (before != null && before.parentNode !== this) {
+        const error = new Error(
+          "The reference node is not a child of this parent",
+        );
+        error.name = "NotFoundError";
+        throw error;
+      }
       if (child === before) return child;
       if (child.parentNode) child.parentNode.removeChild(child);
       const index =

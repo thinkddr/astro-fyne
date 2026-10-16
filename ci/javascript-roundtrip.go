@@ -84,6 +84,7 @@ func main() {
 	if err = view.BindCanvas(window.Canvas()); err != nil {
 		panic(err)
 	}
+	insertion := view.Object("js-insert-input")
 	perform := func(step step) {
 		object := view.Object(step.ID)
 		if object == nil {
@@ -112,6 +113,9 @@ func main() {
 		if err = view.Error(); err != nil {
 			panic(fmt.Errorf("%s: %w", step.ID, err))
 		}
+		if insertion != nil && view.Object("js-insert-input") != insertion {
+			panic("insertion replaced the existing native input object after " + step.ID)
+		}
 	}
 	if os.Args[2] == "export" {
 		for _, step := range scenario.Prefix {
@@ -136,7 +140,7 @@ func main() {
 		}
 		frames = append(frames, snapshot.Frame)
 	}
-	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls})
+	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil})
 	if err != nil {
 		panic(err)
 	}
