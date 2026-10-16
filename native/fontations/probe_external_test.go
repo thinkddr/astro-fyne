@@ -81,26 +81,26 @@ type probeFrame struct {
 }
 
 type probeBuildRecord struct {
-	Schema int `json:"schema"`
-	DiagnosticOnly bool `json:"diagnosticOnly"`
-	PixelPerfectVerified bool `json:"pixelPerfectVerified"`
-	Sources map[string]string `json:"sources"`
-	Binary struct {
-		Name string `json:"name"`
+	Schema               int               `json:"schema"`
+	DiagnosticOnly       bool              `json:"diagnosticOnly"`
+	PixelPerfectVerified bool              `json:"pixelPerfectVerified"`
+	Sources              map[string]string `json:"sources"`
+	Binary               struct {
+		Name   string `json:"name"`
 		SHA256 string `json:"sha256"`
 	} `json:"binary"`
 	BuildInfo struct {
-		Name string `json:"name"`
+		Name   string `json:"name"`
 		SHA256 string `json:"sha256"`
 	} `json:"buildInfo"`
 	ModuleContext struct {
-		ProductionGoModHash string `json:"productionGoModHash"`
-		ProductionGoSumHash string `json:"productionGoSumHash"`
-		TemporaryGoModHash string `json:"temporaryGoModHash"`
-		TemporaryGoSumHash string `json:"temporaryGoSumHash"`
-		SelectedModulesHash string `json:"selectedModulesHash"`
-		TemporaryFyneReplacementOnly bool `json:"temporaryFyneReplacementOnly"`
-		ProductionDependencyChanged bool `json:"productionDependencyChanged"`
+		ProductionGoModHash          string `json:"productionGoModHash"`
+		ProductionGoSumHash          string `json:"productionGoSumHash"`
+		TemporaryGoModHash           string `json:"temporaryGoModHash"`
+		TemporaryGoSumHash           string `json:"temporaryGoSumHash"`
+		SelectedModulesHash          string `json:"selectedModulesHash"`
+		TemporaryFyneReplacementOnly bool   `json:"temporaryFyneReplacementOnly"`
+		ProductionDependencyChanged  bool   `json:"productionDependencyChanged"`
 	} `json:"moduleContext"`
 }
 
@@ -180,10 +180,10 @@ func probeProviderBuild(t *testing.T, root string) (json.RawMessage, string, str
 		t.Fatal("executed provider binary/build information differs from its capture binding")
 	}
 	for name, expected := range map[string]string{
-		filepath.Join(root, "native/go.mod"): record.ModuleContext.ProductionGoModHash,
-		filepath.Join(root, "native/go.sum"): record.ModuleContext.ProductionGoSumHash,
-		filepath.Join(provider, "provider.mod"): record.ModuleContext.TemporaryGoModHash,
-		filepath.Join(provider, "provider.sum"): record.ModuleContext.TemporaryGoSumHash,
+		filepath.Join(root, "native/go.mod"):             record.ModuleContext.ProductionGoModHash,
+		filepath.Join(root, "native/go.sum"):             record.ModuleContext.ProductionGoSumHash,
+		filepath.Join(provider, "provider.mod"):          record.ModuleContext.TemporaryGoModHash,
+		filepath.Join(provider, "provider.sum"):          record.ModuleContext.TemporaryGoSumHash,
 		filepath.Join(provider, "selected-modules.json"): record.ModuleContext.SelectedModulesHash,
 	} {
 		if probeHash(probeRead(t, name)) != expected {
@@ -346,7 +346,7 @@ func TestOriginalTypographyProbeThroughFyne(t *testing.T) {
 		"browserEffectivePolicyVerified": false, "nativeScalerInternalsObserved": false,
 		"sourceHash": pin.SourceHash, "probeHash": pin.ProbeHash, "fixtureHash": pin.FixtureHash, "fontHash": pin.FontHash,
 		"libraryHash": probeHash(probeRead(t, library)), "policyHash": probeHash(policyBytes), "nativePolicy": policy,
-		"testHash": probeHash(probeRead(t, filepath.Join(root, "native/fontations/probe_external_test.go"))),
+		"testHash":      probeHash(probeRead(t, filepath.Join(root, "native/fontations/probe_external_test.go"))),
 		"providerBuild": providerBuild, "providerBuildHash": providerBuildHash,
 		"testBinaryHash": testBinaryHash, "testBuildInfoHash": testBuildInfoHash,
 		"fyneRevision": os.Getenv("ASTRO_FYNE_FONTATIONS_FYNE_REVISION"), "frames": frames,

@@ -15,11 +15,11 @@ import (
 )
 
 type paintRegion struct {
-	pixels []byte
+	pixels               []byte
 	width, height, scale uint32
-	x, y int32
-	origin fyne.Position
-	rgb uint32
+	x, y                 int32
+	origin               fyne.Position
+	rgb                  uint32
 }
 
 func paintClipped(destination *image.NRGBA, context canvas.TextPaintContext, paint func(paintRegion) error) error {
@@ -35,7 +35,7 @@ func paintClipped(destination *image.NRGBA, context canvas.TextPaintContext, pai
 		return nil
 	}
 	width, height := clip.Dx(), clip.Dy()
-	rowBytes := width*4
+	rowBytes := width * 4
 	rows := make([]int, height)
 	packed := make([]byte, rowBytes*height)
 	for row := 0; row < height; row++ {

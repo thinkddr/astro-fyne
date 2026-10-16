@@ -57,13 +57,13 @@ type Options struct {
 
 // FontNotice is a fresh copy of a registered font's redistribution notice.
 type FontNotice struct {
-	Family       string
-	Face         webui.Font
-	FontName     string
-	FontSHA256   string
-	LicenseName  string
+	Family        string
+	Face          webui.Font
+	FontName      string
+	FontSHA256    string
+	LicenseName   string
 	LicenseSHA256 string
-	Content      []byte
+	Content       []byte
 }
 
 // Metrics records the native line in logical CSS pixels.
@@ -93,8 +93,8 @@ type Snapshot struct {
 	Text                string  `json:"text"`
 	FontSize            float32 `json:"fontSizeCSS"`
 	LineHeight          float32 `json:"lineHeightCSS"`
-	SourceFontSHA256     string  `json:"sourceFontHash"`
-	EffectiveFontSHA256  string  `json:"effectiveFontHash"`
+	SourceFontSHA256    string  `json:"sourceFontHash"`
+	EffectiveFontSHA256 string  `json:"effectiveFontHash"`
 	Policy              Policy  `json:"policy"`
 	Metrics             Metrics `json:"metrics"`
 	Glyphs              []Glyph `json:"glyphs"`
@@ -107,24 +107,24 @@ type fontKey struct {
 
 type fontEntry struct {
 	family, sourceHash, effectiveHash string
-	face webui.Font
-	resource fyne.Resource
-	licenseName, licenseHash string
-	license []byte
-	native *nativeFont
+	face                              webui.Font
+	resource                          fyne.Resource
+	licenseName, licenseHash          string
+	license                           []byte
+	native                            *nativeFont
 }
 
 // Backend owns the native engines and library. Close it only after its views
 // stop painting. Existing canvas objects hold copied glyphs, not native runs.
 // Hosts must retain FontNotices and the compiled engine's upstream notices.
 type Backend struct {
-	mu sync.Mutex
+	mu      sync.Mutex
 	library *nativeLibrary
-	fonts map[fontKey]*fontEntry
-	policy Policy
-	closed bool
-	err error
-	base webui.FyneBackend
+	fonts   map[fontKey]*fontEntry
+	policy  Policy
+	closed  bool
+	err     error
+	base    webui.FyneBackend
 }
 
 var _ webui.Backend = (*Backend)(nil)
@@ -223,7 +223,7 @@ func (b *Backend) FontNotices() []FontNotice {
 }
 
 func (b *Backend) Defaults(n webui.Node) webui.Style { return b.base.Defaults(n) }
-func (b *Backend) Box(s webui.Style) webui.Box { return b.base.Box(s) }
+func (b *Backend) Box(s webui.Style) webui.Box       { return b.base.Box(s) }
 
 func (b *Backend) Validate(s webui.Style, text bool) error {
 	b.mu.Lock()
@@ -313,7 +313,10 @@ func (b *Backend) Editor(multiline bool, s webui.Style, onChange func(string)) w
 	return webui.NewEditor(b, false, s, onChange)
 }
 
-type failedEditorBackend struct { *Backend; err error }
+type failedEditorBackend struct {
+	*Backend
+	err error
+}
 
 func (b failedEditorBackend) Measure(string, webui.Style) fyne.Size { return fyne.Size{} }
 func (b failedEditorBackend) Text(value string, style webui.Style) *canvas.Text {
@@ -324,9 +327,9 @@ func (b failedEditorBackend) PlaceText(t *canvas.Text, _ webui.Style, x, y float
 	t.Move(fyne.NewPos(x, y))
 }
 
-type failedLine struct { err error }
+type failedLine struct{ err error }
 
-func (f failedLine) Metrics() (fyne.Size, float32, error) { return fyne.Size{}, 0, f.err }
+func (f failedLine) Metrics() (fyne.Size, float32, error)                      { return fyne.Size{}, 0, f.err }
 func (f failedLine) PaintSoftware(*image.NRGBA, canvas.TextPaintContext) error { return f.err }
 
 func (b *Backend) rememberLocked(err error) error {
@@ -402,7 +405,7 @@ func freezeFonts(source map[string]map[webui.Font]LicensedFont) (map[fontKey]*fo
 			hash := digest(data)
 			resourceName := licensed.Resource.Name()
 			if !strings.HasSuffix(resourceName, "#sha256="+hash) {
-				resourceName += "#sha256="+hash
+				resourceName += "#sha256=" + hash
 			}
 			resource := &frozenResource{name: resourceName, content: data}
 			fonts[fontKey{family: key, face: face}] = &fontEntry{family: name, face: face, sourceHash: hash, resource: resource,
@@ -419,11 +422,11 @@ func freezeFonts(source map[string]map[webui.Font]LicensedFont) (map[fontKey]*fo
 }
 
 type frozenResource struct {
-	name string
+	name    string
 	content []byte
 }
 
-func (r *frozenResource) Name() string { return r.name }
+func (r *frozenResource) Name() string    { return r.name }
 func (r *frozenResource) Content() []byte { return bytes.Clone(r.content) }
 
 func validateStaticTTF(data []byte) error {
@@ -435,7 +438,7 @@ func validateStaticTTF(data []byte) error {
 		return fmt.Errorf("fontations: invalid TrueType table directory")
 	}
 	for i := 0; i < count; i++ {
-		table := data[12+i*16:28+i*16]
+		table := data[12+i*16 : 28+i*16]
 		start, length := uint64(binary.BigEndian.Uint32(table[8:12])), uint64(binary.BigEndian.Uint32(table[12:16]))
 		if start+length > uint64(len(data)) {
 			return fmt.Errorf("fontations: TrueType table is outside the resource")

@@ -49,7 +49,7 @@ func TestRegionTransportPreservesPhysicalOffsetLogicalOriginAndStride(t *testing
 			}
 			for y := 0; y < 4; y++ {
 				for x := 0; x < 8; x++ {
-					offset := (y*8+x)*4
+					offset := (y*8 + x) * 4
 					want := base.NRGBAAt(12+x, 22+y)
 					if !bytes.Equal(region.pixels[offset:offset+4], []byte{want.R, want.G, want.B, want.A}) {
 						t.Fatal("packed region was not the true per-row backdrop")
@@ -65,7 +65,7 @@ func TestRegionTransportPreservesPhysicalOffsetLogicalOriginAndStride(t *testing
 		for y := base.Rect.Min.Y; y < base.Rect.Max.Y; y++ {
 			for x := base.Rect.Min.X; x < base.Rect.Max.X; x++ {
 				offset := base.PixOffset(x, y)
-				want := bytes.Clone(before[offset:offset+4])
+				want := bytes.Clone(before[offset : offset+4])
 				if image.Pt(x, y).In(clip) {
 					want[0] ^= 0x5a
 				}
@@ -98,7 +98,7 @@ func TestRegionNativeFailureAndInvalidOutputNeverCommit(t *testing.T) {
 
 func TestUnsupportedRegionRequestsFailBeforeNativePaint(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name   string
 		change func(*image.NRGBA, *canvas.TextPaintContext)
 	}{
 		{"scale", func(_ *image.NRGBA, c *canvas.TextPaintContext) { c.Scale = 1.5 }},
@@ -108,7 +108,10 @@ func TestUnsupportedRegionRequestsFailBeforeNativePaint(t *testing.T) {
 		{"backdrop alpha", func(d *image.NRGBA, _ *canvas.TextPaintContext) { d.Pix[3] = 254 }},
 		{"stride", func(d *image.NRGBA, _ *canvas.TextPaintContext) { d.Stride = 0 }},
 		{"pixel length", func(d *image.NRGBA, _ *canvas.TextPaintContext) { d.Pix = d.Pix[:7] }},
-		{"offset", func(d *image.NRGBA, c *canvas.TextPaintContext) { d.Rect = image.Rect(4097, 0, 4105, 4); c.Clip = d.Rect }},
+		{"offset", func(d *image.NRGBA, c *canvas.TextPaintContext) {
+			d.Rect = image.Rect(4097, 0, 4105, 4)
+			c.Clip = d.Rect
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			destination := transportImage(image.Rect(0, 0, 8, 4))

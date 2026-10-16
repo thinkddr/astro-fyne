@@ -197,7 +197,10 @@ func TestConcurrentCloseAndNativeCalls(t *testing.T) {
 			for n := 0; n < 12; n++ {
 				line, err := b.Shape("Hgx", s)
 				if err == nil {
-					select { case shaped <- struct{}{}: default: }
+					select {
+					case shaped <- struct{}{}:
+					default:
+					}
 					err = line.PaintSoftware(destination, context)
 				}
 				if err != nil && !errors.Is(err, ErrClosed) {
@@ -212,7 +215,7 @@ func TestConcurrentCloseAndNativeCalls(t *testing.T) {
 	case <-shaped:
 	case err := <-failures:
 		t.Fatalf("native calls failed before exercising concurrency: %v", err)
-	case <-time.After(10*time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no native shape completed before the concurrent-close deadline")
 	}
 	if err := b.Close(); err != nil {
@@ -348,7 +351,7 @@ func TestUnsupportedTextAndStyleErrorsRemainVisible(t *testing.T) {
 
 func TestRejectedLibraryFontAndPolicyConfiguration(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name   string
 		change func(*Options)
 	}{
 		{"relative library", func(o *Options) { o.LibraryPath = "text-engine.so" }},

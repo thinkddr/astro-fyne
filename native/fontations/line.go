@@ -18,11 +18,11 @@ import (
 // never a native run. The backend must remain open while it measures or paints.
 type Line struct {
 	backend *Backend
-	font *fontEntry
-	text string
-	style webui.Style
+	font    *fontEntry
+	text    string
+	style   webui.Style
 	metrics Metrics
-	glyphs []Glyph
+	glyphs  []Glyph
 }
 
 var _ canvas.TextLayout = (*Line)(nil)
