@@ -153,7 +153,15 @@ func validateResponsiveBackend(nodes []Node, backend Backend) error {
 			// Validate the inherited defaults used by the actual native elements.
 			style := resolveStyle(n, n.Style, inherited, backend, true)
 			if responsiveHasText(n) {
-				if err := backend.Validate(style, true); err != nil {
+				paintStyle := style
+				if n.Kind == "input" {
+					var err error
+					paintStyle, err = editorLineStyle(backend, style)
+					if err != nil {
+						return fmt.Errorf("webui: %q: %w", n.ID, err)
+					}
+				}
+				if err := backend.Validate(paintStyle, true); err != nil {
 					return fmt.Errorf("webui: %q: %w", n.ID, err)
 				}
 				validator, ok := backend.(TextValidator)
@@ -165,7 +173,7 @@ func validateResponsiveBackend(nodes []Node, backend Backend) error {
 					texts = []string{n.Value, n.Placeholder}
 				}
 				for _, text := range texts {
-					if err := validator.ValidateText(text, style); err != nil {
+					if err := validator.ValidateText(text, paintStyle); err != nil {
 						return fmt.Errorf("webui: %q: %w", n.ID, err)
 					}
 				}
@@ -211,12 +219,20 @@ func validateResponsiveFrame(nodes []Node, backend Backend, viewport fyne.Size, 
 	check = func(e *element, size fyne.Size) error {
 		content := fyne.NewSize(max(size.Width-horizontalDecoration(e.style), 0), max(size.Height-verticalDecoration(e.style), 0))
 		if responsiveHasText(e.node) {
+			paintStyle := e.style
+			if e.node.Kind == "input" {
+				var err error
+				paintStyle, err = editorLineStyle(backend, e.style)
+				if err != nil {
+					return fmt.Errorf("webui: responsive editor on %q: %w", e.node.ID, err)
+				}
+			}
 			texts := []string{sourceNowrap(e.node.Text)}
 			if e.node.Kind == "input" {
 				texts = []string{e.node.Value, e.node.Placeholder}
 			}
 			for _, text := range texts {
-				if err := validateResponsiveLine(backend, e.style, text, content); err != nil {
+				if err := validateResponsiveLine(backend, paintStyle, text, content); err != nil {
 					return fmt.Errorf("webui: responsive text on %q: %w", e.node.ID, err)
 				}
 			}
@@ -249,19 +265,30 @@ func (v *View) responsiveFrameError() error {
 			continue
 		}
 		texts := []string{sourceNowrap(e.node.Text)}
+		paintStyle := e.style
 		if e.input != nil {
-			if editor, ok := e.input.(*primitiveEditor); ok && editor.editErr != nil {
-				return fmt.Errorf("webui: rejected responsive input edit on %q: %w", e.node.ID, editor.editErr)
+			if editor, ok := e.input.(*primitiveEditor); ok {
+				if editor.lineStyleErr != nil {
+					return fmt.Errorf("webui: responsive editor metrics on %q: %w", e.node.ID, editor.lineStyleErr)
+				}
+				if editor.editErr != nil {
+					return fmt.Errorf("webui: rejected responsive input edit on %q: %w", e.node.ID, editor.editErr)
+				}
 			}
 			value := e.input.Text()
 			if invalidSingleLineInput(value) {
 				return fmt.Errorf("webui: responsive input %q contains an unsupported control character", e.node.ID)
 			}
 			texts = []string{value, e.node.Placeholder}
+			var err error
+			paintStyle, err = editorLineStyle(v.backend, e.style)
+			if err != nil {
+				return fmt.Errorf("webui: responsive editor on %q: %w", e.node.ID, err)
+			}
 		}
 		content := e.object.Size().SubtractWidthHeight(horizontalDecoration(e.style), verticalDecoration(e.style))
 		for _, text := range texts {
-			if err := validateResponsiveLine(v.backend, e.style, text, content); err != nil {
+			if err := validateResponsiveLine(v.backend, paintStyle, text, content); err != nil {
 				return fmt.Errorf("webui: responsive text on %q: %w", e.node.ID, err)
 			}
 		}

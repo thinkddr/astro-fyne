@@ -53,6 +53,38 @@ Single-line editors use the existing native editing engine. Multiline editing,
 contextual caret mapping, generated-widget visual parity, reverse-conversion
 typography, GPU rendering and universal 1:1 conversion remain unverified.
 
+For responsive border-box inputs, the optional `webui.EditorLineStyler` interface
+separates the authored outer style from the internal text line. This provider
+follows the pinned Chromium plain-input rule: where that rule selects a normal
+line height, it derives the height from native font ascent, descent and leading.
+Text, caret, selection and hit testing use the same internal line style. Other
+backends keep their existing behavior. This does not establish auto-height input
+layout, clipped editor lines or focused rendering parity.
+
+The optional `webui.EditorTextPlacer` seam keeps the editor's logical text box,
+caret and selection unchanged. At software paint time, this provider rounds the
+accumulated CSS line top before adding the native baseline and applying device
+scale. Half ties go toward positive infinity, including negative coordinates.
+Ordinary `PlaceText` clears that mode on reused text through an immutable line
+copy. The [pinned Blink sources](../../ci/text-engine-probe/editor-paint-source-pin.json)
+document this bounded horizontal LTR rule; the pin is provenance, not a runtime
+input. The new regressions require hosted validation and do not establish an
+observed browser baseline, effective raster policy or focused caret parity.
+
+The additive [`input-editor-metrics.json`](../../input-editor-metrics.json)
+profile checks six fixed input boxes at scales 1 and 2, including retained authored
+line heights and fractional font sizes. Hosted checks compare actual UA editor
+boxes and whole-frame pixels at zero tolerance. Browser measurements remain
+evidence and never become native layout inputs.
+
+The hosted generated-controls gate injects this backend into the ordinary
+`NewResponsiveControls` constructor. It keeps the original source, font and
+21 interaction actions, captures all 22 DPR 1 frames, and compares complete
+images at zero RGBA tolerance. The retained text layouts and binary/source
+bindings are separate from the seven-row provider evidence. See
+[`test-controls-remote.sh`](../../ci/text-engine-probe/test-controls-remote.sh)
+for the hosted invocation; no browser measurements enter the native layout.
+
 The canonical C ABI lives in [`cabi`](cabi/). Its hosted source build, compiler
 receipts, notices and strict transport/rendering checks are documented in
 [`ci/text-engine-probe`](../../ci/text-engine-probe/README.md). Run builds and tests
