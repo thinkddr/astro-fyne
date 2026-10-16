@@ -81,6 +81,25 @@ def main():
             destination.write_bytes(data)
             files[str(path)] = hashlib.sha256(data).hexdigest()
         vendor_manifest[name] = {"version": version, "chromiumCommit": CHROMIUM, "gitTree": entry["sha"], "files": files}
+    # Chromium's CXX source includes this forwarding header from its source root.
+    forwarding_path = "third_party/rust/cxx/v1/cxx.h"
+    forwarding_entry = api(f"contents/{forwarding_path}?ref={CHROMIUM}")
+    forwarding_bytes = fetch(f"https://raw.githubusercontent.com/chromium/chromium/{CHROMIUM}/{forwarding_path}")
+    forwarding_blob = hashlib.sha1(b"blob " + str(len(forwarding_bytes)).encode() + b"\0" + forwarding_bytes).hexdigest()
+    if forwarding_entry.get("type") != "file" or forwarding_blob != forwarding_entry.get("sha"):
+        raise RuntimeError("Chromium CXX forwarding header Git object mismatch")
+    forwarding_destination = assembly / forwarding_path
+    forwarding_destination.parent.mkdir(parents=True, exist_ok=True)
+    forwarding_destination.write_bytes(forwarding_bytes)
+    included_path = "third_party/rust/chromium_crates_io/vendor/cxx-v1/include/cxx.h"
+    included_bytes = (assembly / "vendor/cxx-v1/include/cxx.h").read_bytes()
+    included_destination = assembly / included_path
+    included_destination.parent.mkdir(parents=True, exist_ok=True)
+    included_destination.write_bytes(included_bytes)
+    chromium_cxx_headers = {
+        forwarding_path: {"gitBlob": forwarding_blob, "sha256": hashlib.sha256(forwarding_bytes).hexdigest()},
+        included_path: {"verifiedVendorPath": "cxx-v1/include/cxx.h", "sha256": hashlib.sha256(included_bytes).hexdigest()},
+    }
     # Retain Chromium's lock as evidence. Cargo resolves the actual standalone
     # graph/checksums; it is not claimed to equal Chromium's GN build graph.
     chrome_lock = fetch(f"https://raw.githubusercontent.com/chromium/chromium/{CHROMIUM}/third_party/rust/chromium_crates_io/Cargo.lock")
@@ -95,7 +114,7 @@ def main():
         packages = [p for p in actual["packages"] if p["name"] == name]
         if len(packages) != 1 or packages[0]["version"] != version:
             raise RuntimeError("Wrong or ambiguous selected crate: " + name)
-    (work / "sources.json").write_text(json.dumps({"schema": 1, "diagnosticOnly": True, "compiled": False, "chromiumCommit": CHROMIUM, "sources": source_records, "vendoredPrimaryCrates": vendor_manifest, "cargoLockHash": hashlib.sha256((assembly / "Cargo.lock").read_bytes()).hexdigest()}, indent=2) + "\n")
+    (work / "sources.json").write_text(json.dumps({"schema": 1, "diagnosticOnly": True, "compiled": False, "chromiumCommit": CHROMIUM, "sources": source_records, "vendoredPrimaryCrates": vendor_manifest, "chromiumCxxHeaders": chromium_cxx_headers, "cargoLockHash": hashlib.sha256((assembly / "Cargo.lock").read_bytes()).hexdigest()}, indent=2) + "\n")
     notices = work / "notices"
     notices.mkdir()
     for source in [work / "skia" / "LICENSE", work / "harfbuzz" / "COPYING", work / "ots" / "LICENSE"]:

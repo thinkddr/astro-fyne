@@ -58,7 +58,7 @@ meson setup "$task_work/ots/out" "$task_work/ots" --buildtype=release \
 meson compile -C "$task_work/ots/out" -j2 ots
 (
   cd "$task_work/assembly"
-  CC_ENABLE_DEBUG_OUTPUT=1 cargo build --release --locked -vv
+  CXXFLAGS="-I$task_work/assembly" CC_ENABLE_DEBUG_OUTPUT=1 cargo build --release --locked -vv
   cargo metadata --locked --format-version 1 > "$task_work/evidence/cargo-metadata-built.json"
   cargo tree --locked -e features > "$task_work/evidence/cargo-features.txt"
 )

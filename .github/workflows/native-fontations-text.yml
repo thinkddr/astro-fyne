@@ -74,6 +74,7 @@ jobs:
             ${{ runner.temp }}/native-text/sources.json
             ${{ runner.temp }}/native-text/cargo-metadata.json
             ${{ runner.temp }}/native-text/assembly/Cargo.lock
+            ${{ runner.temp }}/native-text/assembly/third_party/rust
             ${{ runner.temp }}/native-text/chromium-Cargo.lock
             ${{ runner.temp }}/native-text/notices
             ci/text-engine-probe
