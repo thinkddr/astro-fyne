@@ -165,6 +165,13 @@ object, default and live value. This named-error correction does not add global
 Valid moves retain object identity, dirty input values and defaults. Ordinary DOM
 insertion is not a focus-preserving move; focus, selection and connection lifecycle
 semantics require their own adapters and are not certified by these checks.
+The `Text.data` setter uses its `LegacyNullToEmptyString` conversion: null clears
+existing text, undefined and numbers become DOM strings, and a Symbol throws
+`TypeError` before changing it. This also updates pristine textarea defaults without
+overwriting an edited live value. `createTextNode(null)` still creates the text
+`"null"`. This setter-specific correction adds no other CharacterData methods,
+general Web IDL argument conversions, prototype behavior, mutation observers or
+lifecycle guarantees.
 Restored browser inputs retain their raw value attribute separately from the live
 editor value, including attribute absence and an edited value with an unchanged default.
 Checkboxes preserve `checked`/`defaultChecked`, dirty local state, the default `on`
@@ -243,6 +250,10 @@ fixed tree/default/live values and actual browser/native object identity through
 The removal scenario checks foreign, detached and Text-parent errors before mutation,
 then removes and reattaches the same edited input. Fixed exception/tree/default/live
 expectations and actual browser/native identity remain required through continuation.
+The CharacterData scenario checks null, undefined, numeric and rejected Symbol
+assignments against fixed original-source observations. It retains actual Text/element
+and native object identity, and checks pristine versus edited textarea defaults and
+live values through the same browser/native continuation.
 The CSS scenario additionally compares native
 cascade values against Chromium's original computed styles in an isolated shadow tree,
 including self/mutual cycles, selected/unused fallbacks, comments and function-name boundaries,
