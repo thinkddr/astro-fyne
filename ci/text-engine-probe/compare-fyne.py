@@ -3,17 +3,28 @@
 # Copyright 2026 Astro Fyne contributors.
 """Strict original-source Fyne text evidence with explicit fork/library bindings."""
 import argparse
+import base64
 import copy
 import hashlib
 import json
 import math
 import os
 import pathlib
+import re
+import shutil
 import struct
 import subprocess
 import tempfile
+import zipfile
 
 from compare import frame_scales
+
+
+FYNE_SOURCE_NAMES = {"canvas/text.go", "canvas/text_layout.go", "canvas/text_layout_test.go",
+    "internal/painter/gl/draw.go", "internal/painter/gl/text_layout_test.go",
+    "internal/painter/software/draw.go", "internal/painter/software/text_layout.go",
+    "internal/painter/software/text_layout_integration_test.go", "internal/painter/software/text_layout_test.go",
+    "go.mod", "go.sum", "LICENSE"}
 
 
 def require(condition, message):
@@ -26,7 +37,8 @@ def digest(path):
 
 
 def read(path):
-    return json.loads(path.read_bytes())
+    # Go writes float32 negative zero as -0; preserve its IEEE sign.
+    return json.loads(path.read_bytes(), parse_int=lambda token: -0.0 if token == "-0" else int(token))
 
 
 def same_float(first, second):
@@ -83,6 +95,17 @@ def binary_build_info(path):
     return subprocess.check_output(["go", "version", "-m", str(path)], env=go_environment())
 
 
+def verify_binary_module(data, pin):
+    lines = [line.strip().split("\t") for line in data.decode("utf-8").splitlines()]
+    module = pin["module"]
+    selected = [index for index, line in enumerate(lines)
+                if len(line) >= 2 and line[:2] == ["dep", module["canonicalPath"]]]
+    require(len(selected) == 1 and lines[selected[0]][2:] == [module["canonicalVersion"]]
+            and selected[0] + 1 < len(lines)
+            and lines[selected[0] + 1] == ["=>", module["path"], module["version"], module["sum"]],
+            "The actual provider binary did not compile the pinned public Fyne release")
+
+
 def selected_modules(path):
     values, text = [], path.read_text()
     decoder = json.JSONDecoder()
@@ -94,30 +117,167 @@ def selected_modules(path):
     return values
 
 
+def public_pin(repository):
+    pin = read(repository / "ci/text-engine-probe/fyne-hook-pin.json")
+    require(type(pin.get("schema")) is int and pin["schema"] == 1
+            and pin.get("repository") == "https://github.com/thinkddr/fyne.git"
+            and all(isinstance(pin.get(key), str) and re.fullmatch(r"[0-9a-f]{40}", pin[key])
+                    for key in ["revision", "tree", "tagObject"])
+            and set(pin.get("sourceHashes", {})) == FYNE_SOURCE_NAMES
+            and all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+                    for value in pin["sourceHashes"].values()), "Invalid exact public Fyne source pin")
+    module = pin.get("module", {})
+    require(module.get("path") == "github.com/thinkddr/fyne/v2"
+            and module.get("canonicalPath") == "fyne.io/fyne/v2"
+            and module.get("canonicalVersion") == "v2.8.1"
+            and module.get("version") == "v2.8.1-sytue.19"
+            and all(isinstance(module.get(key), str) and re.fullmatch(r"h1:[A-Za-z0-9+/]{43}=", module[key])
+                    for key in ["sum", "goModSum"])
+            and isinstance(module.get("zipSHA256"), str)
+            and re.fullmatch(r"[0-9a-f]{64}", module["zipSHA256"]), "Invalid published Fyne module pin")
+    return pin
+
+
+def hash1(entries):
+    result = hashlib.sha256()
+    for name, content in sorted(entries):
+        require("\n" not in name, "Invalid newline in Go module Hash1 name")
+        result.update((hashlib.sha256(content).hexdigest() + "  " + name + "\n").encode())
+    return "h1:" + base64.b64encode(result.digest()).decode("ascii")
+
+
+def git_object(kind, data):
+    return hashlib.sha1(kind.encode() + b" " + str(len(data)).encode() + b"\0" + data).hexdigest()
+
+
+def verify_public_identity(provider, pin):
+    commit, tag = [(provider / name).read_bytes() for name in ["fyne-commit.txt", "fyne-tag.txt"]]
+    neutral = b"Fyne contributors <contributors@fyne.invalid> "
+    require(git_object("commit", commit) == pin["revision"]
+            and commit.startswith(("tree " + pin["tree"] + "\n").encode())
+            and git_object("tag", tag) == pin["tagObject"]
+            and tag.startswith(("object " + pin["revision"] + "\ntype commit\ntag " + pin["module"]["version"] + "\n").encode())
+            and all(any(line.startswith(key + neutral) for line in commit.splitlines())
+                    for key in [b"author ", b"committer "])
+            and any(line.startswith(b"tagger " + neutral) for line in tag.splitlines())
+            and b"\ngpgsig " not in commit and b"-----BEGIN " not in tag,
+            "Public Fyne tag/commit must retain their pinned neutral unsigned identity")
+
+
+def public_module(repository, provider, retain=False):
+    """Verify both downloaded bytes and the cache tree used by the actual build."""
+    pin = public_pin(repository)
+    expected = pin["module"]
+    if retain:
+        shutil.copyfile(repository / "ci/text-engine-probe/fyne-hook-pin.json", provider / "fyne-hook-pin.json")
+    require((provider / "fyne-hook-pin.json").read_bytes()
+            == (repository / "ci/text-engine-probe/fyne-hook-pin.json").read_bytes(), "Retained Fyne pin changed")
+    verify_public_identity(provider, pin)
+    download = read(provider / "module-download.json")
+    require(not download.get("Error") and download.get("Path") == expected["path"]
+            and download.get("Version") == expected["version"]
+            and download.get("Sum") == expected["sum"] and download.get("GoModSum") == expected["goModSum"],
+            "Actual Go download is not the pinned published Fyne module")
+    cache = pathlib.Path(download.get("Dir", ""))
+    require(cache.is_absolute() and cache.is_dir() and not cache.is_symlink(), "Missing actual public module cache directory")
+    for key, name in [("Zip", "module.zip"), ("GoMod", "module.mod"), ("Info", "module.info")]:
+        source = pathlib.Path(download.get(key, ""))
+        require(source.is_absolute() and source.is_file() and not source.is_symlink(), "Missing actual cache module file: " + key)
+        target = provider / name
+        if retain:
+            shutil.copyfile(source, target)
+        require(target.is_file() and not target.is_symlink() and source.read_bytes() == target.read_bytes(),
+                "Actual module cache bytes changed: " + key)
+    info = read(provider / "module.info")
+    require(info.get("Version") == expected["version"]
+            and info.get("Origin") == {"VCS": "git", "URL": pin["repository"].removesuffix(".git"),
+                                      "Hash": pin["revision"], "Ref": "refs/tags/" + expected["version"]},
+            "Public module info lacks the exact pinned tag origin")
+    require(digest(provider / "module.zip") == expected["zipSHA256"]
+            and hash1([("go.mod", (provider / "module.mod").read_bytes())]) == expected["goModSum"],
+            "Published module ZIP or go.mod checksum changed")
+    prefix = expected["path"] + "@" + expected["version"] + "/"
+    entries = {}
+    with zipfile.ZipFile(provider / "module.zip") as archive:
+        files = archive.infolist()
+        require(files and len(files) <= 10000 and sum(item.file_size for item in files) <= 64 * 1024 * 1024,
+                "Unexpected public module ZIP limits")
+        for item in files:
+            relative = item.filename.removeprefix(prefix)
+            require(item.filename.startswith(prefix) and not item.is_dir()
+                    and relative and pathlib.PurePosixPath(relative).as_posix() == relative
+                    and not relative.startswith("/") and ".." not in pathlib.PurePosixPath(relative).parts
+                    and "\\" not in relative and relative not in entries,
+                    "Unsafe or duplicate public module ZIP entry")
+            entries[relative] = archive.read(item)
+    require(hash1([(prefix + name, value) for name, value in entries.items()]) == expected["sum"],
+            "Actual public module ZIP Hash1 differs from the published pin")
+    cache_entries = {}
+    for path in cache.rglob("*"):
+        require(not path.is_symlink(), "Unexpected symlink in the public module cache")
+        if path.is_dir():
+            continue
+        require(path.is_file(), "Unexpected non-file in the public module cache")
+        cache_entries[path.relative_to(cache).as_posix()] = path.read_bytes()
+    require(cache_entries == entries, "The actual compiled public module cache differs from its verified ZIP")
+    require(entries["go.mod"] == (provider / "module.mod").read_bytes(), "ZIP and cache module declarations differ")
+    for name, expected_hash in pin["sourceHashes"].items():
+        require(hashlib.sha256(entries[name]).hexdigest() == expected_hash, "Pinned Fyne source changed: " + name)
+        target = provider / "fyne-source" / name
+        if retain:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(entries[name])
+        require(target.is_file() and not target.is_symlink() and target.read_bytes() == entries[name],
+                "Retained public Fyne source changed: " + name)
+    retained_sources = {path.relative_to(provider / "fyne-source").as_posix()
+                        for path in (provider / "fyne-source").rglob("*") if path.is_file()}
+    require(retained_sources == FYNE_SOURCE_NAMES, "Missing or extra retained Fyne source")
+    if retain:
+        (provider / "LICENSE-Fyne").write_bytes(entries["LICENSE"])
+    require((provider / "LICENSE-Fyne").read_bytes() == entries["LICENSE"], "Retained Fyne license changed")
+    return {"revision": pin["revision"], "tree": pin["tree"], "tagObject": pin["tagObject"],
+            "path": expected["path"], "version": expected["version"], "sum": expected["sum"],
+            "goModSum": expected["goModSum"], "zipSHA256": digest(provider / "module.zip"),
+            "modSHA256": digest(provider / "module.mod"), "infoSHA256": digest(provider / "module.info"),
+            "downloadMetadataHash": digest(provider / "module-download.json"),
+            "tagHash": digest(provider / "fyne-tag.txt"), "commitHash": digest(provider / "fyne-commit.txt"),
+            "sourceHashes": pin["sourceHashes"], "moduleFiles": len(entries),
+            "selection": "Published versioned production replacement; no temporary Fyne replacement"}
+
+
 def module_context(repository, provider, parse_module=module_json):
-    original, temporary = parse_module(repository / "native/go.mod"), parse_module(provider / "provider.mod")
-    replacement = str(provider.parents[1] / "fyne-text-hook")
-    expected = copy.deepcopy(original)
-    replacements = expected.get("Replace")
-    require(isinstance(replacements, list), "The production module must retain its explicit Fyne dependency")
-    selected = [item for item in replacements if item.get("Old", {}).get("Path") == "fyne.io/fyne/v2"]
-    require(len(selected) == 1, "The production module must have one Fyne replacement")
-    selected[0]["New"] = {"Path": replacement}
-    require(canonical(temporary) == canonical(expected), "Temporary module changed more than the Fyne source replacement")
-    require((provider / "provider.sum").read_bytes() == (repository / "native/go.sum").read_bytes(),
-            "Temporary module sums differ from the unchanged production sums")
+    original = parse_module(repository / "native/go.mod")
+    require((provider / "provider.mod").read_bytes() == (repository / "native/go.mod").read_bytes()
+            and (provider / "provider.sum").read_bytes() == (repository / "native/go.sum").read_bytes(),
+            "Production module files changed during the hosted provider build")
+    pin = public_pin(repository)
+    expected = pin["module"]
+    replacements = original.get("Replace", [])
+    selected = [item for item in replacements if item.get("Old", {}).get("Path") == expected["canonicalPath"]]
+    require(len(selected) == 1 and selected[0].get("New") == {"Path": expected["path"], "Version": expected["version"]},
+            "Production Fyne replacement is not the pinned public release")
     modules = selected_modules(provider / "selected-modules.json")
-    selected = [item for item in modules if item.get("Path") == "fyne.io/fyne/v2"]
-    require(len(selected) == 1 and selected[0].get("Replace", {}).get("Dir") == replacement
-            and selected[0]["Replace"].get("Path") == replacement
-            and not selected[0]["Replace"].get("Version"), "The selected graph did not use the exact local Fyne source")
+    require(len({item.get("Path") for item in modules}) == len(modules), "Duplicate selected module")
+    require(all(item.get("Replace", {}).get("Version") for item in modules if item.get("Replace")),
+            "Local module replacement is forbidden in the hosted provider build")
+    selected = [item for item in modules if item.get("Path") == expected["canonicalPath"]]
+    download = read(provider / "module-download.json")
+    replacement = selected[0].get("Replace", {}) if len(selected) == 1 else {}
+    require(len(selected) == 1 and selected[0].get("Version") == expected["canonicalVersion"]
+            and not replacement.get("Replace") and replacement.get("Path") == expected["path"]
+            and replacement.get("Version") == expected["version"] and replacement.get("Sum") == expected["sum"]
+            and replacement.get("GoModSum") == expected["goModSum"]
+            and replacement.get("Dir") == download.get("Dir") and selected[0].get("Dir") == download.get("Dir"),
+            "Selected provider graph differs from the actual published Fyne download")
+    sums = (repository / "native/go.sum").read_text().splitlines()
+    require(all(expected["path"] + " " + expected["version"] + suffix + " " + expected[key] in sums
+                for key, suffix in [("sum", ""), ("goModSum", "/go.mod")]), "Missing pinned production Fyne checksums")
     return {"productionGoModHash": digest(repository / "native/go.mod"),
             "productionGoSumHash": digest(repository / "native/go.sum"),
-            "temporaryGoModHash": digest(provider / "provider.mod"),
-            "temporaryGoSumHash": digest(provider / "provider.sum"),
+            "retainedGoModHash": digest(provider / "provider.mod"), "retainedGoSumHash": digest(provider / "provider.sum"),
             "selectedModulesHash": digest(provider / "selected-modules.json"),
-            "fyneReplacementPath": replacement, "temporaryFyneReplacementOnly": True,
-            "productionDependencyChanged": False}
+            "publicModule": public_module(repository, provider), "usesPublishedProductionModule": True,
+            "temporaryFyneReplacement": False, "productionDependencyChangedDuringBuild": False}
 
 
 def make_provider_build(repository, provider, parse_module=module_json, observe_binary=binary_build_info):
@@ -127,6 +287,7 @@ def make_provider_build(repository, provider, parse_module=module_json, observe_
     observed, recorded = observe_binary(binary), info.read_bytes()
     require(normalized_build_info(observed) == normalized_build_info(recorded),
             "Retained build information differs from the actual retained test binary")
+    verify_binary_module(observed, public_pin(repository))
     return {"schema": 1, "diagnosticOnly": True, "pixelPerfectVerified": False,
             "sources": provider_sources(repository),
             "binary": {"name": binary.name, "sha256": digest(binary)},
@@ -157,6 +318,14 @@ def contract_self_test():
     """Hosted negative controls; these exercise validation without running Go."""
     with tempfile.TemporaryDirectory(prefix="fontations-contract-") as directory:
         root = pathlib.Path(directory)
+        numbers = root / "numbers.json"
+        numbers.write_text('{"negative":-0,"decimalNegative":-0.0,"positive":0,"one":1,"boolean":true}')
+        values = read(numbers)
+        require(same_float(values["negative"], values["decimalNegative"])
+                and not same_float(values["negative"], values["positive"])
+                and type(values["positive"]) is int and type(values["one"]) is int
+                and not same_float(values["boolean"], values["one"]),
+                "JSON must preserve floating negative zero without weakening integer or boolean checks")
         repository, provider = root / "repository", root / "work/evidence/fyne"
         source_names = ["native/go.mod", "native/go.sum", "native/backend.go",
                         "ci/text-engine-probe/compare-fyne.py", "ci/text-engine-probe/test-fyne-remote.sh",
@@ -173,14 +342,55 @@ def contract_self_test():
         for name, content in {"provider.mod": b"temporary module\n", "provider.sum": b"native/go.sum\n",
                               "fontations.test": b"retained ELF fixture", "test-build-info.txt": b"/build/fontations.test: go1.27.2\n\tpath\texample.test\n"}.items():
             (provider / name).write_bytes(content)
-        replacement = str(provider.parents[1] / "fyne-text-hook")
-        original = {"Module": {"Path": "example/native"}, "Replace": [{"Old": {"Path": "fyne.io/fyne/v2"},
-                     "New": {"Path": "example/fyne", "Version": "v1.0.0"}}]}
-        temporary = copy.deepcopy(original)
-        temporary["Replace"][0]["New"] = {"Path": replacement}
-        (provider / "selected-modules.json").write_text(json.dumps({"Path": "fyne.io/fyne/v2", "Replace": {"Path": replacement, "Dir": replacement}}))
-        parse = lambda path: original if path == repository / "native/go.mod" else temporary
-        observe = lambda _: b"/extract/fontations.test: go1.27.2\n\tpath\texample.test\n"
+        entries = {name: (name + "\n").encode() for name in FYNE_SOURCE_NAMES}
+        module = {"path": "github.com/thinkddr/fyne/v2", "canonicalPath": "fyne.io/fyne/v2",
+                  "canonicalVersion": "v2.8.1", "version": "v2.8.1-sytue.19"}
+        prefix = module["path"] + "@" + module["version"] + "/"
+        cache = root / "cache/module"
+        for name, content in entries.items():
+            path = cache / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        archive = root / "cache/module.zip"
+        with zipfile.ZipFile(archive, "w") as target:
+            for name, content in entries.items():
+                target.writestr(prefix + name, content)
+        mod, info = root / "cache/module.mod", root / "cache/module.info"
+        mod.write_bytes(entries["go.mod"])
+        module.update(sum=hash1([(prefix + name, content) for name, content in entries.items()]),
+                      goModSum=hash1([("go.mod", entries["go.mod"])]), zipSHA256=digest(archive))
+        commit = b"tree " + b"1" * 40 + b"\nauthor Fyne contributors <contributors@fyne.invalid> 1 +0000\ncommitter Fyne contributors <contributors@fyne.invalid> 1 +0000\n\nFixture\n"
+        revision = git_object("commit", commit)
+        tag = ("object " + revision + "\ntype commit\ntag " + module["version"]
+               + "\ntagger Fyne contributors <contributors@fyne.invalid> 1 +0000\n\nFixture\n").encode()
+        pin = {"schema": 1, "repository": "https://github.com/thinkddr/fyne.git", "revision": revision,
+               "tree": "1" * 40, "tagObject": git_object("tag", tag), "module": module,
+               "sourceHashes": {name: hashlib.sha256(content).hexdigest() for name, content in entries.items()}}
+        (repository / "ci/text-engine-probe/fyne-hook-pin.json").write_text(json.dumps(pin))
+        (provider / "fyne-commit.txt").write_bytes(commit)
+        (provider / "fyne-tag.txt").write_bytes(tag)
+        info.write_text(json.dumps({"Version": module["version"], "Origin": {"VCS": "git",
+            "URL": "https://github.com/thinkddr/fyne", "Hash": revision, "Ref": "refs/tags/" + module["version"]}}))
+        download = {"Path": module["path"], "Version": module["version"], "Dir": str(cache), "Zip": str(archive),
+                    "GoMod": str(mod), "Info": str(info), "Sum": module["sum"], "GoModSum": module["goModSum"]}
+        (provider / "module-download.json").write_text(json.dumps(download))
+        public_module(repository, provider, retain=True)
+        original = {"Module": {"Path": "example/native"}, "Replace": [{"Old": {"Path": module["canonicalPath"]},
+                     "New": {"Path": module["path"], "Version": module["version"]}}]}
+        selected = {"Path": module["canonicalPath"], "Version": module["canonicalVersion"], "Dir": str(cache),
+                    "Replace": {"Path": module["path"], "Version": module["version"], "Dir": str(cache),
+                                "Sum": module["sum"], "GoModSum": module["goModSum"]}}
+        (provider / "selected-modules.json").write_text(json.dumps(selected))
+        (repository / "native/go.sum").write_text("\n".join(module["path"] + " " + module["version"] + suffix
+             + " " + module[key] for key, suffix in [("sum", ""), ("goModSum", "/go.mod")]) + "\n")
+        for suffix in ["mod", "sum"]:
+            shutil.copyfile(repository / ("native/go." + suffix), provider / ("provider." + suffix))
+        parse = lambda _: original
+        binary_info = ("/build/fontations.test: go1.27.2\n\tpath\texample.test\n\tdep\t"
+                       + module["canonicalPath"] + "\t" + module["canonicalVersion"] + "\n\t=>\t"
+                       + module["path"] + "\t" + module["version"] + "\t" + module["sum"] + "\n").encode()
+        (provider / "test-build-info.txt").write_bytes(binary_info)
+        observe = lambda _: binary_info.replace(b"/build/", b"/extract/")
         record = make_provider_build(repository, provider, parse, observe)
         build_path = provider / "provider-build.json"
         build_path.write_text(json.dumps(record))
@@ -219,8 +429,37 @@ def contract_self_test():
         build_path.write_text(json.dumps(altered))
         rejected(lambda: validate_provider_build(repository, provider, parse, observe), "boolean schema alias")
         build_path.write_text(json.dumps(record))
-        temporary["Require"] = [{"Path": "unexpected/dependency", "Version": "v1.0.0"}]
-        rejected(lambda: make_provider_build(repository, provider, parse, observe), "extra temporary dependency")
+        for key, value in [("Version", "v2.8.1-sytue.18"), ("Version", None), ("Path", "/local/fyne"),
+                           ("Sum", "h1:" + "0" * 43 + "=")]:
+            altered = copy.deepcopy(selected)
+            altered["Replace"][key] = value
+            (provider / "selected-modules.json").write_text(json.dumps(altered))
+            rejected(lambda: make_provider_build(repository, provider, parse, observe), "selected " + key)
+        (provider / "selected-modules.json").write_text(json.dumps(selected))
+        original["Replace"][0]["New"]["Version"] = "v2.8.1-sytue.18"
+        rejected(lambda: make_provider_build(repository, provider, parse, observe), "stale production release")
+        original["Replace"][0]["New"]["Version"] = module["version"]
+        for path in [provider / "fyne-tag.txt", provider / "fyne-commit.txt", provider / "module.zip",
+                     provider / "fyne-source/canvas/text.go", cache / "canvas/text.go"]:
+            before = path.read_bytes()
+            path.write_bytes(before + b"changed\n")
+            rejected(lambda: make_provider_build(repository, provider, parse, observe), str(path))
+            path.write_bytes(before)
+        for path in [cache / "extra.go", provider / "fyne-source/extra.go"]:
+            path.write_text("package injected\n")
+            rejected(lambda: make_provider_build(repository, provider, parse, observe), "extra Fyne source")
+            path.unlink()
+        altered = {**download, "Sum": "h1:" + "0" * 43 + "="}
+        (provider / "module-download.json").write_text(json.dumps(altered))
+        rejected(lambda: make_provider_build(repository, provider, parse, observe), "incorrect download sum")
+        (provider / "module-download.json").write_text(json.dumps(download))
+        for before, after in [(module["version"], "v2.8.1-sytue.18"),
+                              (module["path"], "/local/fyne"), (module["sum"], "h1:" + "0" * 43 + "=")]:
+            replayed = binary_info.replace(before.encode(), after.encode())
+            (provider / "test-build-info.txt").write_bytes(replayed)
+            rejected(lambda: make_provider_build(repository, provider, parse, lambda _: replayed),
+                     "resealed binary compiled with stale/local/wrong-sum Fyne")
+        (provider / "test-build-info.txt").write_bytes(binary_info)
         print("Provider provenance negative controls passed")
 
 
@@ -231,6 +470,7 @@ def main():
     parser.add_argument("--comparator", type=pathlib.Path)
     parser.add_argument("--record-sources", action="store_true")
     parser.add_argument("--record-provider-build", action="store_true")
+    parser.add_argument("--retain-public-module", action="store_true")
     parser.add_argument("--verify-provider-build", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
@@ -240,6 +480,9 @@ def main():
         return
     require(args.provider_evidence is not None, "--provider-evidence is required")
     provider = args.provider_evidence.resolve()
+    if args.retain_public_module:
+        public_module(repository, provider, retain=True)
+        return
     if args.record_sources:
         (provider / "provider-sources-before.json").write_text(json.dumps(provider_sources(repository), indent=2) + "\n")
         return
@@ -253,27 +496,7 @@ def main():
         return
     require(args.evidence is not None and args.comparator is not None, "--evidence and --comparator are required")
     root = args.evidence.resolve()
-    pin_path = repository / "ci/text-engine-probe/fyne-hook-pin.json"
-    pin = read(pin_path)
-    source = read(provider / "fyne-source.json")
-    require((provider / "fyne-hook-pin.json").read_bytes() == pin_path.read_bytes()
-            and source.get("revision") == pin["revision"] and source.get("tree") == pin["tree"]
-            and source.get("sourceHashes") == pin["sourceHashes"], "Fyne source is not bound to the current exact fork pin")
-    raw = (provider / "fyne-commit.txt").read_bytes()
-    require(hashlib.sha1(b"commit " + str(len(raw)).encode() + b"\0" + raw).hexdigest() == pin["revision"]
-            and raw.startswith(("tree " + pin["tree"] + "\n").encode())
-            and (provider / "fyne-after-tests.txt").read_text().strip() == pin["revision"],
-            "The actual fork commit/tree changed across the hosted provider build")
-    require(digest(provider / "LICENSE-Fyne") == pin["sourceHashes"]["LICENSE"], "Fyne notice changed")
-    modules, text = [], (provider / "selected-modules.json").read_text()
-    decoder = json.JSONDecoder()
-    while text.strip():
-        module, used = decoder.raw_decode(text.lstrip())
-        modules.append(module)
-        text = text.lstrip()[used:]
-    selected = [module for module in modules if module.get("Path") == "fyne.io/fyne/v2"]
-    require(len(selected) == 1 and selected[0].get("Replace", {}).get("Dir")
-            == str(provider.parents[1] / "fyne-text-hook"), "Provider did not select the verified local fork source")
+    pin = public_pin(repository)
     native, browser, fyne = [read(root / name) for name in
                              ["native/native-text.json", "browser/browser-text.json", "fyne/fyne-text.json"]]
     validate_provider_report(fyne, record, record_hash)

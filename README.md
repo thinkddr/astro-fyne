@@ -125,13 +125,13 @@ and refuses to overwrite files it does not own.
 ## Use widgets, themes and fonts
 
 The runtime and desktop demo pin the public [Sytue Fyne fork](https://github.com/thinkddr/fyne)
-at `v2.8.1-sytue.18`, including its pixel-position rounding, Entry scroll fixes,
-bounded software image sampler and synchronized cache expiry.
+at `v2.8.1-sytue.19`, including its pixel-position rounding, Entry scroll fixes,
+bounded software image sampler, synchronized cache expiry and opt-in software shaped-text API.
 Imports remain `fyne.io/fyne/v2`. Go replacements do not propagate to a host module;
 apply the same replacement in your application's `go.mod`:
 
 ```sh
-go mod edit -replace=fyne.io/fyne/v2=github.com/thinkddr/fyne/v2@v2.8.1-sytue.18
+go mod edit -replace=fyne.io/fyne/v2=github.com/thinkddr/fyne/v2@v2.8.1-sytue.19
 go mod tidy
 ```
 

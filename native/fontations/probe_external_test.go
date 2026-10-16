@@ -96,11 +96,12 @@ type probeBuildRecord struct {
 	ModuleContext struct {
 		ProductionGoModHash          string `json:"productionGoModHash"`
 		ProductionGoSumHash          string `json:"productionGoSumHash"`
-		TemporaryGoModHash           string `json:"temporaryGoModHash"`
-		TemporaryGoSumHash           string `json:"temporaryGoSumHash"`
+		RetainedGoModHash            string `json:"retainedGoModHash"`
+		RetainedGoSumHash            string `json:"retainedGoSumHash"`
 		SelectedModulesHash          string `json:"selectedModulesHash"`
-		TemporaryFyneReplacementOnly bool   `json:"temporaryFyneReplacementOnly"`
-		ProductionDependencyChanged  bool   `json:"productionDependencyChanged"`
+		UsesPublishedModule          bool   `json:"usesPublishedProductionModule"`
+		TemporaryFyneReplacement     bool   `json:"temporaryFyneReplacement"`
+		DependencyChangedDuringBuild bool   `json:"productionDependencyChangedDuringBuild"`
 	} `json:"moduleContext"`
 }
 
@@ -157,8 +158,8 @@ func probeProviderBuild(t *testing.T, root string) (json.RawMessage, string, str
 	probeJSON(t, data, &record)
 	if record.Schema != 1 || !record.DiagnosticOnly || record.PixelPerfectVerified ||
 		!reflect.DeepEqual(record.Sources, probeSources(t, root)) || record.Binary.Name != "fontations.test" ||
-		record.BuildInfo.Name != "test-build-info.txt" || !record.ModuleContext.TemporaryFyneReplacementOnly ||
-		record.ModuleContext.ProductionDependencyChanged {
+		record.BuildInfo.Name != "test-build-info.txt" || !record.ModuleContext.UsesPublishedModule ||
+		record.ModuleContext.TemporaryFyneReplacement || record.ModuleContext.DependencyChangedDuringBuild {
 		t.Fatal("provider source/build record differs from the current source and bounded module selection")
 	}
 	provider := filepath.Dir(path)
@@ -182,8 +183,8 @@ func probeProviderBuild(t *testing.T, root string) (json.RawMessage, string, str
 	for name, expected := range map[string]string{
 		filepath.Join(root, "native/go.mod"):             record.ModuleContext.ProductionGoModHash,
 		filepath.Join(root, "native/go.sum"):             record.ModuleContext.ProductionGoSumHash,
-		filepath.Join(provider, "provider.mod"):          record.ModuleContext.TemporaryGoModHash,
-		filepath.Join(provider, "provider.sum"):          record.ModuleContext.TemporaryGoSumHash,
+		filepath.Join(provider, "provider.mod"):          record.ModuleContext.RetainedGoModHash,
+		filepath.Join(provider, "provider.sum"):          record.ModuleContext.RetainedGoSumHash,
 		filepath.Join(provider, "selected-modules.json"): record.ModuleContext.SelectedModulesHash,
 	} {
 		if probeHash(probeRead(t, name)) != expected {

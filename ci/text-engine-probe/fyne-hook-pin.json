@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "repository": "https://github.com/thinkddr/fyne.git",
-  "revision": "eb30b4793d6eb857ae080acaa24d80a4c4ea6c19",
-  "tree": "091ced3dd42a99d24e85ab7dc128a970d5c2850b",
+  "revision": "0c112c82aa06be463d4336ce36cda45e587fdd84",
+  "tree": "4f13dbff0f278e6277be2f55566e09f64e1310b0",
   "sourceHashes": {
     "canvas/text.go": "dcd4faab6c60d46800839ae3a7abbc9e4c6ff7d746946a8e74cb810c0900ccf2",
     "canvas/text_layout.go": "9ba62630b439e32f6fa662b5afded313c61b8c62d5e09aac47ad09ee67003d52",
@@ -17,5 +17,15 @@
     "go.sum": "b5d064af9a8db390669531e9be8245dde7e10799aaa0399051aa9e6808a488a6",
     "LICENSE": "68a1eafb90581708e62e1d269e7f6e92e6b0b5cdae93f45ede832d42912c7014"
   },
-  "scope": "Reviewed software TextLayout API source; no published .19 module, browser/editor/inverse/GPU or universal claim"
+  "scope": "Published .19 software TextLayout API source and module identity; provider rendering remains subject to hosted strict comparisons; no generated-widget/editor/inverse/GPU or universal claim",
+  "tagObject": "cb980fdc239c4b024961a5d0e98def9399e3b584",
+  "module": {
+    "canonicalPath": "fyne.io/fyne/v2",
+    "canonicalVersion": "v2.8.1",
+    "path": "github.com/thinkddr/fyne/v2",
+    "version": "v2.8.1-sytue.19",
+    "sum": "h1:Vex+6Gs3jNl3saiQKnKVe4Xh5896aIUnkOUzcKNzJKs=",
+    "goModSum": "h1:kpeuFrClm0fiAgJYr2soTfwKMT5rzNcSKzmgGjxvHOY=",
+    "zipSHA256": "898fcc7453e14cfbe412571914b2cce16934163d0bac0f5099cd7d119e69989c"
+  }
 }
