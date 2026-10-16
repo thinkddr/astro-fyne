@@ -6,7 +6,8 @@ This diagnostic builds a native Fontations, HarfBuzz, Skia and OTS pipeline and
 compares it with the original Astro typography page. The verified N32 run matches
 both complete original browser frames at zero RGBA tolerance.
 Existing fonts, fixtures, browser settings and reference pixels are unchanged.
-Fyne widget, editor, reverse-conversion and GPU integration remain pending.
+The optional Fyne provider also matches those frames. Broader widget, editor,
+reverse-conversion and GPU parity remain unverified.
 
 The canonical C ABI source and header live in
 [`native/fontations/cabi`](../../native/fontations/cabi/), inside the native Go
@@ -48,6 +49,36 @@ scales, scripts or fonts fail visibly. Empty lines retain native metrics without
 painting pixels. These development checks do not establish generated-widget,
 editor, reverse-conversion or GPU parity; see the package documentation for its
 current limits.
+
+The workflow also exercises the unchanged `ResponsiveControls` source with this
+backend. It generates the widget, captures the original browser page, and runs
+the same 21 pointer, typing, focus, resize and commit actions through a separate
+native test binary. All 22 complete frames use zero RGBA tolerance. Geometry,
+object identity and behavior checks remain mandatory. The default backend's
+existing diagnostics are retained independently.
+
+`test-controls-remote.sh` runs the generated-controls test from its package
+directory. `compare-controls.py` binds the actual race-enabled test binary,
+published Fyne module, generated and handwritten sources, original fixture,
+scenario, font, policy and engine library. Its sidecar records all ten actual
+native text layouts in every frame. Each capture retains its raw strict result,
+stderr and diff, including failures. These checks cover only the original DPR 1
+scenario and do not certify general editing or universal conversion.
+
+After the unchanged 22-frame browser collector, an additional hosted Linux
+observer captures the original page in three baseline states at DPR 1 and 2:
+initial, pointer focus in the input, and a pointer click on Commit. Separate
+uninstrumented and CDP-observed passes retain their complete PNGs and strict
+comparison results, including any observation or caret-timing differences. The
+observer records the genuine UA editor's computed style, boxes, text quads and
+used font, plus author layout, paint order and compositor-layer observations.
+It retains 19 verified Chromium source/protocol files and their license. Public
+CDP does not expose the editor's alphabetic baseline or effective glyph mask;
+those fields remain unobserved. None of these supplemental measurements feeds
+native layout or replaces an original reference. Decoder tests, the observer and
+the original native controls helper run independently; their exit codes and
+dedicated observer stdout/stderr are retained, and any nonzero phase fails the
+job after the original native helper has run.
 
 The workflow is `.github/workflows/native-fontations-text.yml`. It runs on pushes
 and pull requests affecting its source, inputs or comparator, and supports manual
@@ -429,3 +460,35 @@ Compilation and this diagnostic never establish widget parity.
 Before treating browser policy as reproduced, complete
 the instrumentation or explicitly retain the independent-policy qualification.
 These are technical completeness conditions, not human approval locks.
+
+## Supplemental controls layer tracing
+
+`capture/responsive-controls-layer-trace.ts` runs after the existing uninstrumented
+and observed controls diagnostic. Those sources, three pointer states at DPR 1/2,
+14 comparisons and the original 22-frame collector/gate remain unchanged. The new
+pass records a fresh LayerTree-observed control and then a traced sequence in the
+same browser. Thirty strict full-frame comparisons cover control/traced output,
+per-state observation perturbation and both prior diagnostic passes. Any changed
+pixel, malformed/missing comparison or diagnostic failure remains fatal; all slots
+are attempted before returning. The native controls helper still runs independently.
+
+The trace uses existing `cc`, metadata and DevTools timeline/layer categories.
+It retains bounded raw CDP packets, exact start/completion/buffer receipts, real
+pointer focus/author state, frame tokens, renderer PIDs and clock-sync markers.
+Source-shaped decoding reports live layer IDs, `contents_opaque`, current
+`lcd_text_disallowed_reason`, property-tree indices and raster transforms. Trace
+matrices are row-major; CDP LayerTree matrices are column-major. The optional CDP
+tree may remain unreported. Its absence does not establish absence of layers.
+
+Clock-window joins retain candidate source-frame numbers and raster tasks; they
+do not identify the exact tree used by the screenshot swap. Cached tile LCD flags,
+actual glyph masks, surface pixel geometry/color/alpha, gamma/contrast and per-text
+layer membership remain unobserved. There is no effective-policy or widget-parity
+claim. No snapshot replay, debug rendering flag, policy override or fitted placement
+is used. Tracing is stopped in cleanup; loss, overflow or missing required joins
+diagnose incomplete evidence rather than becoming a successful empty result.
+
+`controls-layer-trace-source-pin.json` binds official Chromium
+`971a7443b0c9b0a9b2860529b33331b76077ec62` protocol/implementation bytes and its
+DEPS-pinned Perfetto clock-marker macro. Hosted evidence includes their unchanged
+source notices and both licenses. New collector/decoder code remains Apache-2.0.

@@ -13,10 +13,9 @@ on:
       - primitive-conformance.json
       - tsconfig.json
       - typography-probe.json
-      - native/visual/**
-      - native/fontations/**
-      - native/go.mod
-      - native/go.sum
+      - responsive-controls.json
+      - responsive-controls-scenario.json
+      - native/**
       - package.json
       - bun.lock
   pull_request:
@@ -31,10 +30,9 @@ on:
       - primitive-conformance.json
       - tsconfig.json
       - typography-probe.json
-      - native/visual/**
-      - native/fontations/**
-      - native/go.mod
-      - native/go.sum
+      - responsive-controls.json
+      - responsive-controls-scenario.json
+      - native/**
       - package.json
       - bun.lock
   workflow_dispatch:
@@ -58,12 +56,12 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
-      - name: Check optional native adapter source formatting before building
+      - name: Check native source formatting before building
         run: |
-          task_unformatted="$(gofmt -l native/fontations)"
+          task_unformatted="$(gofmt -l native)"
           if [ -n "$task_unformatted" ]; then
             mkdir -p artifacts/native-fontations-text
-            gofmt -d native/fontations > artifacts/native-fontations-text/adapter-format.diff
+            gofmt -d native > artifacts/native-fontations-text/adapter-format.diff
             cat artifacts/native-fontations-text/adapter-format.diff
             exit 1
           fi
@@ -110,6 +108,9 @@ jobs:
           python3 ci/text-engine-probe/observe-fontconfig.py --out "$task_evidence/fontconfig" \
             --sources "$RUNNER_TEMP/native-text/sources.json" \
             --request-policy ci/text-engine-probe/policy.json
+          bun src/cli.ts generate --config responsive-controls.json
+          bun src/cli.ts check --config responsive-controls.json
+          export ASTRO_FYNE_RESPONSIVE_CONTROLS_SOURCE_HASH="$(bun -e 'console.log((await Bun.file("native/generated/responsive_controls.gen.report.json").json()).sourceHash)')"
           bun run build:web
           bunx --no-install astro preview --ignore-lock --root example --host 127.0.0.1 --port 4321 > "$task_evidence/preview.log" 2>&1 &
           task_preview=$!
@@ -130,6 +131,51 @@ jobs:
           python3 ci/text-engine-probe/compare.py --evidence "$task_evidence" --comparator "$RUNNER_TEMP/native-text/compare"
           python3 ci/text-engine-probe/compare-fyne.py --evidence "$task_evidence" \
             --provider-evidence "$RUNNER_TEMP/native-text/evidence/fyne" --comparator "$RUNNER_TEMP/native-text/compare"
+          bun capture/responsive-controls.ts --url http://127.0.0.1:4321/responsive-controls \
+            --out "$task_evidence/controls" --report native/generated/responsive_controls.gen.report.json
+          task_diagnostic="$task_evidence/controls-diagnostic"
+          mkdir -p "$task_diagnostic"
+          task_decoder_status=0
+          bun test src/controls-diagnostic-contract.test.ts \
+            > "$task_diagnostic/decoder.stdout.log" 2> "$task_diagnostic/decoder.stderr.log" || task_decoder_status=$?
+          printf '%s\n' "$task_decoder_status" > "$task_diagnostic/decoder-exit-code.txt"
+          task_diagnostic_status=0
+          bun capture/responsive-controls-diagnostic.ts \
+            --url http://127.0.0.1:4321/responsive-controls \
+            --out "$task_diagnostic" \
+            --report native/generated/responsive_controls.gen.report.json \
+            --reference "$task_evidence/controls" \
+            --comparator "$RUNNER_TEMP/native-text/compare" \
+            > "$task_diagnostic/capture.stdout.log" 2> "$task_diagnostic/capture.stderr.log" || task_diagnostic_status=$?
+          printf '%s\n' "$task_diagnostic_status" > "$task_diagnostic/capture-exit-code.txt"
+          task_trace="$task_evidence/controls-layer-trace"
+          mkdir -p "$task_trace"
+          task_trace_decoder_status=0
+          bun test src/controls-layer-trace-contract.test.ts \
+            > "$task_trace/decoder.stdout.log" 2> "$task_trace/decoder.stderr.log" || task_trace_decoder_status=$?
+          printf '%s\n' "$task_trace_decoder_status" > "$task_trace/decoder-exit-code.txt"
+          task_trace_capture_status=0
+          bun capture/responsive-controls-layer-trace.ts \
+            --url http://127.0.0.1:4321/responsive-controls \
+            --out "$task_trace" \
+            --report native/generated/responsive_controls.gen.report.json \
+            --diagnostic "$task_diagnostic" \
+            --comparator "$RUNNER_TEMP/native-text/compare" \
+            > "$task_trace/capture.stdout.log" 2> "$task_trace/capture.stderr.log" || task_trace_capture_status=$?
+          printf '%s\n' "$task_trace_capture_status" > "$task_trace/capture-exit-code.txt"
+          printf '{"schema":1,"decoderTests":%s,"traceCapture":%s}\n' \
+            "$task_trace_decoder_status" "$task_trace_capture_status" > "$task_trace/phase-exit-codes.json"
+          task_native_controls_status=0
+          bash ci/text-engine-probe/test-controls-remote.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/native-text" || task_native_controls_status=$?
+          printf '%s\n' "$task_native_controls_status" > "$task_diagnostic/native-controls-exit-code.txt"
+          printf '{"schema":1,"decoderTests":%s,"diagnosticCapture":%s,"nativeControls":%s}\n' \
+            "$task_decoder_status" "$task_diagnostic_status" "$task_native_controls_status" \
+            > "$task_diagnostic/phase-exit-codes.json"
+          test "$task_decoder_status" -eq 0
+          test "$task_diagnostic_status" -eq 0
+          test "$task_native_controls_status" -eq 0
+          test "$task_trace_decoder_status" -eq 0
+          test "$task_trace_capture_status" -eq 0
       - name: Retain exact failures, native binary, locks and upstream notices
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -146,7 +192,18 @@ jobs:
             ${{ runner.temp }}/native-text/font-policy-source
             ${{ runner.temp }}/native-text/notices
             ci/text-engine-probe
+            capture/controls-diagnostic-contract.ts
+            capture/controls-diagnostic-source-pin.json
+            capture/responsive-controls-diagnostic.ts
+            src/controls-diagnostic-contract.test.ts
+            capture/controls-layer-trace-contract.ts
+            capture/controls-layer-trace-source-pin.json
+            capture/responsive-controls-layer-trace.ts
+            src/controls-layer-trace-contract.test.ts
+            native/generated
             native/fontations
+            responsive-controls.json
+            responsive-controls-scenario.json
             typography-probe.json
             example/src/pages/typography-probe.astro
             example/public/fonts/NotoSans-Regular.ttf
