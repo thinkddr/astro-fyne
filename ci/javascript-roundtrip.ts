@@ -513,7 +513,8 @@ function assertCSSCaseTimeline(
       "css-case-ascii": {
         color: "#456789",
         backgroundColor: "#dce7f2",
-        paddingLeft: "5px",
+        // Frames retain token whitespace; snapshots separately check used pixels.
+        paddingLeft: " 5px",
       },
     };
     for (const frame of nodes)
@@ -1956,6 +1957,24 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
   );
 }
 if (!astro) {
+  assert.equal(
+    nativeResult.cssUsedStyleChecked,
+    true,
+    "Native CSS used style checks did not run",
+  );
+  assert.deepEqual(
+    nativeResult.cssUsedStyleObservations,
+    [
+      "initial",
+      ...scenario.prefix.map((step) => step.id),
+      ...scenario.suffix.map((step) => step.id),
+    ].map((label) => ({
+      label,
+      paddingLeft: 5,
+      background: "#dce7f2",
+    })),
+    "Native actual used CSS differs before or after an action",
+  );
   assert.equal(
     nativeResult.cssCaseIdentityChecked,
     true,
@@ -3497,6 +3516,20 @@ const webResult = JSON.parse(
 );
 if (!astro) {
   assert.equal(
+    restored.cssUsedStyleChecked,
+    true,
+    "Restored native CSS used style checks did not run",
+  );
+  assert.deepEqual(
+    restored.cssUsedStyleObservations,
+    ["initial", ...scenario.follow.map((step) => step.id)].map((label) => ({
+      label,
+      paddingLeft: 5,
+      background: "#dce7f2",
+    })),
+    "Restored native actual used CSS differs before or after an action",
+  );
+  assert.equal(
     restored.cssCaseIdentityChecked,
     true,
     "Restored native CSS case pointer checks did not run",
@@ -3623,6 +3656,10 @@ await writeFile(
               browserElementIdentityChecked: true,
               observations: cssCaseObservations.length,
               identifierObservations: cssIdentifierObservations.length,
+              nativeUsedStyleChecked: true,
+              nativeUsedStyleObservations:
+                nativeResult.cssUsedStyleObservations.length +
+                restored.cssUsedStyleObservations.length,
               explicitSensitiveFlag:
                 "spec-unit-only; pinned Chromium flag disabled",
             },
