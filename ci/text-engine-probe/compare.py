@@ -3,7 +3,7 @@
 # Copyright 2026 Astro Fyne contributors.
 """Strict full-frame evidence for this standalone native experiment only."""
 import argparse, hashlib, json, pathlib, subprocess
-from driver import validate_surface_contract, validate_surface_record
+from driver import compiled_source_hashes, validate_surface_contract, validate_surface_record
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -37,8 +37,7 @@ def main():
     native_frames = frame_scales(native["frames"], "Native")
     contract_path = root / "native/surface-build-contract.json"
     contract = json.loads(contract_path.read_text())
-    current_sources = {name: digest(pathlib.Path(__file__).with_name(name))
-                       for name in ["build.rs", "text_engine.cc", "text_engine.h"]}
+    current_sources = compiled_source_hashes(pathlib.Path(__file__).resolve().parents[2])
     validate_surface_contract(contract, native.get("libraryHash"), current_sources)
     if (native.get("surfaceBuildContractHash") != digest(contract_path)
         or native.get("nativeScalerInternalsObserved") is not False

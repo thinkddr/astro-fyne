@@ -8,7 +8,7 @@ import json
 import pathlib
 
 from driver import (FONT_HASH, POLICY_FIELDS, Glyph, Metrics, Policy, SurfaceMetadata,
-                    digest, fields, png, surface_metadata, validate_surface_contract)
+                    compiled_source_hashes, digest, fields, png, surface_metadata, validate_surface_contract)
 
 
 def require(condition, message):
@@ -41,9 +41,7 @@ def main():
     library_path = args.library.resolve(strict=True)
     library_hash = digest(library_path.read_bytes())
     contract_bytes = args.surface_build_contract.read_bytes()
-    validate_surface_contract(json.loads(contract_bytes), library_hash,
-                              {name: digest((source / name).read_bytes())
-                               for name in ["build.rs", "text_engine.cc", "text_engine.h"]})
+    validate_surface_contract(json.loads(contract_bytes), library_hash, compiled_source_hashes(root))
     library = C.CDLL(str(library_path))
     library.atf_error.restype = C.c_char_p
     library.atf_abi_size.argtypes, library.atf_abi_size.restype = [C.c_uint32], C.c_size_t

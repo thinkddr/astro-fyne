@@ -35,8 +35,10 @@ def main():
     prototype = pathlib.Path(__file__).resolve().parent
     assembly = work / "assembly"
     assembly.mkdir(exist_ok=True)
-    for name in ["Cargo.toml", "Cargo.lock", "build.rs", "text_engine.h", "text_engine.cc", "driver.py", "policy.json", "probe-pin.json"]:
+    for name in ["Cargo.toml", "Cargo.lock", "build.rs", "driver.py", "policy.json", "probe-pin.json"]:
         shutil.copyfile(prototype / name, assembly / name)
+    for name in ["text_engine.h", "text_engine.cc"]:
+        shutil.copyfile(prototype.parents[1] / "native/fontations/cabi" / name, assembly / name)
     source_records = {}
     for name, (url, revision) in PINS.items():
         destination = work / name

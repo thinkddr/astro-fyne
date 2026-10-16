@@ -272,13 +272,16 @@ int atf_copy_glyphs(const atf_run* run, atf_glyph* glyphs, size_t count) {
   if (count == 0) return 1;
   std::copy(run->glyphs.begin(), run->glyphs.end(), glyphs); return 1;
 }
-int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
-              uint32_t width, uint32_t height, uint32_t scale,
-              float line_x_css, float line_y_css, uint32_t foreground_rgb) {
+static int paint_at_offset(const atf_run* run, uint8_t* rgba, size_t length,
+                          uint32_t width, uint32_t height, uint32_t scale,
+                          float line_x_css, float line_y_css, uint32_t foreground_rgb,
+                          int32_t destination_x_px, int32_t destination_y_px) {
   try {
     require(run && rgba && width > 0 && height > 0 && width <= 4096 && height <= 4096 &&
             length == static_cast<size_t>(width) * height * 4 && (scale == 1 || scale == 2) &&
-            std::isfinite(line_x_css) && std::isfinite(line_y_css) && foreground_rgb <= 0xffffff,
+            std::isfinite(line_x_css) && std::isfinite(line_y_css) && foreground_rgb <= 0xffffff &&
+            destination_x_px >= -4096 && destination_x_px <= 4096 &&
+            destination_y_px >= -4096 && destination_y_px <= 4096,
             "Invalid opaque paint destination/origin");
     for (size_t i = 3; i < length; i += 4) require(rgba[i] == 255, "LCD probe requires a truly opaque destination");
     const auto geometry = run->policy.pixel_geometry == 1 ? kRGB_H_SkPixelGeometry :
@@ -292,6 +295,9 @@ int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
     require(surface != nullptr, "Could not allocate native N32 destination");
     auto* canvas = surface->getCanvas();
     require(canvas->writePixels(info, rgba, row_bytes, 0, 0), "Could not convert RGBA input to N32");
+    if (destination_x_px != 0 || destination_y_px != 0) {
+      canvas->translate(-static_cast<float>(destination_x_px), -static_cast<float>(destination_y_px));
+    }
     canvas->scale(static_cast<float>(scale), static_cast<float>(scale));
     SkPaint paint; paint.setColor(0xff000000u | foreground_rgb);
     canvas->drawGlyphs({run->ids.data(), run->ids.size()},
@@ -329,10 +335,17 @@ int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
     return 1;
   } catch (const std::exception& failure) { error = failure.what(); return 0; }
 }
-int atf_paint_snapshot(atf_engine* engine, const atf_glyph* glyphs, size_t count,
-                       float font_css, float line_height_css, const atf_policy* policy,
-                       uint8_t* rgba, size_t length, uint32_t width, uint32_t height,
-                       uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb) {
+int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
+              uint32_t width, uint32_t height, uint32_t scale,
+              float line_x_css, float line_y_css, uint32_t foreground_rgb) {
+  return paint_at_offset(run, rgba, length, width, height, scale,
+                         line_x_css, line_y_css, foreground_rgb, 0, 0);
+}
+static int paint_snapshot_at_offset(atf_engine* engine, const atf_glyph* glyphs, size_t count,
+                                   float font_css, float line_height_css, const atf_policy* policy,
+                                   uint8_t* rgba, size_t length, uint32_t width, uint32_t height,
+                                   uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb,
+                                   int32_t destination_x_px, int32_t destination_y_px) {
   try {
     require(engine && policy && (glyphs || count == 0) && count <= 4096,
             "Invalid glyph snapshot arguments");
@@ -351,8 +364,24 @@ int atf_paint_snapshot(atf_engine* engine, const atf_glyph* glyphs, size_t count
       advance_css += glyph.x_advance_16_16 / 65536.0f;
     }
     set_metrics(run, advance_css, line_height_css);
-    return atf_paint(&run, rgba, length, width, height, scale,
-                     line_x_css, line_y_css, foreground_rgb);
+    return paint_at_offset(&run, rgba, length, width, height, scale,
+                           line_x_css, line_y_css, foreground_rgb, destination_x_px, destination_y_px);
   } catch (const std::exception& failure) { error = failure.what(); return 0; }
+}
+int atf_paint_snapshot(atf_engine* engine, const atf_glyph* glyphs, size_t count,
+                       float font_css, float line_height_css, const atf_policy* policy,
+                       uint8_t* rgba, size_t length, uint32_t width, uint32_t height,
+                       uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb) {
+  return paint_snapshot_at_offset(engine, glyphs, count, font_css, line_height_css, policy,
+                                  rgba, length, width, height, scale, line_x_css, line_y_css, foreground_rgb, 0, 0);
+}
+int atf_paint_snapshot_region(atf_engine* engine, const atf_glyph* glyphs, size_t count,
+                              float font_css, float line_height_css, const atf_policy* policy,
+                              uint8_t* rgba, size_t length, uint32_t width, uint32_t height,
+                              uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb,
+                              int32_t destination_x_px, int32_t destination_y_px) {
+  return paint_snapshot_at_offset(engine, glyphs, count, font_css, line_height_css, policy,
+                                  rgba, length, width, height, scale, line_x_css, line_y_css, foreground_rgb,
+                                  destination_x_px, destination_y_px);
 }
 }
