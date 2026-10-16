@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: Apache-2.0
+name: native-n32-passive-scaler-trace
+on:
+  push:
+    branches: [codex/native-n32-trace]
+    paths:
+      - ci/text-engine-trace/**
+      - .github/workflows/native-fontations-trace.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-n32-trace-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  passive-trace:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: native/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - name: Install native build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y clang llvm ninja-build cmake meson pkg-config libgtest-dev libwoff-dev zlib1g-dev
+      - name: Resolve the unchanged pinned control sources and Cargo lock
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/text-engine-probe/build-remote.sh --resolve --work "$RUNNER_TEMP/native-text-trace"
+      - name: Build control and copied-source trace, require neutrality, retain all browser mismatches
+        run: bash ci/text-engine-trace/run.sh "$RUNNER_TEMP/native-text-trace"
+      - name: Retain all six outcomes, original sources, commands, inventories and notices
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-n32-trace-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: |
+            artifacts/native-scaler-trace
+            ${{ runner.temp }}/native-text-trace/evidence
+            ${{ runner.temp }}/native-text-trace/trace/evidence
+            ${{ runner.temp }}/native-text-trace/trace/assembly/build.rs
+            ${{ runner.temp }}/native-text-trace/trace/assembly/driver.py
+            ${{ runner.temp }}/native-text-trace/trace/assembly/text_engine.cc
+            ${{ runner.temp }}/native-text-trace/trace/assembly/text_engine.h
+            ${{ runner.temp }}/native-text-trace/trace/assembly/Cargo.lock
+            ${{ runner.temp }}/native-text-trace/trace/copied-skia
+            ${{ runner.temp }}/native-text-trace/sources.json
+            ${{ runner.temp }}/native-text-trace/cargo-metadata.json
+            ${{ runner.temp }}/native-text-trace/assembly/Cargo.lock
+            ${{ runner.temp }}/native-text-trace/assembly/build.rs
+            ${{ runner.temp }}/native-text-trace/assembly/driver.py
+            ${{ runner.temp }}/native-text-trace/assembly/text_engine.cc
+            ${{ runner.temp }}/native-text-trace/assembly/text_engine.h
+            ${{ runner.temp }}/native-text-trace/assembly/third_party/rust
+            ${{ runner.temp }}/native-text-trace/chromium-Cargo.lock
+            ${{ runner.temp }}/native-text-trace/font-policy-source
+            ${{ runner.temp }}/native-text-trace/notices
+            ci/text-engine-probe
+            ci/text-engine-trace
+            typography-probe.json
+            example/src/pages/typography-probe.astro
+            example/public/fonts/NotoSans-Regular.ttf
+            example/public/fonts/LICENSE-NotoSans.txt
+          if-no-files-found: warn
