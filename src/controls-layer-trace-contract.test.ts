@@ -111,7 +111,7 @@ function firstLayer(value: ReturnType<typeof fixture>) {
 }
 test("joins real source-shaped layer/frame/clock records without inventing a glyph mask", () => {
   const decoded = decode();
-  expect(decoded.map((state) => state.state)).toEqual(pointerStates);
+  expect(decoded.map((state) => state.state)).toEqual([...pointerStates]);
   expect(decoded[0]!.rendererPID).toBe(99);
   expect(decoded[0]!.latestBeforeCapture!.sourceFrameNumber).toBe(1);
   const layer = decoded[0]!.snapshots[0]!.layers[0]!;
