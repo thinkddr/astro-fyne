@@ -11,12 +11,19 @@
 #include "include/core/SkFontArguments.h"
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkStrikeRef.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkSurfaceProps.h"
 #include "include/ports/SkTypeface_fontations.h"
+#include "src/core/SkDraw.h"
+#include "src/core/SkGlyphRunPainter.h"
+#include "src/core/SkMipmap.h"
+#include "src/core/SkRasterClip.h"
+#include "src/core/SkStrikeSpec.h"
+#include "src/text/GlyphRun.h"
 #include "opentype-sanitiser.h"
 #include "ots-memory-stream.h"
 #include <hb.h>
@@ -162,6 +169,50 @@ hb_bool_t extents(hb_font_t*, void* data, hb_codepoint_t glyph,
     return true;
   } catch (...) { run.invalid_metric = true; return false; }
 }
+
+class RegionMaskPainter final : public skcpu::BitmapDevicePainter {
+public:
+  RegionMaskPainter(const SkPixmap& destination, const SkRasterClip& clip,
+                    const SkMatrix& matrix, const SkSurfaceProps& props,
+                    int32_t x, int32_t y, size_t count)
+    : positions(count), offset_x(x), offset_y(y) {
+    draw.fDst = destination;
+    draw.fCTM = &matrix;
+    draw.fRC = &clip;
+    draw.fProps = &props;
+  }
+
+  void paintMasks(SkZip<const SkGlyph*, SkPoint> accepted,
+                  const SkPaint& paint) const override {
+    const auto source = accepted.get<1>();
+    if (unsupported || source.size() > positions.size()) {
+      unsupported = true;
+      return;
+    }
+    // Skia has already selected the mask and floored its global placement.
+    // Visible integer coordinates remain exact within the bounded region API.
+    for (size_t i = 0; i < source.size(); ++i) {
+      positions[i] = SkPoint::Make(source[i].x() - static_cast<float>(offset_x),
+                                   source[i].y() - static_cast<float>(offset_y));
+    }
+    draw.paintMasks(SkMakeZip(accepted.get<0>(),
+      SkSpan<SkPoint>{positions.data(), source.size()}), paint);
+  }
+
+  void drawBitmap(const SkBitmap&, const SkMatrix&, const SkRect*,
+                  const SkSamplingOptions&, const SkPaint&, sk_sp<SkMipmap>) const override {
+    // Do not throw through the independently compiled Skia call frames.
+    unsupported = true;
+  }
+
+  bool failed() const { return unsupported; }
+
+private:
+  skcpu::Draw draw;
+  mutable std::vector<SkPoint> positions;
+  int32_t offset_x, offset_y;
+  mutable bool unsupported = false;
+};
 }
 
 extern "C" {
@@ -272,13 +323,16 @@ int atf_copy_glyphs(const atf_run* run, atf_glyph* glyphs, size_t count) {
   if (count == 0) return 1;
   std::copy(run->glyphs.begin(), run->glyphs.end(), glyphs); return 1;
 }
-int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
-              uint32_t width, uint32_t height, uint32_t scale,
-              float line_x_css, float line_y_css, uint32_t foreground_rgb) {
+static int paint_at_offset(const atf_run* run, uint8_t* rgba, size_t length,
+                          uint32_t width, uint32_t height, uint32_t scale,
+                          float line_x_css, float line_y_css, uint32_t foreground_rgb,
+                          int32_t destination_x_px, int32_t destination_y_px) {
   try {
     require(run && rgba && width > 0 && height > 0 && width <= 4096 && height <= 4096 &&
             length == static_cast<size_t>(width) * height * 4 && (scale == 1 || scale == 2) &&
-            std::isfinite(line_x_css) && std::isfinite(line_y_css) && foreground_rgb <= 0xffffff,
+            std::isfinite(line_x_css) && std::isfinite(line_y_css) && foreground_rgb <= 0xffffff &&
+            destination_x_px >= -4096 && destination_x_px <= 4096 &&
+            destination_y_px >= -4096 && destination_y_px <= 4096,
             "Invalid opaque paint destination/origin");
     for (size_t i = 3; i < length; i += 4) require(rgba[i] == 255, "LCD probe requires a truly opaque destination");
     const auto geometry = run->policy.pixel_geometry == 1 ? kRGB_H_SkPixelGeometry :
@@ -294,9 +348,31 @@ int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
     require(canvas->writePixels(info, rgba, row_bytes, 0, 0), "Could not convert RGBA input to N32");
     canvas->scale(static_cast<float>(scale), static_cast<float>(scale));
     SkPaint paint; paint.setColor(0xff000000u | foreground_rgb);
-    canvas->drawGlyphs({run->ids.data(), run->ids.size()},
-      {run->positions.data(), run->positions.size()},
-      SkPoint::Make(line_x_css, line_y_css + run->metrics.baseline_css), run->font, paint);
+    if (destination_x_px == 0 && destination_y_px == 0) {
+      canvas->drawGlyphs({run->ids.data(), run->ids.size()},
+        {run->positions.data(), run->positions.size()},
+        SkPoint::Make(line_x_css, line_y_css + run->metrics.baseline_css), run->font, paint);
+    } else if (!run->ids.empty()) {
+      const SkMatrix matrix = SkMatrix::Scale(static_cast<float>(scale), static_cast<float>(scale));
+      const SkPoint origin = SkPoint::Make(line_x_css, line_y_css + run->metrics.baseline_css);
+      SkMatrix position_matrix = matrix;
+      position_matrix.preTranslate(origin.x(), origin.y());
+      require(!SkStrikeSpec::ShouldDrawAsPath(paint, run->font, position_matrix),
+              "Clipped regions do not support path or drawable glyph rendering");
+      surface->notifyContentWillChange(SkSurface::kRetain_ContentChangeMode);
+      SkPixmap pixels;
+      require(surface->peekPixels(&pixels), "Could not access native region pixels");
+      const SkRasterClip clip(SkIRect::MakeWH(static_cast<int>(width), static_cast<int>(height)));
+      RegionMaskPainter destination(pixels, clip, matrix, surface->props(),
+                                    destination_x_px, destination_y_px, run->ids.size());
+      const sktext::GlyphRun glyph_run(run->font,
+        {run->positions.data(), run->positions.size()}, {run->ids.data(), run->ids.size()}, {}, {}, {});
+      sktext::GlyphRunBuilder builder;
+      const auto list = builder.makeGlyphRunList(glyph_run, paint, origin);
+      skcpu::GlyphRunListPainter painter(surface->props(), pixels.colorType(), pixels.colorSpace());
+      painter.drawForBitmapDevice(canvas, &destination, list, paint, matrix);
+      require(!destination.failed(), "Clipped regions do not support bitmap glyph fallback");
+    }
     std::vector<uint8_t> output(length);
     require(surface->readPixels(info, output.data(), row_bytes, 0, 0),
             "Could not convert native N32 output to RGBA");
@@ -329,10 +405,17 @@ int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
     return 1;
   } catch (const std::exception& failure) { error = failure.what(); return 0; }
 }
-int atf_paint_snapshot(atf_engine* engine, const atf_glyph* glyphs, size_t count,
-                       float font_css, float line_height_css, const atf_policy* policy,
-                       uint8_t* rgba, size_t length, uint32_t width, uint32_t height,
-                       uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb) {
+int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
+              uint32_t width, uint32_t height, uint32_t scale,
+              float line_x_css, float line_y_css, uint32_t foreground_rgb) {
+  return paint_at_offset(run, rgba, length, width, height, scale,
+                         line_x_css, line_y_css, foreground_rgb, 0, 0);
+}
+static int paint_snapshot_at_offset(atf_engine* engine, const atf_glyph* glyphs, size_t count,
+                                   float font_css, float line_height_css, const atf_policy* policy,
+                                   uint8_t* rgba, size_t length, uint32_t width, uint32_t height,
+                                   uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb,
+                                   int32_t destination_x_px, int32_t destination_y_px) {
   try {
     require(engine && policy && (glyphs || count == 0) && count <= 4096,
             "Invalid glyph snapshot arguments");
@@ -351,8 +434,24 @@ int atf_paint_snapshot(atf_engine* engine, const atf_glyph* glyphs, size_t count
       advance_css += glyph.x_advance_16_16 / 65536.0f;
     }
     set_metrics(run, advance_css, line_height_css);
-    return atf_paint(&run, rgba, length, width, height, scale,
-                     line_x_css, line_y_css, foreground_rgb);
+    return paint_at_offset(&run, rgba, length, width, height, scale,
+                           line_x_css, line_y_css, foreground_rgb, destination_x_px, destination_y_px);
   } catch (const std::exception& failure) { error = failure.what(); return 0; }
+}
+int atf_paint_snapshot(atf_engine* engine, const atf_glyph* glyphs, size_t count,
+                       float font_css, float line_height_css, const atf_policy* policy,
+                       uint8_t* rgba, size_t length, uint32_t width, uint32_t height,
+                       uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb) {
+  return paint_snapshot_at_offset(engine, glyphs, count, font_css, line_height_css, policy,
+                                  rgba, length, width, height, scale, line_x_css, line_y_css, foreground_rgb, 0, 0);
+}
+int atf_paint_snapshot_region(atf_engine* engine, const atf_glyph* glyphs, size_t count,
+                              float font_css, float line_height_css, const atf_policy* policy,
+                              uint8_t* rgba, size_t length, uint32_t width, uint32_t height,
+                              uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb,
+                              int32_t destination_x_px, int32_t destination_y_px) {
+  return paint_snapshot_at_offset(engine, glyphs, count, font_css, line_height_css, policy,
+                                  rgba, length, width, height, scale, line_x_css, line_y_css, foreground_rgb,
+                                  destination_x_px, destination_y_px);
 }
 }

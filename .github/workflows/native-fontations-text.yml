@@ -14,6 +14,7 @@ on:
       - tsconfig.json
       - typography-probe.json
       - native/visual/**
+      - native/fontations/**
       - native/go.mod
       - native/go.sum
       - package.json
@@ -31,6 +32,7 @@ on:
       - tsconfig.json
       - typography-probe.json
       - native/visual/**
+      - native/fontations/**
       - native/go.mod
       - native/go.sum
       - package.json
@@ -56,6 +58,15 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
+      - name: Check optional native adapter source formatting before building
+        run: |
+          task_unformatted="$(gofmt -l native/fontations)"
+          if [ -n "$task_unformatted" ]; then
+            mkdir -p artifacts/native-fontations-text
+            gofmt -d native/fontations > artifacts/native-fontations-text/adapter-format.diff
+            cat artifacts/native-fontations-text/adapter-format.diff
+            exit 1
+          fi
       - name: Install native build prerequisites
         run: |
           sudo apt-get update
@@ -81,6 +92,14 @@ jobs:
             --library "$RUNNER_TEMP/native-text/evidence/libastro_fyne_text_experiment.so" \
             --surface-build-contract "$RUNNER_TEMP/native-text/evidence/surface-build-contract.json" \
             --out "$RUNNER_TEMP/native-text/evidence/snapshot-transfer"
+      - name: Check clipped native regions without rebasing logical origins
+        run: |
+          python3 ci/text-engine-probe/test_region_transfer.py --source-root "$GITHUB_WORKSPACE" \
+            --library "$RUNNER_TEMP/native-text/evidence/libastro_fyne_text_experiment.so" \
+            --surface-build-contract "$RUNNER_TEMP/native-text/evidence/surface-build-contract.json" \
+            --out "$RUNNER_TEMP/native-text/evidence/region-transfer"
+      - name: Test the optional native provider through real Fyne text primitives
+        run: bash ci/text-engine-probe/test-fyne-remote.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/native-text"
       - name: Capture the unchanged original Astro typography source and paint native glyphs
         run: |
           set -euo pipefail
@@ -109,6 +128,8 @@ jobs:
           (cd native && GOWORK=off GOFLAGS=-mod=readonly GOMAXPROCS=2 go build -p=1 \
             -o "$RUNNER_TEMP/native-text/compare" ./visual/cmd/astro-fyne-compare)
           python3 ci/text-engine-probe/compare.py --evidence "$task_evidence" --comparator "$RUNNER_TEMP/native-text/compare"
+          python3 ci/text-engine-probe/compare-fyne.py --evidence "$task_evidence" \
+            --provider-evidence "$RUNNER_TEMP/native-text/evidence/fyne" --comparator "$RUNNER_TEMP/native-text/compare"
       - name: Retain exact failures, native binary, locks and upstream notices
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -125,6 +146,7 @@ jobs:
             ${{ runner.temp }}/native-text/font-policy-source
             ${{ runner.temp }}/native-text/notices
             ci/text-engine-probe
+            native/fontations
             typography-probe.json
             example/src/pages/typography-probe.astro
             example/public/fonts/NotoSans-Regular.ttf

@@ -8,6 +8,30 @@ both complete original browser frames at zero RGBA tolerance.
 Existing fonts, fixtures, browser settings and reference pixels are unchanged.
 Fyne widget, editor, reverse-conversion and GPU integration remain pending.
 
+The canonical C ABI source and header live in
+[`native/fontations/cabi`](../../native/fontations/cabi/), inside the native Go
+module. The hosted resolver copies those exact files into its build assembly;
+receipts and comparisons bind their current hashes. The copied Chromium BSD
+notice is retained beside the source and in the hosted binary's upstream notices.
+
+The optional development provider in [`native/fontations`](../../native/fontations/)
+connects copied glyph records to real Fyne `canvas.Text` primitives. Its hosted
+checks use the exact public fork commit in `fyne-hook-pin.json` through a temporary
+module replacement; the production module stays unchanged. They require the
+original seven rows to retain their font, metrics, glyphs and line origins, then
+compare both Fyne software captures with Chromium and the standalone renderer at
+zero tolerance. This validation is additional to the existing native gate.
+The provider receives no browser pixels or measurements.
+
+The provider requires an explicit library path, licensed static fonts and policy.
+It is selected with `atf_fontations` on Linux ARM64 with CGo. It validates and packs
+the actual clipped backdrop and commits rows only after native success. Hosts
+own its lifetime and retain font/engine notices. Unsupported nonempty text alpha,
+scales, scripts or fonts fail visibly. Empty lines retain native metrics without
+painting pixels. These development checks do not establish generated-widget,
+editor, reverse-conversion or GPU parity; see the package documentation for its
+current limits.
+
 The workflow is `.github/workflows/native-fontations-text.yml`. It runs on pushes
 and pull requests affecting its source, inputs or comparator, and supports manual
 dispatch. Its timeout is 45 minutes. Run the build
@@ -52,6 +76,32 @@ invalid snapshots to preserve caller bytes, guard bytes and last-success surface
 metadata. The workflow retains original/snapshot PNGs and the actual records in
 `snapshot-transfer/`. This is preparation for native widget integration; it
 does not certify Fyne widgets, editors, inverse conversion or GPU rendering.
+
+### Clipped physical regions
+
+`atf_paint_snapshot_region` paints a contiguous region of the actual opaque
+backdrop. Skia selects masks and rounds their positions using the original global
+matrix and line origin. A native bitmap painter then subtracts the destination's
+integer physical offset from the rounded placements. Subtracting the clip from
+the logical origin, or translating the canvas before glyph positioning, changes
+float32 addition order near half-pixel boundaries. This path leaves Skia's
+positioning arithmetic intact. Destination offsets are bounded to `[-4096,4096]`;
+the existing size, alpha and DPR limits apply.
+
+Nonzero-offset path/drawable rendering and rejected-mask bitmap fallback report
+an error before changing caller bytes. Zero offsets retain the existing full
+surface painter, and empty lines remain no-op surfaces. Bitmap fallback rejection
+is a source guard; the current static Noto fixture does not exercise that fallback.
+
+The hosted region controls partition native full frames at odd physical cuts,
+paint each region after freeing the original run, and require exact crops and
+complete recompositions at DPR 1/2. They include signed fractional coordinates,
+values immediately around half-pixel boundaries, visible negative destination
+offsets, empty regions and atomic failure controls. A real native size-256 run at
+DPR 2 checks explicit path rejection while preserving the zero-offset painter.
+The former origin-subtraction approach is recorded separately as a diagnostic
+and is never used to accept a region. These native transport controls leave the
+original seven-row browser comparison intact.
 
 ## Native N32 surface
 

@@ -69,6 +69,16 @@ def validate_surface_contract(contract, library_hash, current_sources):
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
+def compiled_source_hashes(repository, compiled_directory=None):
+    names = ["build.rs", "text_engine.cc", "text_engine.h"]
+    if compiled_directory is not None:
+        paths = {name: pathlib.Path(compiled_directory) / name for name in names}
+    else:
+        repository = pathlib.Path(repository)
+        paths = {"build.rs": repository / "ci/text-engine-probe/build.rs",
+                 **{name: repository / "native/fontations/cabi" / name for name in names[1:]}}
+    return {name: digest(path.read_bytes()) for name, path in paths.items()}
+
 def png(width, height, rgba):
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
@@ -121,8 +131,7 @@ def main():
     library_path = args.library.resolve(strict=True)
     contract_bytes = args.surface_build_contract.read_bytes()
     contract = json.loads(contract_bytes)
-    current_sources = {name: digest(pathlib.Path(__file__).with_name(name).read_bytes())
-                       for name in ["build.rs", "text_engine.cc", "text_engine.h"]}
+    current_sources = compiled_source_hashes(root)
     validate_surface_contract(contract, digest(library_path.read_bytes()), current_sources)
     expected_receipts = {"skia-commands.txt", "cargo-build.log", "cabi-command.json"}
     if set(contract.get("receiptHashes", {})) != expected_receipts:
