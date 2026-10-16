@@ -147,11 +147,13 @@ func (b FyneBackend) ValidateText(text string, s Style) error {
 }
 
 func validateResponsiveBackend(nodes []Node, backend Backend) error {
-	var walk func([]Node) error
-	walk = func(nodes []Node) error {
+	var walk func([]Node, Style) error
+	walk = func(nodes []Node, inherited Style) error {
 		for _, n := range nodes {
+			// Validate the inherited defaults used by the actual native elements.
+			style := resolveStyle(n, n.Style, inherited, backend, true)
 			if responsiveHasText(n) {
-				if err := backend.Validate(n.Style, true); err != nil {
+				if err := backend.Validate(style, true); err != nil {
 					return fmt.Errorf("webui: %q: %w", n.ID, err)
 				}
 				validator, ok := backend.(TextValidator)
@@ -163,18 +165,18 @@ func validateResponsiveBackend(nodes []Node, backend Backend) error {
 					texts = []string{n.Value, n.Placeholder}
 				}
 				for _, text := range texts {
-					if err := validator.ValidateText(text, n.Style); err != nil {
+					if err := validator.ValidateText(text, style); err != nil {
 						return fmt.Errorf("webui: %q: %w", n.ID, err)
 					}
 				}
 			}
-			if err := walk(n.Children); err != nil {
+			if err := walk(n.Children, style); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	return walk(nodes)
+	return walk(nodes, Style{})
 }
 
 func validateResponsiveLine(backend Backend, style Style, text string, content fyne.Size) error {
