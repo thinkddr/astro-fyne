@@ -21,11 +21,17 @@ click cancellation, disabled behavior and input/change events across continuatio
 styling and measured rendering profiles remain diagnosed; functional state tests do not
 certify their pixels.
 
+The JavaScript DOM adapter also preserves ASCII HTML names, reflected boolean/control
+attributes, dirty editor values, text/checkbox type transitions and textarea child-text
+defaults. These behavior checks do not certify control rendering.
+
 Local CSS side-effect imports now preserve an explicit cascade for the JavaScript mode:
 supported selectors, flat layers, specificity/order/importance, variables and declared
 inheritance are reevaluated after source state changes. Original-browser computed styles
 are compared with native frames. General CSS layout, media/state/font/resource adapters
 and pixel equivalence remain pending.
+Selected custom-property replacements with unsupported token adjacency or unquoted comments
+are diagnosed instead of concatenated into a fabricated native dimension or color.
 
 [Astro entries in the JavaScript engine](docs/astro-javascript.md) now preserve synchronous
 frontmatter lifetime, default/named/forwarded slots, compatible hydrated islands and processed script

@@ -294,6 +294,174 @@ func TestViewSnapshotNeverReevaluatesAndUsesResolvedCurrentFrame(t *testing.T) {
 	}
 }
 
+func TestViewExportRemapsLabelTargetsWithoutChangingTheSourceFrame(t *testing.T) {
+	app(t)
+	builds, calls := 0, 0
+	view := webui.NewView(func() []webui.Node {
+		builds++
+		return []webui.Node{{ID: "panel", Kind: "container", Children: []webui.Node{
+			{ID: "caption", Kind: "text", Text: "Email", LabelFor: "edit", Style: webui.Style{FontFamily: "HostFont"}},
+			{ID: "edit", Kind: "input", Value: "Draft", Style: webui.Style{FontFamily: "HostFont"}, OnChange: func(string) { calls++ }},
+		}}}
+	})
+	place(view, 0, 0, 320, 240)
+	label, edit := view.Object("caption"), view.Object("edit")
+	position, size, before := edit.Position(), edit.Size(), builds
+	opts := options()
+	opts.IDs = map[fyne.CanvasObject]string{label: "contact-label", edit: "contact-email"}
+	opts.IDBindings = map[string]Events{"contact-email": {Input: "contact:edit"}}
+	doc, err := Export(view, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes := content(doc).Children[0].Children
+	if nodes[0].ID != "contact-label" || nodes[0].LabelFor != "contact-email" || nodes[1].ID != "contact-email" || nodes[1].Value != "Draft" || nodes[1].Events == nil || nodes[1].Events.Input != "contact:edit" {
+		t.Fatalf("label target or aliased control contract was lost: %+v", nodes)
+	}
+	snapshot, err := view.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := snapshot.Roots[0].Children
+	if builds != before || calls != 0 || source[0].Node.ID != "caption" || source[0].Node.LabelFor != "edit" || source[1].Node.ID != "edit" || view.Object("edit") != edit || view.Object("contact-email") != nil || edit.Position() != position || edit.Size() != size {
+		t.Fatal("export rebuilt, activated or renamed the native source frame")
+	}
+	again, err := Export(view, opts)
+	if err != nil || !reflect.DeepEqual(doc, again) || builds != before {
+		t.Fatalf("repeated export changed the scene or source: %v", err)
+	}
+}
+
+func TestViewLabelAliasesAreScopedToEachSnapshot(t *testing.T) {
+	app(t)
+	makeView := func(value string) *webui.View {
+		return webui.NewView(func() []webui.Node {
+			return []webui.Node{
+				{ID: "caption", Kind: "text", Text: "Email", LabelFor: "edit", Style: webui.Style{FontFamily: "HostFont"}},
+				{ID: "edit", Kind: "input", Value: value, Style: webui.Style{FontFamily: "HostFont"}},
+			}
+		})
+	}
+	first, second := makeView("First"), makeView("Second")
+	place(first, 0, 0, 160, 240)
+	place(second, 160, 0, 160, 240)
+	root := container.NewWithoutLayout(first, second)
+	place(root, 0, 0, 320, 240)
+	opts := options()
+	opts.IDs = map[fyne.CanvasObject]string{
+		first.Object("caption"): "first-label", first.Object("edit"): "first-email",
+		second.Object("caption"): "second-label", second.Object("edit"): "second-email",
+	}
+	doc, err := Export(root, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	views := content(doc).Children
+	for i, expected := range []struct{ label, edit, value string }{{"first-label", "first-email", "First"}, {"second-label", "second-email", "Second"}} {
+		nodes := views[i].Children
+		if nodes[0].ID != expected.label || nodes[0].LabelFor != expected.edit || nodes[1].ID != expected.edit || nodes[1].Value != expected.value {
+			t.Fatalf("View %d resolved a label through another View: %+v", i, nodes)
+		}
+	}
+	opts.IDs[second.Object("edit")] = "first-email"
+	if _, err := Export(root, opts); err == nil || !strings.Contains(err.Error(), "duplicate ID") {
+		t.Fatalf("cross-View alias collision accepted: %v", err)
+	}
+}
+
+func TestViewLabelAliasesDoNotHideInvalidReferencesOrCollisions(t *testing.T) {
+	app(t)
+	target := "edit"
+	view := webui.NewView(func() []webui.Node {
+		return []webui.Node{
+			{ID: "caption", Kind: "text", Text: "Email", LabelFor: target, Style: webui.Style{FontFamily: "HostFont"}},
+			{ID: "edit", Kind: "input", Style: webui.Style{FontFamily: "HostFont"}},
+		}
+	})
+	place(view, 0, 0, 320, 240)
+	opts := options()
+	opts.IDs = map[fyne.CanvasObject]string{view.Object("caption"): "contact", view.Object("edit"): "contact"}
+	if _, err := Export(view, opts); err == nil || !strings.Contains(err.Error(), "duplicate ID") {
+		t.Fatalf("label/control alias collision accepted: %v", err)
+	}
+	opts.IDs[view.Object("caption")] = "contact-label"
+	opts.IDs[view.Object("edit")] = "contact-email"
+	target = "missing"
+	view.Refresh()
+	if _, err := Export(view, opts); err == nil || !strings.Contains(err.Error(), "labelFor") {
+		t.Fatalf("unresolved source reference was silently repaired: %v", err)
+	}
+}
+
+func TestViewLabelTargetCannotResolveThroughASiblingView(t *testing.T) {
+	app(t)
+	caption := webui.NewView(func() []webui.Node {
+		return []webui.Node{{ID: "caption", Kind: "text", Text: "Email", LabelFor: "edit", Style: webui.Style{FontFamily: "HostFont"}}}
+	})
+	field := webui.NewView(func() []webui.Node {
+		return []webui.Node{{ID: "edit", Kind: "input", Value: "Draft", Style: webui.Style{FontFamily: "HostFont"}}}
+	})
+	place(caption, 0, 0, 160, 240)
+	place(field, 160, 0, 160, 240)
+	root := container.NewWithoutLayout(caption, field)
+	place(root, 0, 0, 320, 240)
+	if _, err := Export(root, options()); err == nil || !strings.Contains(err.Error(), "same View") {
+		t.Fatalf("label acquired an association absent from its native View: %v", err)
+	}
+}
+
+func TestResponsiveViewExportRemapsLabelTargetsAndPreservesDeclarations(t *testing.T) {
+	app(t)
+	leafStyle := func(basis float32, input bool) webui.Style {
+		style := webui.Style{
+			Height: 32, FontFamily: "Fixture", FontWeight: 400, FontStyle: "normal", FontSize: 14, LineHeight: 20,
+			Color: "#112233", Background: "#ffffff", WhiteSpace: "nowrap", TextAlign: "left",
+			Flex: &webui.FlexStyle{Basis: webui.FlexValue(basis), Grow: webui.FlexValue(0), Shrink: webui.FlexValue(0), MinWidth: webui.FlexValue(0), MinHeight: webui.FlexValue(0), HeightSet: true, BoxSizing: "border-box", MarginSet: true},
+		}
+		if input {
+			style.Flex.Appearance, style.Flex.BorderStyle = "none", "solid"
+		}
+		return style
+	}
+	builds := 0
+	backend := webui.FyneBackend{Fonts: map[string]map[webui.Font]fyne.Resource{"Fixture": {{Weight: 400}: theme.DefaultTheme().Font(fyne.TextStyle{})}}}
+	view := webui.NewView(func() []webui.Node {
+		builds++
+		return []webui.Node{{ID: "panel", Kind: "container", Style: webui.Style{Display: "flex", Direction: "row", Height: 240, Background: "#ffffff", Flex: &webui.FlexStyle{WidthSet: true, WidthPercent: webui.FlexValue(100), HeightSet: true, BoxSizing: "border-box"}}, Children: []webui.Node{
+			{ID: "caption", Kind: "text", Text: "Email", LabelFor: "edit", Style: leafStyle(80, false)},
+			{ID: "edit", Kind: "input", Value: "Draft", Style: leafStyle(160, true)},
+		}}}
+	}, backend)
+	c := software.NewCanvas()
+	c.SetPadded(false)
+	c.Resize(fyne.NewSize(320, 240))
+	c.SetContent(view)
+	if err := view.BindCanvas(c); err != nil {
+		t.Fatal(err)
+	}
+	opts := Options{Viewport: Viewport{320, 240, 1}, Canvas: c, PreserveLayout: true, IDs: map[fyne.CanvasObject]string{view.Object("panel"): "contact-panel", view.Object("caption"): "contact-label", view.Object("edit"): "contact-email"}}
+	before := builds
+	doc, err := Export(view, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := doc.Roots[0]
+	if doc.Schema != 2 || doc.Layout != "flex" || root.ID != "contact-panel" || len(root.Children) != 2 || root.Children[0].LabelFor != "contact-email" || root.Children[1].ID != "contact-email" || builds != before {
+		t.Fatalf("responsive aliasing changed declarations or references: %+v", doc)
+	}
+	if root.SourceStyle == nil || root.SourceStyle.Flex == nil || root.SourceStyle.Flex.WidthPercent == nil || *root.SourceStyle.Flex.WidthPercent != 100 {
+		t.Fatal("responsive aliasing lost the source root width declaration")
+	}
+	fieldStyle := root.Children[1].SourceStyle
+	if fieldStyle == nil || fieldStyle.Flex == nil || fieldStyle.Flex.Basis == nil || *fieldStyle.Flex.Basis != 160 {
+		t.Fatal("responsive aliasing lost the source input basis declaration")
+	}
+	snapshot, err := view.Snapshot()
+	if err != nil || snapshot.Roots[0].Children[0].Node.LabelFor != "edit" || view.Object("contact-email") != nil {
+		t.Fatalf("responsive export changed its source IDs: %v", err)
+	}
+}
+
 func TestInvalidViewsAndStaleMeasurementProfilesCannotBeExported(t *testing.T) {
 	app(t)
 	fail := false

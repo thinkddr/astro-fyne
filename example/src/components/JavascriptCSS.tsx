@@ -13,6 +13,9 @@ export function JavascriptCSS() {
       <p id="css-cycle-fallback">Fallback dependency</p>
       <p id="css-cycle-comment">Comment without dependencies</p>
       <p id="css-cycle-function">Function name boundary</p>
+      <p id="css-token-whitespace">Whole values and token lists</p>
+      <p id="css-token-rgb">RGB channel substitution</p>
+      <p id="css-token-fallback">Selected and inactive fallbacks</p>
       <section class="css-cycle-parent">
         <p id="css-cycle-inherited">Inherited computed value</p>
       </section>

@@ -2,6 +2,7 @@
 // Copyright 2026 Astro Fyne contributors.
 
 import { createContext } from "preact";
+import { JavascriptAttributes } from "./JavascriptAttributes";
 import { JavascriptCheckboxes } from "./JavascriptCheckboxes";
 import { JavascriptCSS } from "./JavascriptCSS";
 import { JavascriptEvents } from "./JavascriptEvents";
@@ -112,6 +113,7 @@ export function JavascriptConformance({
       <JavascriptCheckboxes observe={observe} />
       <JavascriptCSS />
       <JavascriptEvents observe={observe} />
+      <JavascriptAttributes />
       <p id="js-count">{count}</p>
       <p id="js-standard">
         {String(

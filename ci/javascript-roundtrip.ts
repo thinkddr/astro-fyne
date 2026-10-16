@@ -95,6 +95,7 @@ const scenario = astro
           "js-events-recursive",
         ),
         ...tap("css-increment", "css-mode", "css-increment", "css-disabled"),
+        ...tap(...Array<string>(6).fill("js-attrs-step")),
         ...tap("js-reorder", "js-a-increment"),
       ],
       follow: [
@@ -113,6 +114,8 @@ const scenario = astro
           "js-events-mutation",
           "js-events-property",
           "js-events-recursive",
+          "js-attrs-step",
+          "js-attrs-step",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -133,12 +136,49 @@ const initial = await bundleJavascript(
   astro ? [] : ["observe"],
 );
 await writeFile(join(evidence, "initial.json"), JSON.stringify(initial));
+const rejectionCSSImport = `import ${JSON.stringify(join(root, "example/src/components/javascript-css.css"))};`;
 for (const [name, source, event, contains] of [
   [
     "css",
     `export default function Page(){return <p style={{position:"absolute"}}>No adapter</p>}`,
     "",
     "CSS property position",
+  ],
+  [
+    "css-token-width",
+    `${rejectionCSSImport}export default function Page(){return <p style={{"--number":"1",width:"var(--number)0px"}}>No fabricated dimension</p>}`,
+    "",
+    "CSS token adjacency",
+  ],
+  [
+    "css-token-unit",
+    `${rejectionCSSImport}export default function Page(){return <p style={{"--number":"12",width:"var(--number)px"}}>No appended unit</p>}`,
+    "",
+    "CSS token adjacency",
+  ],
+  [
+    "css-token-color",
+    `${rejectionCSSImport}export default function Page(){return <p style={{"--hex":"#abc",color:"var(--hex)def"}}>No fabricated color</p>}`,
+    "",
+    "CSS token adjacency",
+  ],
+  [
+    "css-token-inherited-width",
+    `${rejectionCSSImport}export default function Page(){return <section style={{"--number":"1"}}><p style={{width:"var(--number)0px"}}>No inherited token join</p></section>}`,
+    "",
+    "CSS token adjacency",
+  ],
+  [
+    "css-token-fallback-width",
+    `${rejectionCSSImport}export default function Page(){return <p style={{"--number":"1",width:"var(--missing,var(--number)0px)"}}>No fallback token join</p>}`,
+    "",
+    "CSS token adjacency",
+  ],
+  [
+    "css-token-event-width",
+    `${rejectionCSSImport}import {useState} from "preact/hooks";export default function Page(){const[bad,setBad]=useState(false);return <button id="bad" style={{"--number":"1",width:bad?"var(--number)0px":"12px"}} onClick={()=>setBad(true)}>No later token join</button>}`,
+    "bad",
+    "CSS token adjacency",
   ],
   [
     "checkbox-style",
@@ -242,9 +282,12 @@ const frameValues = (frames: JavascriptFrame[]) => {
     for (const frame of frames) {
       if (frame.attrs?.id)
         values[frame.attrs.id] =
-          frame.tag === "input" && frame.attrs?.type === "checkbox"
+          frame.tag === "input" &&
+          (frame.attrs.type ?? "text").replace(/[A-Z]/g, (c) =>
+            c.toLowerCase(),
+          ) === "checkbox"
             ? String(frame.checked)
-            : frame.tag === "input"
+            : frame.tag === "input" || frame.tag === "textarea"
               ? (frame.value ?? "")
               : text(frame);
       walk(frame.children ?? []);
@@ -253,6 +296,241 @@ const frameValues = (frames: JavascriptFrame[]) => {
   walk(frames);
   return values;
 };
+const attributeFields = {
+  input: [
+    "tag",
+    "type",
+    "attr",
+    "default",
+    "live",
+    "checked",
+    "defaultChecked",
+    "disabled",
+    "disabledAttr",
+    "note",
+  ],
+  textarea: ["attr", "default", "live", "text", "disabled"],
+  button: ["attr", "live", "disabled", "disabledAttr", "clicks"],
+};
+// Fixed observations from the DOM contract, independent of either runtime adapter.
+const attributeStates = [
+  {
+    input: [
+      "input",
+      "TeXt",
+      "A\r\nB",
+      "A\r\nB",
+      "AB",
+      false,
+      false,
+      true,
+      "false",
+      "null",
+    ],
+    textarea: [
+      null,
+      "one\r\ntwo\rthree",
+      "one\ntwo\nthree",
+      "one\r\ntwo\rthree",
+      false,
+    ],
+    button: ["seed", "seed", true, "false", 0],
+    inputFrame: "AB",
+  },
+  {
+    input: [
+      "input",
+      "TeXt",
+      "next\r\ndefault",
+      "next\r\ndefault",
+      "dirtytext",
+      false,
+      false,
+      false,
+      null,
+      "null",
+    ],
+    textarea: [
+      null,
+      "changed\r\rthree",
+      "changed\n\nthree",
+      "changed\r\rthree",
+      false,
+    ],
+    button: ["seed", "seed", false, null, 1],
+    inputFrame: "dirtytext",
+  },
+  {
+    input: [
+      "input",
+      "TeXt",
+      "null",
+      "null",
+      "",
+      false,
+      false,
+      true,
+      "false",
+      "null",
+    ],
+    textarea: [null, "null", "edited\nvalue\nend", "null", false],
+    button: ["null", "null", true, "false", 1],
+    inputFrame: "",
+  },
+  {
+    input: ["input", "ChEcKbOx", "", "", "", false, true, false, null, "null"],
+    textarea: [
+      "ignored",
+      "mutated\rdefault",
+      "edited\nvalue\nend",
+      "mutated\rdefault",
+      false,
+    ],
+    button: ["null", "null", false, null, 2],
+    inputFrame: "false",
+  },
+  {
+    input: [
+      "input",
+      "ChEcKbOx",
+      "box\r\nvalue",
+      "box\r\nvalue",
+      "box\r\nvalue",
+      true,
+      false,
+      false,
+      null,
+      "null",
+    ],
+    textarea: [
+      "ignored",
+      "added\rtail",
+      "edited\nvalue\nend",
+      "added\rtail",
+      false,
+    ],
+    button: ["button\r\nvalue", "button\r\nvalue", false, null, 2],
+    inputFrame: "true",
+  },
+  {
+    input: [
+      "input",
+      "tExT",
+      "pristine\r\nagain",
+      "pristine\r\nagain",
+      "pristineagain",
+      true,
+      true,
+      false,
+      null,
+      "null",
+    ],
+    textarea: ["ignored", "added\rtail", "", "added\rtail", true],
+    button: ["button\r\nvalue", "button\r\nvalue", true, "", 2],
+    inputFrame: "pristineagain",
+  },
+  {
+    input: ["input", null, null, "", "", true, false, false, null, "null"],
+    textarea: ["ignored", "last\r\nbase", "", "last\r\nbase", false],
+    button: ["button\r\nvalue", "button\r\nvalue", false, null, 3],
+    inputFrame: "",
+  },
+  {
+    input: [
+      "input",
+      null,
+      "null",
+      "null",
+      "null",
+      true,
+      false,
+      false,
+      null,
+      "null",
+    ],
+    textarea: ["ignored", "null", "", "null", false],
+    button: ["null", "null", false, null, 4],
+    inputFrame: "null",
+  },
+  {
+    input: [
+      "input",
+      "TEXT",
+      null,
+      "",
+      "finaledit",
+      true,
+      false,
+      false,
+      null,
+      "null",
+    ],
+    textarea: ["ignored", "null", "final\ntextarea", "null", false],
+    button: ["null", "null", true, "false", 4],
+    inputFrame: "finaledit",
+  },
+];
+function assertAttributeValues(
+  values: Record<string, string>,
+  phase: number,
+  label: string,
+) {
+  const expected = attributeStates[phase];
+  assert.ok(expected, `Unexpected attribute phase ${phase}: ${label}`);
+  assert.equal(
+    typeof values["js-attrs-state"],
+    "string",
+    `Missing attribute state: ${label}`,
+  );
+  assert.deepEqual(
+    JSON.parse(values["js-attrs-state"]!),
+    {
+      phase,
+      ...Object.fromEntries(
+        (Object.keys(attributeFields) as (keyof typeof attributeFields)[]).map(
+          (control) => [
+            control,
+            Object.fromEntries(
+              attributeFields[control].map((field, index) => [
+                field,
+                expected[control][index],
+              ]),
+            ),
+          ],
+        ),
+      ),
+    },
+    `DOM attribute/default/live state differs at phase ${phase}: ${label}`,
+  );
+  assert.equal(
+    values["js-attrs-input"],
+    expected.inputFrame,
+    `Input frame differs at phase ${phase}: ${label}`,
+  );
+  assert.equal(
+    values["js-attrs-textarea"],
+    expected.textarea[2],
+    `Textarea frame differs at phase ${phase}: ${label}`,
+  );
+}
+function assertAttributeTimeline(
+  frames: JavascriptFrame[][],
+  steps: { id: string }[],
+  initialPhase: number,
+  label: string,
+) {
+  assert.equal(frames.length, steps.length + 1, `Missing frames: ${label}`);
+  let phase = initialPhase;
+  for (const [index, frame] of frames.entries()) {
+    if (index && steps[index - 1]!.id === "js-attrs-step") phase++;
+    assertAttributeValues(
+      frameValues(frame),
+      phase,
+      `${label}, frame ${index}`,
+    );
+  }
+  return phase;
+}
 function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
   const capture = ["listener-capture", 2, true],
     passive = ["listener-passive", false],
@@ -291,6 +569,15 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
   );
 }
 if (!astro) {
+  assert.equal(
+    assertAttributeTimeline(
+      nativeResult.frames,
+      scenario.suffix,
+      0,
+      "native suffix",
+    ),
+    6,
+  );
   assertListenerCalls(nativeResult.calls, "suffix");
   assert.equal(
     frameValues(nativeResult.frames[0])["js-standard"],
@@ -475,12 +762,28 @@ try {
     JSON.stringify(exported),
   );
   await validateJavascriptArchive(exported);
+  assert.ok(exported.frame, "Browser archive is missing its current frame");
   await page.evaluate(() => window.afyJavascript.clear());
-  const follow = [exported.frame];
+  const follow: JavascriptFrame[][] = [exported.frame];
   for (const step of scenario.follow) {
     await perform(step);
-    follow.push(await page.evaluate(() => window.afyJavascript.export().frame));
+    const frame: JavascriptFrame[] | undefined = await page.evaluate(
+      () => window.afyJavascript.export().frame,
+    );
+    assert.ok(frame, `Browser archive is missing its frame after ${step.id}`);
+    follow.push(frame);
   }
+  const followCalls = await page.evaluate(() => window.afyJavascript.calls());
+  if (!astro)
+    assert.equal(
+      assertAttributeTimeline(
+        follow,
+        scenario.follow,
+        6,
+        "restored browser follow",
+      ),
+      8,
+    );
   await writeFile(
     join(evidence, "browser.json"),
     JSON.stringify(
@@ -488,7 +791,7 @@ try {
         frames,
         calls,
         follow,
-        followCalls: await page.evaluate(() => window.afyJavascript.calls()),
+        followCalls,
       },
       null,
       2,
@@ -500,6 +803,7 @@ try {
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
     const originalValues: Record<string, string>[] = [];
+    const originalFollowValues: Record<string, string>[] = [];
     const originalStyles: unknown[] = [];
     const originalCapture = () =>
       page.evaluate(() =>
@@ -510,13 +814,25 @@ try {
               ? element.type === "checkbox"
                 ? String(element.checked)
                 : element.value
-              : element.textContent,
+              : element instanceof HTMLTextAreaElement
+                ? element.value
+                : element.textContent,
           ]),
         ),
       );
+    let attributePhase = 0;
     for (let i = 0; i <= scenario.suffix.length; i++) {
-      if (i) await perform(scenario.suffix[i - 1]!);
+      if (i) {
+        const step = scenario.suffix[i - 1]!;
+        await perform(step);
+        if (step.id === "js-attrs-step") attributePhase++;
+      }
       const values = await originalCapture();
+      assertAttributeValues(
+        values as Record<string, string>,
+        attributePhase,
+        `original suffix, frame ${i}`,
+      );
       assert.deepEqual(
         values,
         frameValues(nativeResult.frames[i]),
@@ -533,6 +849,33 @@ try {
         }
       };
       collectCSS(nativeResult.frames[i]);
+      const tokenExpectations: Record<string, Record<string, string>> = {
+        "css-token-whitespace": {
+          width: "120px",
+          paddingTop: "2px",
+          paddingRight: "4px",
+          paddingBottom: "6px",
+          paddingLeft: "4px",
+        },
+        "css-token-rgb": {
+          color: "rgb(17, 35, 43)",
+          backgroundColor: "rgba(17, 35, 43, 0.5)",
+        },
+        "css-token-fallback": {
+          width: "120px",
+          height: "24px",
+          color: "rgb(17, 35, 43)",
+        },
+      };
+      for (const [id, properties] of Object.entries(tokenExpectations)) {
+        const frame = cssFrames.find((frame) => frame.id === id);
+        assert.ok(frame, `Missing CSS token fixture ${id}, step ${i}`);
+        for (const property of Object.keys(properties))
+          assert.ok(
+            Object.hasOwn(frame.style, property),
+            `Missing native CSS token property ${id}.${property}, step ${i}`,
+          );
+      }
       const compared = await page.evaluate((frames) => {
         const host = document.createElement("div"),
           shadow = host.attachShadow({ mode: "open" });
@@ -571,6 +914,16 @@ try {
           item.native,
           `Original CSS cascade differs at ${item.id}, step ${i}`,
         );
+      for (const [id, properties] of Object.entries(tokenExpectations)) {
+        const item = compared.find((item) => item.id === id);
+        assert.ok(item, `Missing computed CSS token fixture ${id}, step ${i}`);
+        for (const [property, expected] of Object.entries(properties))
+          assert.equal(
+            item.actual[property],
+            expected,
+            `Original CSS token fixture ${id}.${property} differs, step ${i}`,
+          );
+      }
       originalStyles.push(compared);
       originalValues.push(values as Record<string, string>);
     }
@@ -583,10 +936,56 @@ try {
       normalize(nativeResult.calls),
       "Original source callbacks/closures/effects differ",
     );
+    assert.equal(
+      attributePhase,
+      6,
+      "Missing original-source attribute suffix actions",
+    );
+    await page.evaluate(() => window.afyJavascript.clear());
+    for (let i = 0; i <= scenario.follow.length; i++) {
+      if (i) {
+        const step = scenario.follow[i - 1]!;
+        await perform(step);
+        if (step.id === "js-attrs-step") attributePhase++;
+      }
+      const values = await originalCapture();
+      assertAttributeValues(
+        values as Record<string, string>,
+        attributePhase,
+        `original follow, frame ${i}`,
+      );
+      const followFrame = follow[i];
+      assert.ok(followFrame, `Missing restored browser follow frame ${i}`);
+      assert.deepEqual(
+        values,
+        frameValues(followFrame),
+        `Original browser source differs from restored follow, frame ${i}`,
+      );
+      originalFollowValues.push(values as Record<string, string>);
+    }
+    assert.equal(
+      attributePhase,
+      8,
+      "Missing original-source attribute follow actions",
+    );
+    const originalFollowCalls = await page.evaluate(() =>
+      window.afyJavascript.calls(),
+    );
+    assertListenerCalls(originalFollowCalls, "follow");
+    assert.deepEqual(
+      normalize(originalFollowCalls),
+      normalize(followCalls),
+      "Original source follow callbacks/closures/effects differ",
+    );
     await writeFile(
       join(evidence, "original-browser.json"),
       JSON.stringify(
-        { frames: originalValues, styles: originalStyles },
+        {
+          frames: originalValues,
+          styles: originalStyles,
+          follow: originalFollowValues,
+          followCalls: originalFollowCalls,
+        },
         null,
         2,
       ) + "\n",
@@ -620,6 +1019,15 @@ const webResult = JSON.parse(
   await readFile(join(evidence, "browser.json"), "utf8"),
 );
 if (!astro) {
+  assert.equal(
+    assertAttributeTimeline(
+      restored.frames,
+      scenario.follow,
+      6,
+      "restored native follow",
+    ),
+    8,
+  );
   assertListenerCalls(restored.calls, "follow");
   assertListenerCalls(webResult.followCalls, "follow");
 }
@@ -644,8 +1052,10 @@ await writeFile(
     {
       passed: true,
       browserFrames:
-        webResult.frames.length * (astro ? 1 : 2) + webResult.follow.length,
-      originalBrowserFrames: astro ? 0 : webResult.frames.length,
+        (webResult.frames.length + webResult.follow.length) * (astro ? 1 : 2),
+      originalBrowserFrames: astro
+        ? 0
+        : webResult.frames.length + webResult.follow.length,
       platformDiagnostics: scenario.rejects.length,
       nativeFrames: nativeResult.frames.length + restored.frames.length,
       externalEffectsReplayed: 0,
@@ -656,5 +1066,5 @@ await writeFile(
   ) + "\n",
 );
 console.log(
-  `${astro ? "Astro " : ""}JavaScript roundtrip passed: ${webResult.frames.length * (astro ? 1 : 2) + webResult.follow.length} browser (including ${astro ? 0 : webResult.frames.length} original-source) and ${nativeResult.frames.length + restored.frames.length} generated-Go frames; replay repeated zero host effects.`,
+  `${astro ? "Astro " : ""}JavaScript roundtrip passed: ${(webResult.frames.length + webResult.follow.length) * (astro ? 1 : 2)} browser (including ${astro ? 0 : webResult.frames.length + webResult.follow.length} original-source) and ${nativeResult.frames.length + restored.frames.length} generated-Go frames; replay repeated zero host effects.`,
 );

@@ -91,6 +91,29 @@ test("CSS class and attribute tokens use HTML ASCII whitespace", async () => {
     },
   );
 });
+test(":checked recognizes ASCII-case-insensitive input types without styling the checkbox", async () => {
+  await withCSS(
+    ".peer:checked+span{color:#112233}",
+    ({ document, root, snapshot }) => {
+      const checkbox = document.createElement("InPuT");
+      checkbox.setAttribute("type", "CHECKBOX");
+      checkbox.className = "peer";
+      const label = document.createElement("span");
+      label.textContent = "Check state";
+      root.appendChild(checkbox);
+      root.appendChild(label);
+      expect(snapshot()[0].style).toEqual({});
+      expect(snapshot()[1].style.color).toBeUndefined();
+      checkbox.checked = true;
+      expect(snapshot()[0].style).toEqual({});
+      expect(snapshot()[1].style.color).toBe("#112233");
+      checkbox.setAttribute("type", "cHeCkBoX");
+      expect(snapshot()[1].style.color).toBe("#112233");
+      checkbox.setAttribute("type", "TeXt");
+      expect(snapshot()[1].style.color).toBeUndefined();
+    },
+  );
+});
 test("CSS imports retain transitive source bytes and unsupported rules are diagnosed", async () => {
   const dir = await mkdtemp(join(tmpdir(), "afy-css-import-"));
   try {
@@ -416,6 +439,185 @@ test("dependency-depth exhaustion is diagnosed instead of selecting a fallback",
       node.className = "a";
       root.appendChild(node);
       expect(snapshot).toThrow("supported depth of 32");
+    },
+  );
+});
+
+test("whole CSS values, RGB channels and whitespace-separated padding survive substitution", async () => {
+  await withCSS(
+    `.a{--width:12px;--red:17;--green:35;--blue:43;--alpha:.5;--top:2px;--sides:4px;--bottom:6px;width:var(--width);color:rgb(var(--red),var(--green),var(--blue));background-color:rgba(var(--red),var(--green),var(--blue),var(--alpha));padding:var(--top) var(--sides) var(--bottom)}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      const style = snapshot()[0].style;
+      expect(style.width).toBe("12px");
+      expect(style.color).toBe("rgb(17,35,43)");
+      expect(style.backgroundColor).toBe("rgba(17,35,43,.5)");
+      expect([
+        style.paddingTop,
+        style.paddingRight,
+        style.paddingBottom,
+        style.paddingLeft,
+      ]).toEqual(["2px", "4px", "6px", "4px"]);
+    },
+  );
+});
+
+test("complete RGB token lists and selected nested fallbacks remain usable", async () => {
+  await withCSS(
+    `.a{--channels:17 35 43;--fallback:12px;color:rgb(var(--channels));width:var(--missing,var(--other,var(--fallback)));padding:var(--missing,2px 4px)}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      const style = snapshot()[0].style;
+      expect(style.color).toBe("rgb(17 35 43)");
+      expect(style.width).toBe("12px");
+      expect(style.paddingTop).toBe("2px");
+      expect(style.paddingLeft).toBe("4px");
+    },
+  );
+});
+
+test("substitution cannot fabricate dimensions, colors, functions or adjacent value tokens", () => {
+  for (const [property, value] of [
+    ["width", "var(--number)0px"],
+    ["width", "var(--number)px"],
+    ["width", "var(--number)e2px"],
+    ["width", "+var(--pixels)"],
+    ["width", ".var(--number)px"],
+    ["color", "var(--hex)def"],
+    ["color", "var(--hash)112233"],
+    ["color", "var(--function)(17,35,43)"],
+    ["color", "rgba(17,35,43,.var(--number))"],
+    ["color", "rgba(17,35,43,var(--number)%)"],
+    ["padding", "var(--pixels)var(--pixels)"],
+    ["width", "var(--missing,10px)0px"],
+  ]) {
+    const { document, root, snapshot, installCSS } = createDocument();
+    installCSS([]);
+    const node = document.createElement("p");
+    for (const [name, initial] of [
+      ["--number", "1"],
+      ["--pixels", "2px"],
+      ["--hex", "#abc"],
+      ["--hash", "#"],
+      ["--function", "rgb"],
+    ])
+      node.style.setProperty(name, initial);
+    node.style.setProperty(property, value);
+    root.appendChild(node);
+    expect(snapshot).toThrow("CSS token adjacency");
+  }
+});
+
+test("custom aliases and inherited values cannot hide token fabrication", async () => {
+  for (const declarations of [
+    ".a{--number:1;--bad:var(--number)0px;--alias:var(--bad);width:var(--alias)}",
+    ".a{--hex:#abc;--bad:var(--hex)def;--alias:var(--bad);color:var(--alias)}",
+  ])
+    await withCSS(declarations, ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      expect(snapshot).toThrow("CSS token adjacency");
+    });
+  await withCSS(
+    `.parent{--number:1}.child{width:var(--number)0px}`,
+    ({ document, root, snapshot }) => {
+      const parent = document.createElement("section");
+      parent.className = "parent";
+      const child = document.createElement("p");
+      child.className = "child";
+      parent.appendChild(child);
+      root.appendChild(parent);
+      expect(snapshot()[0].children[0].style.width).toBe("1 0px");
+      child.style.width = "var(--number)0px";
+      expect(snapshot).toThrow("CSS token adjacency");
+    },
+  );
+});
+
+test("comments at joins or inside replacements never erase token boundaries", async () => {
+  for (const [property, value] of [
+    ["width", "var(--number)/**/0px"],
+    ["width", "/**/var(--pixels)"],
+    ["width", "var(--pixels)/**/"],
+    ["color", "var(--hex)/**/def"],
+  ]) {
+    const { document, root, snapshot, installCSS } = createDocument();
+    installCSS([]);
+    const node = document.createElement("p");
+    node.style.setProperty("--number", "1");
+    node.style.setProperty("--pixels", "2px");
+    node.style.setProperty("--hex", "#abc");
+    node.style.setProperty(property, value);
+    root.appendChild(node);
+    expect(snapshot).toThrow("native token-stream adapter");
+  }
+  for (const value of [
+    "/* leading */12px",
+    "12px/* trailing */",
+    "1/**/0px",
+    "#abc/**/def",
+  ])
+    await withCSS(
+      `.a{--commented:${value};width:var(--commented)}`,
+      ({ document, root, snapshot }) => {
+        const node = document.createElement("p");
+        node.className = "a";
+        root.appendChild(node);
+        expect(snapshot).toThrow("CSS comments in the replacement");
+      },
+    );
+  for (const fallback of ["/* leading */12px", "12px/* trailing */"]) {
+    const { document, root, snapshot, installCSS } = createDocument();
+    installCSS([]);
+    const node = document.createElement("p");
+    node.style.width = `var(--missing,${fallback})`;
+    root.appendChild(node);
+    expect(snapshot).toThrow("CSS comments in the replacement");
+  }
+});
+
+test("quoted comment text remains a literal CSS string", async () => {
+  await withCSS(
+    `.a{--quoted:"/*literal*/";font-family:var(--quoted)}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      expect(snapshot()[0].style.fontFamily).toBe('"/*literal*/"');
+    },
+  );
+});
+
+test("unselected unsafe fallback joins and invalid cycles do not run adjacency diagnostics", async () => {
+  await withCSS(
+    `.a{--ready:12px;--color:#112233;--number:1;--hex:#abc;--cycle:var(--cycle,var(--number)0px);width:var(--ready,/* unused */var(--number)0px);color:var(--color,var(--hex)def/* unused */);height:var(--cycle,14px)}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      const style = snapshot()[0].style;
+      expect(style.width).toBe("12px");
+      expect(style.color).toBe("#112233");
+      expect(style.height).toBe("14px");
+    },
+  );
+});
+
+test("fallback trimming removes CSS whitespace without erasing Unicode name characters", async () => {
+  await withCSS(
+    `.a{width:var(--missing,\u00a012px);height:var(--missing, \t12px \n)}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      const style = snapshot()[0].style;
+      expect(style.width).toBe("\u00a012px");
+      expect(style.height).toBe("12px");
     },
   );
 });

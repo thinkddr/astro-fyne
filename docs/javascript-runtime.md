@@ -140,6 +140,10 @@ Listener identity includes event type, callback and capture flag. Boolean/option
 their DOM behavior. Assigning a direct handler to `null` removes its listener slot; assigning
 it again appends a new slot. A direct handler returning `false` cancels a cancelable event;
 ordinary listener returns are ignored. Abort signals still need a native adapter.
+HTML element and attribute names use ASCII case folding. Supported controls retain
+boolean `disabled` presence, dirty input values, reflected checkbox/button values and
+text/checkbox value-mode transitions. Textareas retain child-text defaults and normalized
+line endings independently of edited values. Unsupported input types still require adapters.
 Checkboxes preserve `checked`/`defaultChecked`, dirty local state, the default `on`
 value, click preactivation and cancellation, input/change ordering, disabled behavior,
 Space activation and associated plain-text labels. Native refreshes retain the control
@@ -164,6 +168,10 @@ and ordered padding/background declarations are retained through dynamic class c
 and continuation. Variable resolution follows the selected fallback path and invalidates
 active cycle participants. Unused fallbacks are not evaluated. Inherited custom properties
 retain their already computed values; explicit `inherit`, `unset` and `initial` are supported.
+Complete-value variables, whitespace-separated padding lists and comma-separated RGB/RGBA
+channels are supported. Token adjacency such as `var(--number)px` or `var(--hex)def`,
+and unquoted comments in selected replacements, require a token-stream adapter and receive
+diagnostics. Substitution must not fabricate a dimension or color by joining authored tokens.
 Escaped variable functions/names, dynamic first arguments, custom-property `revert` and
 `revert-layer`, and CSS-wide keywords produced by custom-property substitution require
 further token/property adapters and receive diagnostics. CSS syntax is parsed at build time
@@ -198,15 +206,18 @@ controlled/local state, labels, programmatic activation and Space. Its listener 
 checks options, duplicate registration, one-shot callbacks,
 passive cancellation, object receivers, removal during dispatch, direct handler ordering and
 programmatic click reentry.
-It compares 81 browser frames (33 from the unmodified original component) and 48 generated-Go
-frames, and proves that restoration repeats zero host effects. The CSS scenario additionally compares native
+It compares the unmodified original component, archived browser continuation and generated-Go
+frames at every recorded step, and proves that restoration repeats zero host effects. Frame
+counts are recorded in `comparison.json`. The attribute scenario independently checks default
+and edited values, case folding, disabled presence, type changes and textarea child mutations.
+The CSS scenario additionally compares native
 cascade values against Chromium's original computed styles in an isolated shadow tree,
 including self/mutual cycles, selected/unused fallbacks, comments and function-name boundaries,
 live cycle removal and explicit custom-property inheritance.
 Remote CI also checks two actual
 Astro hydration/event frames, bounded VM execution and preservation of valid native
-objects after source errors. Seven bundled-source scenarios verify native diagnostics for
-unsupported CSS, measurements, DOM properties, async handlers, host data and navigation.
+objects after source errors. Bundled-source rejection scenarios verify native diagnostics for
+unsupported CSS, token adjacency, measurements, DOM properties, async handlers, host data and navigation.
 Archives, callbacks and frames remain under
 `artifacts/javascript-roundtrip`.
 

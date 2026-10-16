@@ -65,6 +65,11 @@ serialize Go or JavaScript functions. The generated Preact component also accept
 prop for direct embedding. Text fields preserve local editing, immediate input and deduplicated
 blur/Return commits. A single-line native `Entry.OnSubmitted` binds a separate `submit` action.
 
+When `Options.IDs` renames controls from a generated `View`, exported label references follow
+those aliases in both scene schemas. References remain scoped to their source `View`;
+missing local targets and duplicate exported IDs are rejected. This preserves associations
+without reevaluating the source builder or changing the live native tree.
+
 The default schema 1 scene freezes the current geometry, styles, values, theme tokens and
 resources. Schema 2 additionally preserves validated source Flexbox declarations when the
 host requests `PreserveLayout: true`. Neither format translates arbitrary Go callback bodies
