@@ -66,6 +66,7 @@ const scenario = astro
         { id: "js-hierarchy-input", value: "edited" },
         { id: "js-ancestor-input", value: "edited" },
         { id: "js-removal-input", value: "edited" },
+        { id: "js-data-dirty", value: "edited" },
       ],
       suffix: [
         ...tap(
@@ -129,6 +130,12 @@ const scenario = astro
           "js-removal-text-parent",
           "js-removal-valid",
         ),
+        ...tap(
+          "js-data-null",
+          "js-data-undefined",
+          "js-data-number",
+          "js-data-symbol",
+        ),
       ],
       follow: [
         ...tap(
@@ -153,6 +160,7 @@ const scenario = astro
         { id: "js-hierarchy-input", value: "continued" },
         { id: "js-ancestor-input", value: "continued" },
         { id: "js-removal-input", value: "continued" },
+        { id: "js-data-dirty", value: "continued" },
         ...tap(
           "js-insert-invalid",
           "js-insert-move",
@@ -178,6 +186,12 @@ const scenario = astro
           "js-removal-detached",
           "js-removal-text-parent",
           "js-removal-valid",
+        ),
+        ...tap(
+          "js-data-null",
+          "js-data-undefined",
+          "js-data-number",
+          "js-data-symbol",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -1049,6 +1063,195 @@ function assertRemovalTimeline(
   }
   assert.equal(operations, 4, `Missing removal operations: ${label}`);
 }
+const characterIDs = [
+  "js-data-text",
+  "js-data-pristine",
+  "js-data-dirty",
+] as const;
+type CharacterState = {
+  data: string;
+  dirty: string;
+  result: "ready" | Record<string, unknown>;
+};
+const characterOperations: Record<string, string> = {
+  "js-data-null": "null",
+  "js-data-undefined": "undefined",
+  "js-data-number": "number",
+  "js-data-symbol": "symbol",
+};
+function characterStep(
+  state: CharacterState,
+  step: { id: string; value?: string },
+): CharacterState {
+  if (step.id === "js-data-dirty") {
+    assert.ok(
+      typeof step.value === "string",
+      "CharacterData edit needs a value",
+    );
+    return { ...state, dirty: step.value };
+  }
+  const operation = characterOperations[step.id];
+  if (!operation) return state;
+  const data =
+    operation === "null"
+      ? ""
+      : operation === "undefined"
+        ? "undefined"
+        : operation === "number"
+          ? "42"
+          : state.data;
+  const error = operation === "symbol" ? "TypeError" : "none";
+  return {
+    data,
+    dirty: state.dirty,
+    result: {
+      operation,
+      errors: [error, error, error],
+      same: true,
+      text: { data, textContent: data },
+      pristine: { data, textContent: data, defaultValue: data, value: data },
+      dirty: {
+        data,
+        textContent: data,
+        defaultValue: data,
+        value: state.dirty,
+      },
+      createdNull: "null",
+    },
+  };
+}
+const characterStart = (): CharacterState => ({
+  data: "seed",
+  dirty: "edited",
+  result: "ready",
+});
+const characterFollowStart = () =>
+  characterStep({ ...characterStart(), data: "42" }, { id: "js-data-symbol" });
+function assertCharacterValues(
+  values: Record<string, string>,
+  state: CharacterState,
+  label: string,
+) {
+  for (const [id, expected] of [
+    ["js-data-text", state.data],
+    ["js-data-pristine", state.data],
+    ["js-data-dirty", state.dirty],
+  ] as const)
+    assert.equal(
+      values[id],
+      expected,
+      `CharacterData value ${id} differs: ${label}`,
+    );
+  const result = values["js-data-result"];
+  assert.ok(
+    typeof result === "string",
+    `Missing CharacterData result: ${label}`,
+  );
+  assert.deepEqual(
+    state.result === "ready" ? result : JSON.parse(result),
+    state.result,
+    `CharacterData outcome differs: ${label}`,
+  );
+}
+function assertCharacterTimeline(
+  frames: JavascriptFrame[][],
+  steps: { id: string; value?: string }[],
+  state: CharacterState,
+  label: string,
+) {
+  assert.equal(
+    frames.length,
+    steps.length + 1,
+    `Missing CharacterData frames: ${label}`,
+  );
+  const identities = new Map<string, { parent: string; text: string }>();
+  let operations = 0;
+  for (const [index, roots] of frames.entries()) {
+    if (index) {
+      const step = steps[index - 1]!;
+      state = characterStep(state, step);
+      if (characterOperations[step.id]) operations++;
+    }
+    const nodes = new Map<
+      string,
+      { frame: JavascriptFrame; parent?: string }
+    >();
+    const visit = (children: JavascriptFrame[], parent?: string) => {
+      for (const frame of children) {
+        const id = frame.attrs?.id;
+        if (id && characterIDs.some((value) => value === id)) {
+          assert.equal(
+            nodes.has(id),
+            false,
+            `Duplicate CharacterData node ${id}: ${label}`,
+          );
+          nodes.set(id, { frame, parent });
+        }
+        visit(frame.children ?? [], id);
+      }
+    };
+    visit(roots);
+    for (const id of characterIDs) {
+      const node = nodes.get(id);
+      assert.ok(node, `Missing CharacterData node ${id}: ${label}`);
+      assert.equal(
+        node.parent,
+        "js-data-host",
+        `CharacterData parent ${id} differs: ${label}`,
+      );
+      assert.equal(
+        node.frame.children?.length,
+        1,
+        `CharacterData child count ${id} differs: ${label}`,
+      );
+      const text = node.frame.children?.[0];
+      assert.ok(
+        text?.uid && node.frame.uid,
+        `Missing CharacterData UIDs ${id}: ${label}`,
+      );
+      assert.equal(
+        text.tag,
+        "#text",
+        `CharacterData child kind ${id} differs: ${label}`,
+      );
+      assert.equal(
+        text.text,
+        state.data,
+        `CharacterData text ${id} differs: ${label}`,
+      );
+      assert.equal(
+        text.children?.length ?? 0,
+        0,
+        `CharacterData acquired children ${id}: ${label}`,
+      );
+      if (!identities.has(id))
+        identities.set(id, { parent: node.frame.uid, text: text.uid });
+      assert.deepEqual(
+        { parent: node.frame.uid, text: text.uid },
+        identities.get(id),
+        `CharacterData identity ${id} differs: ${label}`,
+      );
+      if (id !== "js-data-text") {
+        assert.equal(
+          node.frame.attrs?.value,
+          undefined,
+          `CharacterData invented value attribute ${id}: ${label}`,
+        );
+        assert.equal(
+          node.frame.value,
+          id === "js-data-dirty" ? state.dirty : state.data,
+          `CharacterData live frame ${id} differs: ${label}`,
+        );
+      }
+    }
+    assertCharacterValues(
+      frameValues(roots),
+      state,
+      `${label}, frame ${index}`,
+    );
+  }
+  assert.equal(operations, 4, `Missing CharacterData operations: ${label}`);
+}
 const attributeFields = {
   input: [
     "tag",
@@ -1323,6 +1526,17 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
 }
 if (!astro) {
   assert.equal(
+    nativeResult.characterDataIdentityChecked,
+    true,
+    "Native CharacterData pointer checks did not run",
+  );
+  assertCharacterTimeline(
+    nativeResult.frames,
+    scenario.suffix,
+    characterStart(),
+    "native suffix",
+  );
+  assert.equal(
     nativeResult.removalIdentityChecked,
     true,
     "Native removal pointer checks did not run",
@@ -1522,6 +1736,91 @@ try {
     ? null
     : await page.locator('[id="js-removal-input"]').elementHandle();
   let browserRemovalState = removalStart();
+  const captureCharacterHandles = () =>
+    Promise.all(
+      characterIDs.map((id) =>
+        page.locator(`[id=${JSON.stringify(id)}]`).evaluateHandle((parent) => {
+          const text = parent.firstChild;
+          if (!(text instanceof Text))
+            throw new Error("Missing actual CharacterData Text node");
+          return { parent, text };
+        }),
+      ),
+    );
+  let characterHandles = astro ? [] : await captureCharacterHandles();
+  let browserCharacterState = characterStart();
+  const assertBrowserCharacter = async (label: string) => {
+    if (astro) return;
+    assert.equal(
+      characterHandles.length,
+      characterIDs.length,
+      `Missing CharacterData browser handles: ${label}`,
+    );
+    for (const [index, handle] of characterHandles.entries()) {
+      const id = characterIDs[index];
+      assert.ok(id, `Unexpected CharacterData browser handle: ${label}`);
+      const actual = await handle.evaluate(
+        ({ parent, text }, id) => ({
+          sameParent: document.getElementById(id) === parent,
+          sameText: parent.firstChild === text,
+          attached:
+            text.parentNode === parent &&
+            parent.parentElement?.id === "js-data-host",
+          count: document.querySelectorAll(`[id=${JSON.stringify(id)}]`).length,
+          children: parent.childNodes.length,
+          data: text.data,
+          textContent: parent.textContent,
+          defaultValue:
+            parent instanceof HTMLTextAreaElement ? parent.defaultValue : null,
+          value: parent instanceof HTMLTextAreaElement ? parent.value : null,
+          rawValue: parent.getAttribute("value"),
+        }),
+        id,
+      );
+      assert.deepEqual(
+        actual,
+        {
+          sameParent: true,
+          sameText: true,
+          attached: true,
+          count: 1,
+          children: 1,
+          data: browserCharacterState.data,
+          textContent: browserCharacterState.data,
+          defaultValue:
+            id === "js-data-text" ? null : browserCharacterState.data,
+          value:
+            id === "js-data-text"
+              ? null
+              : id === "js-data-dirty"
+                ? browserCharacterState.dirty
+                : browserCharacterState.data,
+          rawValue: null,
+        },
+        `Actual browser CharacterData identity/default/live values differ for ${id}: ${label}`,
+      );
+    }
+    const values = await page.evaluate(() => {
+      const text = document.getElementById("js-data-text"),
+        pristine = document.getElementById("js-data-pristine"),
+        dirty = document.getElementById("js-data-dirty"),
+        result = document.getElementById("js-data-result");
+      if (
+        !text ||
+        !(pristine instanceof HTMLTextAreaElement) ||
+        !(dirty instanceof HTMLTextAreaElement) ||
+        !result
+      )
+        throw new Error("Missing CharacterData browser values");
+      return {
+        "js-data-text": text.textContent ?? "",
+        "js-data-pristine": pristine.value,
+        "js-data-dirty": dirty.value,
+        "js-data-result": result.textContent ?? "",
+      };
+    });
+    assertCharacterValues(values, browserCharacterState, label);
+  };
   const assertBrowserRemoval = async (label: string) => {
     if (astro) return;
     assert.ok(removalElement, `Missing browser removal input: ${label}`);
@@ -1787,6 +2086,7 @@ try {
   await assertBrowserHierarchy("restored browser initial");
   await assertBrowserAncestor("restored browser initial");
   await assertBrowserRemoval("restored browser initial");
+  await assertBrowserCharacter("restored browser initial");
   await assertBrowserInputReflection("restored browser initial");
   assert.deepEqual(
     await page.evaluate(() => window.afyJavascript.calls()),
@@ -1820,11 +2120,13 @@ try {
       browserHierarchyState = hierarchyStep(browserHierarchyState, step);
       browserAncestorState = ancestorStep(browserAncestorState, step);
       browserRemovalState = removalStep(browserRemovalState, step);
+      browserCharacterState = characterStep(browserCharacterState, step);
       if (step.id === "js-attrs-step") browserAttributePhase++;
       await assertBrowserInsertion(`after ${step.id}`);
       await assertBrowserHierarchy(`after ${step.id}`);
       await assertBrowserAncestor(`after ${step.id}`);
       await assertBrowserRemoval(`after ${step.id}`);
+      await assertBrowserCharacter(`after ${step.id}`);
       await assertBrowserInputReflection(`after ${step.id}`);
     }
   };
@@ -1842,6 +2144,13 @@ try {
       frames,
       scenario.suffix,
       insertionStart(),
+      "restored browser suffix",
+    );
+  if (!astro)
+    assertCharacterTimeline(
+      frames,
+      scenario.suffix,
+      characterStart(),
       "restored browser suffix",
     );
   if (!astro)
@@ -1895,6 +2204,12 @@ try {
   }
   const followCalls = await page.evaluate(() => window.afyJavascript.calls());
   if (!astro) {
+    assertCharacterTimeline(
+      follow,
+      scenario.follow,
+      characterFollowStart(),
+      "restored browser follow",
+    );
     assertRemovalTimeline(
       follow,
       scenario.follow,
@@ -1973,12 +2288,16 @@ try {
       .locator('[id="js-removal-input"]')
       .elementHandle();
     browserRemovalState = { value: "initial", result: "ready" };
+    for (const handle of characterHandles) await handle.dispose();
+    characterHandles = await captureCharacterHandles();
+    browserCharacterState = { data: "seed", dirty: "seed", result: "ready" };
     browserAttributePhase = 0;
     browserStage = "original";
     await assertBrowserInsertion("original browser initial");
     await assertBrowserHierarchy("original browser initial");
     await assertBrowserAncestor("original browser initial");
     await assertBrowserRemoval("original browser initial");
+    await assertBrowserCharacter("original browser initial");
     await assertBrowserInputReflection("original browser initial");
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
@@ -2031,6 +2350,11 @@ try {
       assertRemovalValues(
         values as Record<string, string>,
         browserRemovalState,
+        `original suffix, frame ${i}`,
+      );
+      assertCharacterValues(
+        values as Record<string, string>,
+        browserCharacterState,
         `original suffix, frame ${i}`,
       );
       assert.deepEqual(
@@ -2174,6 +2498,11 @@ try {
         browserRemovalState,
         `original follow, frame ${i}`,
       );
+      assertCharacterValues(
+        values as Record<string, string>,
+        browserCharacterState,
+        `original follow, frame ${i}`,
+      );
       const followFrame = follow[i];
       assert.ok(followFrame, `Missing restored browser follow frame ${i}`);
       assert.deepEqual(
@@ -2245,6 +2574,17 @@ const webResult = JSON.parse(
   await readFile(join(evidence, "browser.json"), "utf8"),
 );
 if (!astro) {
+  assert.equal(
+    restored.characterDataIdentityChecked,
+    true,
+    "Restored native CharacterData pointer checks did not run",
+  );
+  assertCharacterTimeline(
+    restored.frames,
+    scenario.follow,
+    characterFollowStart(),
+    "restored native follow",
+  );
   assert.equal(
     restored.removalIdentityChecked,
     true,
@@ -2343,6 +2683,12 @@ await writeFile(
               followOperations: 3,
               nativePointerIdentityChecked: true,
               browserElementIdentityChecked: true,
+            },
+            characterData: {
+              suffixOperations: 4,
+              followOperations: 4,
+              nativeObjectIdentityChecked: true,
+              browserTextAndElementIdentityChecked: true,
             },
             removal: {
               suffixOperations: 4,

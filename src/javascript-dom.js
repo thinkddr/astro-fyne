@@ -168,7 +168,7 @@ export function createDocument() {
       return this._data;
     }
     set data(value) {
-      this._data = validJavascriptText(String(value));
+      this._data = domString(value === null ? "" : value);
     }
     get value() {
       if (!["input", "textarea", "button"].includes(this.localName))
