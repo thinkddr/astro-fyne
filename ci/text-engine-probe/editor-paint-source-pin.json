@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "sourceOnly": true,
+  "chromiumCommit": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+  "scope": "Horizontal LTR single-line editor glyph painting; logical layout, selection and caret are unchanged. No browser baseline or effective raster-policy observation.",
+  "rule": "Round the accumulated CSS line top before adding the line baseline and before device scaling. For LayoutUnit-representable values, ties including negative ties follow floor(y + 0.5).",
+  "files": {
+    "third_party/blink/renderer/core/paint/box_fragment_painter.cc": {
+      "gitBlob": "85393e17a1a149d128cf4d33972bcbd70d771cf8",
+      "bytes": 132309,
+      "sha256": "ade9646e2689f23a2c00c91e1df3efbcf377a8488feb244b0edbbeec008aa224",
+      "url": "https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/paint/box_fragment_painter.cc"
+    },
+    "third_party/blink/renderer/core/paint/text_fragment_painter.cc": {
+      "gitBlob": "01b73f143c8b2154c8e348b86dc95bf802361407",
+      "bytes": 36640,
+      "sha256": "c71348941650c88bbe6a123071838289d068514235231b768360086238f9d096",
+      "url": "https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/paint/text_fragment_painter.cc"
+    },
+    "third_party/blink/renderer/core/paint/text_painter.cc": {
+      "gitBlob": "367151696e1665594488416c98e85084d2cc588f",
+      "bytes": 32338,
+      "sha256": "b5d4667c7231dd388b92e067fec6cdee5daa2c9ad2c626fef47ddd040f815683",
+      "url": "https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/paint/text_painter.cc"
+    },
+    "third_party/blink/renderer/platform/geometry/layout_unit.h": {
+      "gitBlob": "6ce84519a6946d10fcaf02cccae000333b54ce4c",
+      "bytes": 30986,
+      "sha256": "fdc4e8d9386923943ec92a6868dcf59b34c741d52b19d0ee41c255092ff23624",
+      "url": "https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/platform/geometry/layout_unit.h"
+    }
+  },
+  "symbols": {
+    "third_party/blink/renderer/core/paint/text_fragment_painter.cc": {
+      "ComputePhysicalBoxGeometry": [67, 100],
+      "text_origin": [529, 534]
+    },
+    "third_party/blink/renderer/core/paint/box_fragment_painter.cc": {
+      "line_parent_offset": [2105, 2107],
+      "PaintTextItem": [2159, 2188]
+    },
+    "third_party/blink/renderer/platform/geometry/layout_unit.h": {
+      "ToInt": [243, 243],
+      "Round": [294, 297],
+      "Fraction": [329, 333],
+      "LayoutUnit": [473, 473]
+    },
+    "third_party/blink/renderer/core/paint/text_painter.cc": {
+      "DrawText": [401, 402]
+    }
+  }
+}

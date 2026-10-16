@@ -29,6 +29,20 @@ type Backend interface {
 	Editor(bool, Style, func(string)) Editor
 }
 
+// EditorLineStyler optionally derives a single-line editor's internal line box.
+// The authored outer style is unchanged; only the returned LineHeight is used.
+// Backends without this interface retain the authored editor geometry.
+type EditorLineStyler interface {
+	EditorLineStyle(Style) (Style, error)
+}
+
+// EditorTextPlacer optionally places single-line editor glyphs with a paint-only
+// adjustment. Text geometry, caret and selection retain the used line box.
+// Backends without this interface keep the ordinary PlaceText path.
+type EditorTextPlacer interface {
+	PlaceEditorText(*canvas.Text, Style, float32, float32)
+}
+
 // Box paints a filled border and background rather than a centered stroke.
 type Box interface {
 	Objects() []fyne.CanvasObject
