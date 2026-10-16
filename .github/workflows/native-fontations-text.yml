@@ -148,6 +148,23 @@ jobs:
             --comparator "$RUNNER_TEMP/native-text/compare" \
             > "$task_diagnostic/capture.stdout.log" 2> "$task_diagnostic/capture.stderr.log" || task_diagnostic_status=$?
           printf '%s\n' "$task_diagnostic_status" > "$task_diagnostic/capture-exit-code.txt"
+          task_trace="$task_evidence/controls-layer-trace"
+          mkdir -p "$task_trace"
+          task_trace_decoder_status=0
+          bun test src/controls-layer-trace-contract.test.ts \
+            > "$task_trace/decoder.stdout.log" 2> "$task_trace/decoder.stderr.log" || task_trace_decoder_status=$?
+          printf '%s\n' "$task_trace_decoder_status" > "$task_trace/decoder-exit-code.txt"
+          task_trace_capture_status=0
+          bun capture/responsive-controls-layer-trace.ts \
+            --url http://127.0.0.1:4321/responsive-controls \
+            --out "$task_trace" \
+            --report native/generated/responsive_controls.gen.report.json \
+            --diagnostic "$task_diagnostic" \
+            --comparator "$RUNNER_TEMP/native-text/compare" \
+            > "$task_trace/capture.stdout.log" 2> "$task_trace/capture.stderr.log" || task_trace_capture_status=$?
+          printf '%s\n' "$task_trace_capture_status" > "$task_trace/capture-exit-code.txt"
+          printf '{"schema":1,"decoderTests":%s,"traceCapture":%s}\n' \
+            "$task_trace_decoder_status" "$task_trace_capture_status" > "$task_trace/phase-exit-codes.json"
           task_native_controls_status=0
           bash ci/text-engine-probe/test-controls-remote.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/native-text" || task_native_controls_status=$?
           printf '%s\n' "$task_native_controls_status" > "$task_diagnostic/native-controls-exit-code.txt"
@@ -157,6 +174,8 @@ jobs:
           test "$task_decoder_status" -eq 0
           test "$task_diagnostic_status" -eq 0
           test "$task_native_controls_status" -eq 0
+          test "$task_trace_decoder_status" -eq 0
+          test "$task_trace_capture_status" -eq 0
       - name: Retain exact failures, native binary, locks and upstream notices
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -177,6 +196,10 @@ jobs:
             capture/controls-diagnostic-source-pin.json
             capture/responsive-controls-diagnostic.ts
             src/controls-diagnostic-contract.test.ts
+            capture/controls-layer-trace-contract.ts
+            capture/controls-layer-trace-source-pin.json
+            capture/responsive-controls-layer-trace.ts
+            src/controls-layer-trace-contract.test.ts
             native/generated
             native/fontations
             responsive-controls.json

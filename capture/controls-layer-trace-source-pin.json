@@ -1,0 +1,229 @@
+{
+  "schema": 1,
+  "diagnosticOnly": true,
+  "pixelPerfectVerified": false,
+  "chromiumRevision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+  "files": [
+    {
+      "path": "LICENSE",
+      "gitBlob": "2249a28657f86c645f8978b75babc1bd52aca318",
+      "sha256": "368cca1106be99d39ecd32a38d8305585d802a475effb66380b91ffc9bcf709b",
+      "bytes": 1536,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/LICENSE",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/LICENSE"
+    },
+    {
+      "path": "DEPS",
+      "gitBlob": "153b7611c7698a01166547c261bbda59d947d48c",
+      "sha256": "9b3b7db0bb23ac4e8211ebdedd06f3582d74d43132d07f5bb4440530f9d069b8",
+      "bytes": 196718,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/DEPS",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/DEPS"
+    },
+    {
+      "path": "base/trace_event/trace_event.h",
+      "gitBlob": "00ea6d00b28f625f185d2cd84b2cf3be5624e900",
+      "sha256": "8dd905f2dec4bd3dafadddd1f63b1e992677b0be253b0a2e30434df4d7f1fde8",
+      "bytes": 7137,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/base/trace_event/trace_event.h",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/base/trace_event/trace_event.h"
+    },
+    {
+      "path": "base/trace_event/common/trace_event_common.h",
+      "gitBlob": "aa8403cade893f75e935c1224de0d55eafe06101",
+      "sha256": "9a62dae4f531aafd733e16273ec544310a0970d86f4d2f416aab22c7d4113a8b",
+      "bytes": 2629,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/base/trace_event/common/trace_event_common.h",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/base/trace_event/common/trace_event_common.h"
+    },
+    {
+      "path": "content/browser/devtools/protocol/tracing_handler.cc",
+      "gitBlob": "8b2e2057ca8668a90d3738816a65ba9eb3d14072",
+      "sha256": "c727367cfc866f2e6e182917d1aa7be63f628d1d7f49c918da059cbc7c901b9d",
+      "bytes": 47537,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/content/browser/devtools/protocol/tracing_handler.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/content/browser/devtools/protocol/tracing_handler.cc"
+    },
+    {
+      "path": "third_party/blink/public/devtools_protocol/domains/Tracing.pdl",
+      "gitBlob": "d070f3a9cf97334940f77149c832d10f2099e098",
+      "sha256": "b1516b623681feced8b5c45c4eeb7a75ea39edd1326e0e34c6bf78a095336cd9",
+      "bytes": 7242,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/third_party/blink/public/devtools_protocol/domains/Tracing.pdl",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/public/devtools_protocol/domains/Tracing.pdl"
+    },
+    {
+      "path": "third_party/blink/public/devtools_protocol/domains/LayerTree.pdl",
+      "gitBlob": "f4609b804ab5ffe256a19adce0c1a39b4f442393",
+      "sha256": "b829e1e699ad8eefa16fb87bda5bcc5e6fd215abd11721d71cdc697268c4104a",
+      "bytes": 5958,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/third_party/blink/public/devtools_protocol/domains/LayerTree.pdl",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/public/devtools_protocol/domains/LayerTree.pdl"
+    },
+    {
+      "path": "third_party/blink/public/devtools_protocol/domains/Page.pdl",
+      "gitBlob": "80cd13ea63c98604d5e4c573dcb002f32b99113b",
+      "sha256": "716ab02126c1db173d5b5c4623f0986e27369f44f419d2efffb9e00c81c9feb8",
+      "bytes": 61371,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/third_party/blink/public/devtools_protocol/domains/Page.pdl",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/public/devtools_protocol/domains/Page.pdl"
+    },
+    {
+      "path": "cc/base/math_util.cc",
+      "gitBlob": "347d94700709340d592a4f56e801ffd9d2336e4f",
+      "sha256": "d040918c2b4b80d051899904f4c825807c431785b71d60aae474548bde99f188",
+      "bytes": 44026,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/base/math_util.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/base/math_util.cc"
+    },
+    {
+      "path": "cc/tiles/frame_viewer_instrumentation.h",
+      "gitBlob": "ab5146d374cc405bc036114207e5084bac199cba",
+      "sha256": "ce53210a96b42211949726742a2f9627bf09ba4a22c081b52cc2b6ac3bb149f7",
+      "bytes": 1283,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/tiles/frame_viewer_instrumentation.h",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/tiles/frame_viewer_instrumentation.h"
+    },
+    {
+      "path": "cc/tiles/frame_viewer_instrumentation.cc",
+      "gitBlob": "aaf8517e1fbadee5ca4b169cc9cfbdc6468c1218",
+      "sha256": "d7e3243d9968728db9f8b7347e43cd7d36e77d366b4bc2c9ca16bd28c8c8244d",
+      "bytes": 1970,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/tiles/frame_viewer_instrumentation.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/tiles/frame_viewer_instrumentation.cc"
+    },
+    {
+      "path": "cc/trees/layer_tree_host_impl.cc",
+      "gitBlob": "6ada92d54f6171767786beb456bbf7fc8335ba8e",
+      "sha256": "cbd381e8f4862e87e8a4f04e3ec74071e2adbde70d0ddf48908914ffe9a34f5b",
+      "bytes": 253873,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/trees/layer_tree_host_impl.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/trees/layer_tree_host_impl.cc"
+    },
+    {
+      "path": "cc/trees/layer_tree_impl.cc",
+      "gitBlob": "a2798f3d3e07f5176c250b31c376a19e0b3644ab",
+      "sha256": "70f6225bad4de8bc721c689ce667402c0a2c771957e3ad963378058f4ef05c06",
+      "bytes": 126095,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/trees/layer_tree_impl.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/trees/layer_tree_impl.cc"
+    },
+    {
+      "path": "cc/layers/layer_impl.cc",
+      "gitBlob": "defc7db5ef1b44da28200f2a87a6e612965761f3",
+      "sha256": "de1287ac8e64e9b955a852824be7a085fa166bc09e1eee33c924d74e08634edd",
+      "bytes": 38355,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/layers/layer_impl.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/layers/layer_impl.cc"
+    },
+    {
+      "path": "cc/layers/picture_layer.cc",
+      "gitBlob": "9537cc5e0e302ea7888df769ea84d89e6933c8ef",
+      "sha256": "8931becdabc60a122521edf5096ec659cb8bb7e109c32e01a138f1335118c466",
+      "bytes": 9242,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/layers/picture_layer.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/layers/picture_layer.cc"
+    },
+    {
+      "path": "cc/layers/picture_layer_impl.cc",
+      "gitBlob": "1eb278cab3d05f9881873644ac21b9bcbe0b5e90",
+      "sha256": "8e9881b1ea51cd9988fb5cffb0afc00c46ec3d6774d60df74616fa42785ed449",
+      "bytes": 86234,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/layers/picture_layer_impl.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/layers/picture_layer_impl.cc"
+    },
+    {
+      "path": "cc/tiles/picture_layer_tiling.cc",
+      "gitBlob": "27ce3ced5e015ad725e8e62ddfb420741ef7092f",
+      "sha256": "61a34cf86e12717be8ca5417407671635b3b985a46e29db0a3e004c82fd561b8",
+      "bytes": 36909,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/tiles/picture_layer_tiling.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/tiles/picture_layer_tiling.cc"
+    },
+    {
+      "path": "cc/tiles/tile.cc",
+      "gitBlob": "313390e97de457e780b89f5f78a555aee13b02b0",
+      "sha256": "f76e25283e8e0decd4cd6e79a348dc0a8a69c7ab3824d67ac87b2ce8b918051e",
+      "bytes": 3246,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/tiles/tile.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/tiles/tile.cc"
+    },
+    {
+      "path": "cc/raster/lcd_text_disallowed_reason.cc",
+      "gitBlob": "a9a2e50f6896433da08630bc3b2dbd269cb6c5f2",
+      "sha256": "2e9dcda64afd49475ae3827d698435a8baf859ca5c549ba00beb72baa538ea7e",
+      "bytes": 1493,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/cc/raster/lcd_text_disallowed_reason.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/cc/raster/lcd_text_disallowed_reason.cc"
+    },
+    {
+      "path": "third_party/blink/renderer/core/inspector/inspector_layer_tree_agent.cc",
+      "gitBlob": "fb1ecf5709c504a7144b88bc0168080d25c20cdb",
+      "sha256": "5d3c201c4680547dac5d2ec070375af86a4695cf859e8d2b7f88af08be175133",
+      "bytes": 21503,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/third_party/blink/renderer/core/inspector/inspector_layer_tree_agent.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/inspector/inspector_layer_tree_agent.cc"
+    },
+    {
+      "path": "include/perfetto/tracing/track_event_legacy.h",
+      "gitBlob": "fce0aa5713dd22abee2bd3224e9328edf1d6b16c",
+      "sha256": "e2bf2cce79c1c5ea920f9d831327c015d0dc0f0254d413275f9deca0c8fb9d34",
+      "bytes": 67536,
+      "repository": "google/perfetto",
+      "revision": "da65f7e907e0caf473ddec16e15427465f503d05",
+      "output": "perfetto/include/perfetto/tracing/track_event_legacy.h",
+      "url": "https://raw.githubusercontent.com/google/perfetto/da65f7e907e0caf473ddec16e15427465f503d05/include/perfetto/tracing/track_event_legacy.h"
+    },
+    {
+      "path": "LICENSE",
+      "gitBlob": "681d40008ee32ddb7e4e1413d6bf82c4f68c5b5b",
+      "sha256": "9a682a56cffc9524dfa9b0b1c0dca9cb81a19e96d5bd0793aaf02c08a95ee7ca",
+      "bytes": 14990,
+      "repository": "google/perfetto",
+      "revision": "da65f7e907e0caf473ddec16e15427465f503d05",
+      "output": "perfetto/LICENSE",
+      "url": "https://raw.githubusercontent.com/google/perfetto/da65f7e907e0caf473ddec16e15427465f503d05/LICENSE"
+    }
+  ],
+  "notice": "Exact official Chromium and Chromium-DEPS-pinned Perfetto source copies retain their original headers and LICENSE files. New collector/decoder code is Apache-2.0. Source describes eligibility and trace serialization, not an observed glyph mask."
+}

@@ -460,3 +460,35 @@ Compilation and this diagnostic never establish widget parity.
 Before treating browser policy as reproduced, complete
 the instrumentation or explicitly retain the independent-policy qualification.
 These are technical completeness conditions, not human approval locks.
+
+## Supplemental controls layer tracing
+
+`capture/responsive-controls-layer-trace.ts` runs after the existing uninstrumented
+and observed controls diagnostic. Those sources, three pointer states at DPR 1/2,
+14 comparisons and the original 22-frame collector/gate remain unchanged. The new
+pass records a fresh LayerTree-observed control and then a traced sequence in the
+same browser. Thirty strict full-frame comparisons cover control/traced output,
+per-state observation perturbation and both prior diagnostic passes. Any changed
+pixel, malformed/missing comparison or diagnostic failure remains fatal; all slots
+are attempted before returning. The native controls helper still runs independently.
+
+The trace uses existing `cc`, metadata and DevTools timeline/layer categories.
+It retains bounded raw CDP packets, exact start/completion/buffer receipts, real
+pointer focus/author state, frame tokens, renderer PIDs and clock-sync markers.
+Source-shaped decoding reports live layer IDs, `contents_opaque`, current
+`lcd_text_disallowed_reason`, property-tree indices and raster transforms. Trace
+matrices are row-major; CDP LayerTree matrices are column-major. The optional CDP
+tree may remain unreported. Its absence does not establish absence of layers.
+
+Clock-window joins retain candidate source-frame numbers and raster tasks; they
+do not identify the exact tree used by the screenshot swap. Cached tile LCD flags,
+actual glyph masks, surface pixel geometry/color/alpha, gamma/contrast and per-text
+layer membership remain unobserved. There is no effective-policy or widget-parity
+claim. No snapshot replay, debug rendering flag, policy override or fitted placement
+is used. Tracing is stopped in cleanup; loss, overflow or missing required joins
+diagnose incomplete evidence rather than becoming a successful empty result.
+
+`controls-layer-trace-source-pin.json` binds official Chromium
+`971a7443b0c9b0a9b2860529b33331b76077ec62` protocol/implementation bytes and its
+DEPS-pinned Perfetto clock-marker macro. Hosted evidence includes their unchanged
+source notices and both licenses. New collector/decoder code remains Apache-2.0.
