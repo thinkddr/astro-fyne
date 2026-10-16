@@ -172,6 +172,12 @@ overwriting an edited live value. `createTextNode(null)` still creates the text
 `"null"`. This setter-specific correction adds no other CharacterData methods,
 general Web IDL argument conversions, prototype behavior, mutation observers or
 lifecycle guarantees.
+The implemented `textContent` setter uses nullable DOM-string conversion: both null
+and undefined clear the text, numbers become text, and a Symbol throws `TypeError`
+before changing Text data or detaching Element children. The original-source roundtrip
+checks retained Text and input identity, raw/default/live input values and pristine
+versus edited textarea values through this setter. This does not add other Node APIs
+or general Web IDL/prototype support.
 Restored browser inputs retain their raw value attribute separately from the live
 editor value, including attribute absence and an edited value with an unchanged default.
 Checkboxes preserve `checked`/`defaultChecked`, dirty local state, the default `on`
