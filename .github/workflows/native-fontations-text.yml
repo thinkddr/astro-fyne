@@ -27,7 +27,7 @@ jobs:
       - name: Install native build prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y clang llvm ninja-build cmake meson pkg-config libwoff-dev zlib1g-dev
+          sudo apt-get install --no-install-recommends -y clang llvm ninja-build cmake meson pkg-config libgtest-dev libwoff-dev zlib1g-dev
       - name: Resolve pinned source and record the actual standalone Cargo lock
         env:
           GH_TOKEN: ${{ github.token }}
