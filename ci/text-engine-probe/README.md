@@ -16,12 +16,29 @@ notice is retained beside the source and in the hosted binary's upstream notices
 
 The optional development provider in [`native/fontations`](../../native/fontations/)
 connects copied glyph records to real Fyne `canvas.Text` primitives. Its hosted
-checks use the exact public fork commit in `fyne-hook-pin.json` through a temporary
-module replacement; the production module stays unchanged. They require the
+checks build the committed canonical `fyne.io/fyne/v2` dependency through its
+published `github.com/thinkddr/fyne/v2@v2.8.1-sytue.19` replacement. No local Fyne
+replacement or temporary modfile is used. The adopter changes the production pin
+from `.18` to `.19`; those committed module files must remain unchanged during
+the hosted build. They require the
 original seven rows to retain their font, metrics, glyphs and line origins, then
 compare both Fyne software captures with Chromium and the standalone renderer at
 zero tolerance. This validation is additional to the existing native gate.
 The provider receives no browser pixels or measurements.
+
+`fyne-hook-pin.json` binds the actual public tag object, neutral unsigned commit,
+tree, module checksums and twelve reviewed source files. The hosted check retains
+`go mod download -json`, its actual cache ZIP/mod/info, those twelve source files
+and the Fyne license. It independently computes Go Hash1 for the ZIP and go.mod,
+compares the complete compiled cache tree with that ZIP, and checks the public tag
+and module origin. The previous signed sumDB and full-tree release proof is
+separate evidence; a declared version alone does not satisfy this gate.
+Provider captures bind the current source manifest, readonly selected graph,
+retained test binary and its actual build information before and after execution.
+Negative controls reject stale `.18`, local replacements, wrong checksums,
+changed/extra sources and replayed binary evidence. Published-module provider
+pixel proof must pass the same four strict comparisons; publication of the API
+alone does not establish that result.
 
 The provider requires an explicit library path, licensed static fonts and policy.
 It is selected with `atf_fontations` on Linux ARM64 with CGo. It validates and packs

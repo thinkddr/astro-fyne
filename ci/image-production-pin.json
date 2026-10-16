@@ -6,12 +6,12 @@
   },
   "replacement": {
     "path": "github.com/thinkddr/fyne/v2",
-    "version": "v2.8.1-sytue.18",
-    "sum": "h1:k780PnLSsuzwqvrl6ehDzq0UXThixmAD+kHH1uxvoWQ=",
+    "version": "v2.8.1-sytue.19",
+    "sum": "h1:Vex+6Gs3jNl3saiQKnKVe4Xh5896aIUnkOUzcKNzJKs=",
     "goModSum": "h1:kpeuFrClm0fiAgJYr2soTfwKMT5rzNcSKzmgGjxvHOY="
   },
   "softwareSourceFiles": {
-    "draw.go": "c03707cd8e9d66c95cd7d35ad5ee594bac6dd774c34b6444325241402465a6ed",
+    "draw.go": "aea9950aea1ab0440bb7f9505fcc43ed7653571fe5cdec1f9b075095493be5aa",
     "skia_legacy_enlargement.go": "569d76d50e31f6317a1f05b7517d272614013cb25931ba05e3372b2d116835fc"
   },
   "licenses": {

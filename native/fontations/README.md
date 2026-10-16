@@ -4,9 +4,14 @@
 
 This development package supplies native-shaped text to Fyne's software painter.
 It is enabled by `atf_fontations` on Linux ARM64 with CGo, and requires the fork's
-`canvas.Text.Layout` API. The default converter module and backend remain
-unchanged. Current hosted checks use an exact public fork source pin through a
-temporary module replacement; they do not claim a published `.19` module.
+`canvas.Text.Layout` API in the published `v2.8.1-sytue.19` replacement. The
+default backend loads no native engine. Hosted provider checks use the committed
+production module with readonly resolution, without a temporary local Fyne
+replacement. They retain and verify the actual downloaded ZIP, module checksums,
+tag/commit identity and twelve pinned source files before and after the build.
+Adopting `.19` changes the prior `.18` dependency; the adopted module files must
+remain unchanged during each hosted build. The provider's seven-row glyph and
+strict pixel comparisons remain mandatory, separate from release verification.
 
 `NewBackend` takes an absolute shared-library path, explicit `Policy` and a map
 of font families/faces. Each `LicensedFont` supplies a `Resource` and its `License`

@@ -45,4 +45,4 @@ require (
 
 replace github.com/thinkddr/astro-fyne/native => ../..
 
-replace fyne.io/fyne/v2 => github.com/thinkddr/fyne/v2 v2.8.1-sytue.18
+replace fyne.io/fyne/v2 => github.com/thinkddr/fyne/v2 v2.8.1-sytue.19

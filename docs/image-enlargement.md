@@ -16,7 +16,7 @@ bash ci/image-enlargement.sh production
 ```
 
 Ordinary conformance CI also requires this gate. It selects the versioned public
-replacement in `native/go.mod`: `github.com/thinkddr/fyne/v2@v2.8.1-sytue.18`.
+replacement in `native/go.mod`: `github.com/thinkddr/fyne/v2@v2.8.1-sytue.19`.
 The desktop demo pins the same release in its own module. Host applications must
 declare their own replacement, as described in the [README](../README.md#use-widgets-themes-and-fonts).
 
