@@ -65,6 +65,7 @@ const scenario = astro
         { id: "js-insert-input", value: "edited" },
         { id: "js-hierarchy-input", value: "edited" },
         { id: "js-ancestor-input", value: "edited" },
+        { id: "js-removal-input", value: "edited" },
       ],
       suffix: [
         ...tap(
@@ -122,6 +123,12 @@ const scenario = astro
           "js-ancestor-back",
           "js-ancestor-valid-self",
         ),
+        ...tap(
+          "js-removal-foreign",
+          "js-removal-detached",
+          "js-removal-text-parent",
+          "js-removal-valid",
+        ),
       ],
       follow: [
         ...tap(
@@ -145,6 +152,7 @@ const scenario = astro
         { id: "js-insert-input", value: "continued" },
         { id: "js-hierarchy-input", value: "continued" },
         { id: "js-ancestor-input", value: "continued" },
+        { id: "js-removal-input", value: "continued" },
         ...tap(
           "js-insert-invalid",
           "js-insert-move",
@@ -164,6 +172,12 @@ const scenario = astro
           "js-ancestor-reorder",
           "js-ancestor-back",
           "js-ancestor-valid-self",
+        ),
+        ...tap(
+          "js-removal-foreign",
+          "js-removal-detached",
+          "js-removal-text-parent",
+          "js-removal-valid",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -880,6 +894,161 @@ function assertAncestorTimeline(
   }
   assert.equal(operations, 7, `Missing ancestor operations: ${label}`);
 }
+type RemovalState = {
+  value: string;
+  result: "ready" | Record<string, unknown>;
+};
+const removalOutcomes: Record<
+  string,
+  { operation: string; error: string; returned: boolean; detached: boolean }
+> = {
+  "js-removal-foreign": {
+    operation: "foreign",
+    error: "NotFoundError",
+    returned: false,
+    detached: false,
+  },
+  "js-removal-detached": {
+    operation: "detached",
+    error: "NotFoundError",
+    returned: false,
+    detached: false,
+  },
+  "js-removal-text-parent": {
+    operation: "text-parent",
+    error: "NotFoundError",
+    returned: false,
+    detached: false,
+  },
+  "js-removal-valid": {
+    operation: "valid",
+    error: "none",
+    returned: true,
+    detached: true,
+  },
+};
+function removalStep(
+  state: RemovalState,
+  step: { id: string; value?: string },
+): RemovalState {
+  if (step.id === "js-removal-input") {
+    assert.ok(typeof step.value === "string", "Removal edit needs a value");
+    return { ...state, value: step.value };
+  }
+  const outcome = removalOutcomes[step.id];
+  if (!outcome) return state;
+  return {
+    value: state.value,
+    result: {
+      ...outcome,
+      same: true,
+      attached: true,
+      value: state.value,
+      defaultValue: "initial",
+      rawValue: "initial",
+      textChildren: 0,
+      order: ["input", "caption"],
+    },
+  };
+}
+const removalStart = (): RemovalState => ({ value: "edited", result: "ready" });
+const removalFollowStart = () =>
+  removalStep(removalStart(), { id: "js-removal-valid" });
+function assertRemovalValues(
+  values: Record<string, string>,
+  state: RemovalState,
+  label: string,
+) {
+  assert.equal(
+    values["js-removal-input"],
+    state.value,
+    `Removal input value differs: ${label}`,
+  );
+  const result = values["js-removal-result"];
+  assert.ok(typeof result === "string", `Missing removal result: ${label}`);
+  assert.deepEqual(
+    state.result === "ready" ? result : JSON.parse(result),
+    state.result,
+    `Removal outcome differs: ${label}`,
+  );
+}
+function assertRemovalTimeline(
+  frames: JavascriptFrame[][],
+  steps: { id: string; value?: string }[],
+  state: RemovalState,
+  label: string,
+) {
+  assert.equal(
+    frames.length,
+    steps.length + 1,
+    `Missing removal frames: ${label}`,
+  );
+  let uid: string | undefined;
+  let operations = 0;
+  for (const [index, roots] of frames.entries()) {
+    if (index) {
+      const step = steps[index - 1]!;
+      state = removalStep(state, step);
+      if (removalOutcomes[step.id]) operations++;
+    }
+    const nodes = new Map<
+      string,
+      { frame: JavascriptFrame; parent?: string }
+    >();
+    const visit = (children: JavascriptFrame[], parent?: string) => {
+      for (const frame of children) {
+        const id = frame.attrs?.id;
+        if (id?.startsWith("js-removal-")) {
+          assert.equal(
+            nodes.has(id),
+            false,
+            `Duplicate removal node ${id}: ${label}`,
+          );
+          nodes.set(id, { frame, parent });
+        }
+        visit(frame.children ?? [], id);
+      }
+    };
+    visit(roots);
+    const input = nodes.get("js-removal-input"),
+      host = nodes.get("js-removal-host");
+    assert.ok(input, `Missing removal input: ${label}, frame ${index}`);
+    assert.ok(host, `Missing removal host: ${label}, frame ${index}`);
+    assert.ok(input.frame.uid, `Missing removal input UID: ${label}`);
+    uid ??= input.frame.uid;
+    assert.equal(input.frame.uid, uid, `Removal changed input UID: ${label}`);
+    assert.equal(
+      input.parent,
+      "js-removal-host",
+      `Removal detached input: ${label}`,
+    );
+    assert.equal(
+      input.frame.attrs?.value,
+      "initial",
+      `Removal changed default: ${label}`,
+    );
+    assert.equal(
+      input.frame.value,
+      state.value,
+      `Removal changed live frame: ${label}`,
+    );
+    assert.deepEqual(
+      (host.frame.children ?? []).map((child) =>
+        child.attrs?.id === "js-removal-input"
+          ? "input"
+          : child.tag === "#text" &&
+              child.text === "caption" &&
+              !child.children?.length
+            ? "caption"
+            : "unexpected",
+      ),
+      ["input", "caption"],
+      `Removal tree differs: ${label}, frame ${index}`,
+    );
+    assertRemovalValues(frameValues(roots), state, `${label}, frame ${index}`);
+  }
+  assert.equal(operations, 4, `Missing removal operations: ${label}`);
+}
 const attributeFields = {
   input: [
     "tag",
@@ -1154,6 +1323,17 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
 }
 if (!astro) {
   assert.equal(
+    nativeResult.removalIdentityChecked,
+    true,
+    "Native removal pointer checks did not run",
+  );
+  assertRemovalTimeline(
+    nativeResult.frames,
+    scenario.suffix,
+    removalStart(),
+    "native suffix",
+  );
+  assert.equal(
     nativeResult.ancestorIdentityChecked,
     true,
     "Native ancestor pointer checks did not run",
@@ -1338,6 +1518,65 @@ try {
     ? null
     : await page.locator('[id="js-ancestor-input"]').elementHandle();
   let browserAncestorState = ancestorStart();
+  let removalElement = astro
+    ? null
+    : await page.locator('[id="js-removal-input"]').elementHandle();
+  let browserRemovalState = removalStart();
+  const assertBrowserRemoval = async (label: string) => {
+    if (astro) return;
+    assert.ok(removalElement, `Missing browser removal input: ${label}`);
+    const actual = await removalElement.evaluate((element) => {
+      if (!(element instanceof HTMLInputElement))
+        throw new Error("Removal target is not an input");
+      const host = document.getElementById("js-removal-host");
+      if (!host) throw new Error("Missing removal host");
+      const caption = Array.from(host.childNodes).find(
+        (child) => child.nodeType === 3 && child.textContent === "caption",
+      );
+      if (!caption) throw new Error("Missing removal caption");
+      return {
+        same: document.getElementById("js-removal-input") === element,
+        count: document.querySelectorAll('[id="js-removal-input"]').length,
+        attached: element.parentNode === host,
+        value: element.value,
+        defaultValue: element.defaultValue,
+        rawValue: element.getAttribute("value"),
+        textChildren: caption.childNodes.length,
+        order: Array.from(host.childNodes).map((child) =>
+          child === element
+            ? "input"
+            : child === caption
+              ? "caption"
+              : "unexpected",
+        ),
+        result: document.getElementById("js-removal-result")?.textContent,
+      };
+    });
+    const { result, ...control } = actual;
+    assert.deepEqual(
+      control,
+      {
+        same: true,
+        count: 1,
+        attached: true,
+        value: browserRemovalState.value,
+        defaultValue: "initial",
+        rawValue: "initial",
+        textChildren: 0,
+        order: ["input", "caption"],
+      },
+      `Browser removal identity/tree/value differs: ${label}`,
+    );
+    assert.ok(
+      typeof result === "string",
+      `Missing browser removal result: ${label}`,
+    );
+    assertRemovalValues(
+      { "js-removal-input": actual.value, "js-removal-result": result },
+      browserRemovalState,
+      label,
+    );
+  };
   const assertBrowserAncestor = async (label: string) => {
     if (astro) return;
     assert.ok(ancestorElement, `Missing browser ancestor input: ${label}`);
@@ -1547,6 +1786,7 @@ try {
   await assertBrowserInsertion("restored browser initial");
   await assertBrowserHierarchy("restored browser initial");
   await assertBrowserAncestor("restored browser initial");
+  await assertBrowserRemoval("restored browser initial");
   await assertBrowserInputReflection("restored browser initial");
   assert.deepEqual(
     await page.evaluate(() => window.afyJavascript.calls()),
@@ -1579,10 +1819,12 @@ try {
       browserInsertionState = insertionStep(browserInsertionState, step);
       browserHierarchyState = hierarchyStep(browserHierarchyState, step);
       browserAncestorState = ancestorStep(browserAncestorState, step);
+      browserRemovalState = removalStep(browserRemovalState, step);
       if (step.id === "js-attrs-step") browserAttributePhase++;
       await assertBrowserInsertion(`after ${step.id}`);
       await assertBrowserHierarchy(`after ${step.id}`);
       await assertBrowserAncestor(`after ${step.id}`);
+      await assertBrowserRemoval(`after ${step.id}`);
       await assertBrowserInputReflection(`after ${step.id}`);
     }
   };
@@ -1600,6 +1842,13 @@ try {
       frames,
       scenario.suffix,
       insertionStart(),
+      "restored browser suffix",
+    );
+  if (!astro)
+    assertRemovalTimeline(
+      frames,
+      scenario.suffix,
+      removalStart(),
       "restored browser suffix",
     );
   if (!astro)
@@ -1646,6 +1895,12 @@ try {
   }
   const followCalls = await page.evaluate(() => window.afyJavascript.calls());
   if (!astro) {
+    assertRemovalTimeline(
+      follow,
+      scenario.follow,
+      removalFollowStart(),
+      "restored browser follow",
+    );
     assertAncestorTimeline(
       follow,
       scenario.follow,
@@ -1713,11 +1968,17 @@ try {
       location: "inner",
       result: "ready",
     };
+    await removalElement?.dispose();
+    removalElement = await page
+      .locator('[id="js-removal-input"]')
+      .elementHandle();
+    browserRemovalState = { value: "initial", result: "ready" };
     browserAttributePhase = 0;
     browserStage = "original";
     await assertBrowserInsertion("original browser initial");
     await assertBrowserHierarchy("original browser initial");
     await assertBrowserAncestor("original browser initial");
+    await assertBrowserRemoval("original browser initial");
     await assertBrowserInputReflection("original browser initial");
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
@@ -1765,6 +2026,11 @@ try {
       assertAncestorValues(
         values as Record<string, string>,
         browserAncestorState,
+        `original suffix, frame ${i}`,
+      );
+      assertRemovalValues(
+        values as Record<string, string>,
+        browserRemovalState,
         `original suffix, frame ${i}`,
       );
       assert.deepEqual(
@@ -1903,6 +2169,11 @@ try {
         browserAncestorState,
         `original follow, frame ${i}`,
       );
+      assertRemovalValues(
+        values as Record<string, string>,
+        browserRemovalState,
+        `original follow, frame ${i}`,
+      );
       const followFrame = follow[i];
       assert.ok(followFrame, `Missing restored browser follow frame ${i}`);
       assert.deepEqual(
@@ -1974,6 +2245,17 @@ const webResult = JSON.parse(
   await readFile(join(evidence, "browser.json"), "utf8"),
 );
 if (!astro) {
+  assert.equal(
+    restored.removalIdentityChecked,
+    true,
+    "Restored native removal pointer checks did not run",
+  );
+  assertRemovalTimeline(
+    restored.frames,
+    scenario.follow,
+    removalFollowStart(),
+    "restored native follow",
+  );
   assert.equal(
     restored.ancestorIdentityChecked,
     true,
@@ -2059,6 +2341,12 @@ await writeFile(
             hierarchy: {
               suffixOperations: 3,
               followOperations: 3,
+              nativePointerIdentityChecked: true,
+              browserElementIdentityChecked: true,
+            },
+            removal: {
+              suffixOperations: 4,
+              followOperations: 4,
               nativePointerIdentityChecked: true,
               browserElementIdentityChecked: true,
             },

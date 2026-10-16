@@ -87,6 +87,7 @@ func main() {
 	insertion := view.Object("js-insert-input")
 	hierarchy := view.Object("js-hierarchy-input")
 	ancestor := view.Object("js-ancestor-input")
+	removal := view.Object("js-removal-input")
 	perform := func(step step) {
 		object := view.Object(step.ID)
 		if object == nil {
@@ -124,6 +125,9 @@ func main() {
 		if ancestor != nil && view.Object("js-ancestor-input") != ancestor {
 			panic("ancestor mutation replaced the existing native input after " + step.ID)
 		}
+		if removal != nil && view.Object("js-removal-input") != removal {
+			panic("removal replaced the existing native input after " + step.ID)
+		}
 	}
 	if os.Args[2] == "export" {
 		for _, step := range scenario.Prefix {
@@ -148,7 +152,7 @@ func main() {
 		}
 		frames = append(frames, snapshot.Frame)
 	}
-	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil, "hierarchyIdentityChecked": hierarchy != nil, "ancestorIdentityChecked": ancestor != nil})
+	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil, "hierarchyIdentityChecked": hierarchy != nil, "ancestorIdentityChecked": ancestor != nil, "removalIdentityChecked": removal != nil})
 	if err != nil {
 		panic(err)
 	}
