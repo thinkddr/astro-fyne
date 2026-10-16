@@ -24,3 +24,6 @@ native/.astro-javascript-probe/
 example/src/pages/astro-javascript-roundtrip/
 example/src/pages/javascript-roundtrip/
 example/src/pages/program-roundtrip/
+native/.image-enlargement-source/
+native/.image-enlargement-roundtrip/
+example/src/pages/image-enlargement-reverse/

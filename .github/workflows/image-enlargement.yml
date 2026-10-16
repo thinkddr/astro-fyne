@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: Apache-2.0
+name: image-enlargement-experiment
+on:
+  push:
+    branches: [codex/image-enlargement]
+  pull_request:
+    paths:
+      - .github/workflows/image-enlargement.yml
+      - ci/image-enlargement*
+      - ci/image-sampling/**
+      - capture/image-enlargement.ts
+      - image-enlargement*.json
+      - example/src/components/ImageEnlargementConformance.tsx
+      - example/src/pages/image-enlargement.astro
+      - example/public/images/enlargement-*.png
+      - native/reverse/cmd/image-enlargement-fixture/**
+      - native/go.mod
+      - native/go.sum
+      - native/view.go
+      - native/images.go
+      - native/reverse/**
+      - src/reverse.ts
+      - src/scene-native.ts
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Isolated renderer to exercise; baseline may fail strict pixel comparisons
+        type: choice
+        default: all
+        options: [all, baseline, bilinear, skia-lowp, skia-legacy]
+permissions:
+  contents: read
+concurrency:
+  group: image-enlargement-${{ github.ref }}-${{ inputs.variant || 'all' }}
+  cancel-in-progress: true
+jobs:
+  compare:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(github.event_name != 'workflow_dispatch' && '["skia-legacy"]' || inputs.variant == 'all' && '["baseline","bilinear","skia-lowp","skia-legacy"]' || format('["{0}"]', inputs.variant)) }}
+    name: strict enlargement (${{ matrix.variant }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: native/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - name: Format Go probes remotely and retain the exact changes
+        run: |
+          gofmt -w native/reverse/cmd/image-enlargement-fixture/main.go ci/image-enlargement-source_test.go ci/image-enlargement-roundtrip_test.go
+          mkdir -p artifacts/formatted
+          cp --parents native/reverse/cmd/image-enlargement-fixture/main.go ci/image-enlargement-source_test.go ci/image-enlargement-roundtrip_test.go artifacts/formatted/
+          git diff -- native/reverse/cmd/image-enlargement-fixture/main.go ci/image-enlargement-source_test.go ci/image-enlargement-roundtrip_test.go > artifacts/formatted/remote-gofmt.patch
+      - name: Exercise the original source, native export and inverse scene without tolerances
+        env:
+          ASTRO_FYNE_IMAGE_VARIANT: ${{ matrix.variant }}
+        run: bash ci/image-enlargement.sh "$ASTRO_FYNE_IMAGE_VARIANT"
+      - name: Preserve every strict failure and generated source
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-enlargement-${{ matrix.variant }}-${{ github.sha }}
+          path: |
+            artifacts/image-enlargement
+            artifacts/formatted
+            ci/image-enlargement.sh
+            ci/image-enlargement-source_test.go
+            ci/image-enlargement-roundtrip_test.go
+            ci/image-sampling
+            capture/image-enlargement.ts
+            image-enlargement.json
+            image-enlargement-scenario.json
+            example/src/components/ImageEnlargementConformance.tsx
+            example/src/pages/image-enlargement.astro
+            example/public/images/enlargement-*.png
+          if-no-files-found: warn

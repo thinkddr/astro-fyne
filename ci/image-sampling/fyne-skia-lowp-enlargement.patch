@@ -1,0 +1,18 @@
+diff --git a/internal/painter/software/draw.go b/internal/painter/software/draw.go
+--- a/internal/painter/software/draw.go
++++ b/internal/painter/software/draw.go
+@@ -179,7 +179,14 @@
+ 			(width > sourceBounds.Dx() || height > sourceBounds.Dy()) {
+ 			// Smooth images magnify linearly, as the GL image path does.
++			if alpha == 1.0 && radius == 0 {
++				if filtered, ok := skiaLowpEnlargement(origImg, width, height); ok {
++					drawTex(x, y, width, height, base, filtered, clip, alpha)
++					return
++				}
++			}
++			// Unsupported experimental profiles retain the ordinary bilinear candidate.
+ 			draw.BiLinear.Scale(scaledImg, scaledBounds, origImg, sourceBounds, draw.Over, nil)
+ 		} else {
+ 			draw.CatmullRom.Scale(scaledImg, scaledBounds, origImg, sourceBounds, draw.Over, nil)
+ 		}
+ 	}

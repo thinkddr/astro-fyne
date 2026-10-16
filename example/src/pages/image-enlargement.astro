@@ -1,0 +1,12 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+import { ImageEnlargementConformance } from "../components/ImageEnlargementConformance";
+const sourceHash = process.env.ASTRO_FYNE_IMAGE_ENLARGEMENT_SOURCE_HASH ?? "";
+---
+<html lang="en" data-image-enlargement-source-hash={sourceHash}>
+  <head><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+  <body><ImageEnlargementConformance client:load /></body>
+</html>
+<style is:global>
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+</style>
