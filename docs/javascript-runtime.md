@@ -150,6 +150,8 @@ A foreign reference, including a foreign self reference, throws an error named
 `NotFoundError` without changing the tree or edited input. Valid same-parent moves
 retain the virtual node and native control. This bounded contract does not provide
 a global `DOMException` constructor or complete DOM hierarchy validation.
+Restored browser inputs retain their raw value attribute separately from the live
+editor value, including attribute absence and an edited value with an unchanged default.
 Checkboxes preserve `checked`/`defaultChecked`, dirty local state, the default `on`
 value, click preactivation and cancellation, input/change ordering, disabled behavior,
 Space activation and associated plain-text labels. Native refreshes retain the control

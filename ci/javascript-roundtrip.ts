@@ -896,6 +896,7 @@ const normalize = (calls: unknown[][]) =>
       : args,
   );
 let exported: JavascriptArchive;
+const inputReflections: unknown[] = [];
 try {
   const page = await browser.newPage();
   page.on("pageerror", (error) => errors.push(error.message));
@@ -913,6 +914,51 @@ try {
     ? null
     : await page.locator('[id="js-insert-input"]').elementHandle();
   let browserInsertionState = insertionStart();
+  let browserAttributePhase = 0;
+  let browserStage = "restored";
+  const assertBrowserInputReflection = async (label: string) => {
+    if (astro) return;
+    const inputs = await page.evaluate(
+      (ids) =>
+        ids.map((id) => {
+          const element = document.getElementById(id);
+          if (!(element instanceof HTMLInputElement))
+            throw new Error(`Missing reflected input ${id}`);
+          return {
+            id,
+            attr: element.getAttribute("value"),
+            default: element.defaultValue,
+            live: element.value,
+          };
+        }),
+      ["js-attrs-input", "js-check-controlled", "js-check-local"],
+    );
+    inputReflections.push({
+      stage: browserStage,
+      label,
+      phase: browserAttributePhase,
+      inputs,
+    });
+    const expected = attributeStates[browserAttributePhase];
+    assert.ok(
+      expected,
+      `Unexpected rendered attribute phase ${browserAttributePhase}`,
+    );
+    assert.deepEqual(
+      inputs,
+      [
+        {
+          id: "js-attrs-input",
+          attr: expected.input[2],
+          default: expected.input[3],
+          live: expected.input[4],
+        },
+        { id: "js-check-controlled", attr: null, default: "", live: "on" },
+        { id: "js-check-local", attr: null, default: "", live: "on" },
+      ],
+      `Rendered input attribute/default/live state differs at phase ${browserAttributePhase}: ${label}`,
+    );
+  };
   const assertBrowserInsertion = async (label: string) => {
     if (astro) return;
     assert.ok(insertionElement, `Missing browser insertion input: ${label}`);
@@ -966,6 +1012,7 @@ try {
     );
   };
   await assertBrowserInsertion("restored browser initial");
+  await assertBrowserInputReflection("restored browser initial");
   assert.deepEqual(
     await page.evaluate(() => window.afyJavascript.calls()),
     [],
@@ -995,7 +1042,9 @@ try {
     await settle();
     if (!astro) {
       browserInsertionState = insertionStep(browserInsertionState, step);
+      if (step.id === "js-attrs-step") browserAttributePhase++;
       await assertBrowserInsertion(`after ${step.id}`);
+      await assertBrowserInputReflection(`after ${step.id}`);
     }
   };
   for (const step of scenario.suffix) {
@@ -1081,7 +1130,10 @@ try {
       .locator('[id="js-insert-input"]')
       .elementHandle();
     browserInsertionState = { value: "initial", moved: false, result: "ready" };
+    browserAttributePhase = 0;
+    browserStage = "original";
     await assertBrowserInsertion("original browser initial");
+    await assertBrowserInputReflection("original browser initial");
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
     const originalValues: Record<string, string>[] = [];
@@ -1285,6 +1337,12 @@ try {
   }
   assert.deepEqual(errors, [], "Browser runtime errors");
 } finally {
+  if (!astro)
+    await writeFile(
+      join(evidence, "browser-input-reflection.json"),
+      JSON.stringify({ schema: 1, observations: inputReflections }, null, 2) +
+        "\n",
+    );
   await browser.close();
   server.stop(true);
 }
@@ -1369,6 +1427,7 @@ await writeFile(
               followOperations: 4,
               nativePointerIdentityChecked: true,
               browserElementIdentityChecked: true,
+              inputReflectionObservations: inputReflections.length,
             },
           }
         : {}),

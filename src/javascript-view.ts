@@ -152,8 +152,17 @@ export function createJavascriptComponent(
         key: frame.uid,
         "data-afy-js": frame.uid,
         ref: (element: HTMLElement | null) => {
-          if (element) ctx.refs.set(frame.uid, element);
-          else ctx.refs.delete(frame.uid);
+          if (element) {
+            if (element instanceof HTMLInputElement) {
+              const value = frame.attrs?.value;
+              if (value === undefined) element.removeAttribute("value");
+              else if (element.getAttribute("value") !== value)
+                element.setAttribute("value", value);
+              if (element.value !== frame.value)
+                element.value = frame.value ?? "";
+            }
+            ctx.refs.set(frame.uid, element);
+          } else ctx.refs.delete(frame.uid);
         },
       };
       if (frame.tag === "button" || frame.tag === "a")
