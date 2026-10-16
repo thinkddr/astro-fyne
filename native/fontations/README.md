@@ -61,6 +61,16 @@ Text, caret, selection and hit testing use the same internal line style. Other
 backends keep their existing behavior. This does not establish auto-height input
 layout, clipped editor lines or focused rendering parity.
 
+The optional `webui.EditorTextPlacer` seam keeps the editor's logical text box,
+caret and selection unchanged. At software paint time, this provider rounds the
+accumulated CSS line top before adding the native baseline and applying device
+scale. Half ties go toward positive infinity, including negative coordinates.
+Ordinary `PlaceText` clears that mode on reused text through an immutable line
+copy. The [pinned Blink sources](../../ci/text-engine-probe/editor-paint-source-pin.json)
+document this bounded horizontal LTR rule; the pin is provenance, not a runtime
+input. The new regressions require hosted validation and do not establish an
+observed browser baseline, effective raster policy or focused caret parity.
+
 The additive [`input-editor-metrics.json`](../../input-editor-metrics.json)
 profile checks six fixed input boxes at scales 1 and 2, including retained authored
 line heights and fractional font sizes. Hosted checks compare actual UA editor
