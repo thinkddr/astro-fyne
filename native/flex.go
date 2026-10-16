@@ -275,6 +275,42 @@ func alignSupported(value string, self bool) bool {
 func horizontalDecoration(s Style) float32 { return s.PaddingLeft + s.PaddingRight + 2*s.BorderWidth }
 func verticalDecoration(s Style) float32   { return s.PaddingTop + s.PaddingBottom + 2*s.BorderWidth }
 func flexRow(s Style) bool                 { return s.Direction != "column" }
+
+// A host may move, resize or hide actual Fyne objects without changing their
+// source declarations. Frozen snapshots preserve that frame, but a responsive
+// export must not silently replace those overrides with the source algorithm.
+func (v *View) sourceLayoutMatchesFrame() bool {
+	if len(v.roots) != 1 {
+		return false
+	}
+	var matches func(*element, fyne.Position, fyne.Size) bool
+	matches = func(e *element, position fyne.Position, size fyne.Size) bool {
+		if !e.object.Visible() || e.object.Position() != position || e.object.Size() != size {
+			return false
+		}
+		if len(e.children) == 0 {
+			return true
+		}
+		s := e.style
+		left, top := s.PaddingLeft+s.BorderWidth, s.PaddingTop+s.BorderWidth
+		content := fyne.NewSize(max(size.Width-left-s.PaddingRight-s.BorderWidth, 0), max(size.Height-top-s.PaddingBottom-s.BorderWidth, 0))
+		origin := fyne.NewPos(left, top)
+		frames, err := flexFrames(e.children, s, content, origin)
+		if err != nil {
+			return false
+		}
+		for i, child := range e.children {
+			if !matches(child, frames[i].position, frames[i].size) {
+				return false
+			}
+		}
+		return true
+	}
+	root := v.roots[0]
+	size := fyne.NewSize(max(v.Size().Width, horizontalDecoration(root.style)), max(root.style.Height, verticalDecoration(root.style)))
+	return matches(root, fyne.NewPos(0, 0), size)
+}
+
 func itemAlignment(parent, child Style) string {
 	align := child.Flex.AlignSelf
 	if align == "" || align == "auto" {

@@ -16,3 +16,11 @@ example/src/pages/reverse-controls/
 example/src/pages/flex-reverse/
 example/src/pages/bitmap-reverse/
 example/public/assets/
+native/.scene-roundtrip/
+example/src/pages/scene-responsive/
+native/.program-roundtrip/
+native/.javascript-probe/
+native/.astro-javascript-probe/
+example/src/pages/astro-javascript-roundtrip/
+example/src/pages/javascript-roundtrip/
+example/src/pages/program-roundtrip/
