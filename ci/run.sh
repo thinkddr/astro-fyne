@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+test -z "$(gofmt -l native/generated/typography_probe_test.go ci/fyne-texttrace_test.go)"
 bun install --frozen-lockfile --ignore-scripts
 # Start with actual Fyne objects, then compile the exported scene into a web page.
 (cd native && GOMAXPROCS=2 go run -p=1 ./reverse/cmd/scene-fixture --out ../artifacts/reverse)
@@ -16,7 +17,7 @@ bun src/cli.ts reverse --scene artifacts/reverse-controls/scene.json --out examp
 cp example/src/pages/reverse-controls/ReverseControls.* artifacts/reverse-controls/
 bun run typecheck
 bun test src
-bunx --no-install prettier --check README.md docs src capture example ci/program-roundtrip.ts ci/javascript-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json package.json tsconfig.json
+bunx --no-install prettier --check README.md docs src capture example ci/program-roundtrip.ts ci/javascript-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json typography-probe.json package.json tsconfig.json
 bun src/cli.ts generate --config astro-fyne.json
 bun src/cli.ts check --config astro-fyne.json
 bun src/cli.ts generate --config conformance.json
@@ -88,6 +89,7 @@ if [[ "$task_preview_ready" != true ]]; then
   cat /tmp/astro-fyne-preview.log >&2
   exit 1
 fi
+bash ci/typography.sh
 bun capture/program-astro.ts http://127.0.0.1:4321 artifacts/program-roundtrip
 bun capture/javascript-astro.ts http://127.0.0.1:4321 artifacts/javascript-roundtrip
 bun capture/astro-javascript.ts http://127.0.0.1:4321 artifacts/astro-javascript-roundtrip
@@ -225,5 +227,5 @@ test "$task_comparison_status" -eq 0
 test -z "$(gofmt -l .)"
 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 cd ..
-git diff --exit-code HEAD -- native/generated
+git diff --exit-code HEAD -- native/generated ci/fyne-texttrace_test.go
 test -z "$(git ls-files --others --exclude-standard -- native/generated)"
