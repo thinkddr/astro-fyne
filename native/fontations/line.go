@@ -8,6 +8,7 @@ package fontations
 import (
 	"fmt"
 	"image"
+	"math"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -17,12 +18,13 @@ import (
 // Line is a Go-owned immutable shape result. It retains its owning backend,
 // never a native run. The backend must remain open while it measures or paints.
 type Line struct {
-	backend *Backend
-	font    *fontEntry
-	text    string
-	style   webui.Style
-	metrics Metrics
-	glyphs  []Glyph
+	backend           *Backend
+	font              *fontEntry
+	text              string
+	style             webui.Style
+	metrics           Metrics
+	glyphs            []Glyph
+	editorLineTopSnap bool
 }
 
 var _ canvas.TextLayout = (*Line)(nil)
@@ -83,6 +85,11 @@ func (l *Line) PaintSoftware(destination *image.NRGBA, context canvas.TextPaintC
 		// No glyph paint or native surface observation occurs for an empty line.
 		_, err := checkedRegion(destination, context)
 		return l.backend.rememberLocked(err)
+	}
+	if l.editorLineTopSnap {
+		// Blink rounds the global CSS line top before adding the baseline and
+		// applying device scale. LayoutUnit ties, including negative ties, go up.
+		context.Origin.Y = float32(math.Floor(float64(context.Origin.Y) + 0.5))
 	}
 	err := paintClipped(destination, context, func(region paintRegion) error {
 		return l.backend.library.paint(l.font.native, l.glyphs, l.style.FontSize, l.style.LineHeight, l.backend.policy,

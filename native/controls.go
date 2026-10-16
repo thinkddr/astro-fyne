@@ -430,7 +430,11 @@ func (r *editorRenderer) Layout(size fyne.Size) {
 		case "right", "end":
 			x = size.Width - width
 		}
-		e.backend.PlaceText(line, s, x, y+float32(i)*s.LineHeight)
+		if placer, ok := e.backend.(EditorTextPlacer); ok && !e.multiline {
+			placer.PlaceEditorText(line, s, x, y)
+		} else {
+			e.backend.PlaceText(line, s, x, y+float32(i)*s.LineHeight)
+		}
 	}
 	r.cursor.Hide()
 	r.selection.Hide()

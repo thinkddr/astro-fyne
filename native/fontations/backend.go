@@ -130,6 +130,7 @@ type Backend struct {
 var _ webui.Backend = (*Backend)(nil)
 var _ webui.TextValidator = (*Backend)(nil)
 var _ webui.EditorLineStyler = (*Backend)(nil)
+var _ webui.EditorTextPlacer = (*Backend)(nil)
 
 // NewBackend loads the explicitly selected library. No native run survives a
 // shape call. The initial implementation has no shape cache; a Text reuses its
@@ -296,11 +297,31 @@ func (b *Backend) PlaceText(t *canvas.Text, s webui.Style, x, y float32) {
 		}
 		t.Layout = line
 	}
+	if line.editorLineTopSnap {
+		ordinary := *line
+		ordinary.editorLineTopSnap = false
+		line = &ordinary
+		t.Layout = line
+	}
 	t.FontSource, t.TextSize = line.font.resource, s.FontSize
 	t.TextStyle = fyne.TextStyle{Bold: s.FontWeight == 700, Italic: s.FontStyle == "italic",
 		Underline: t.TextStyle.Underline, Strikethrough: t.TextStyle.Strikethrough}
 	t.Move(fyne.NewPos(x, y))
 	t.Resize(t.MinSize())
+}
+
+// PlaceEditorText retains the logical line box and enables whole-CSS-pixel line
+// top rounding only when the immutable layout paints at its accumulated origin.
+func (b *Backend) PlaceEditorText(t *canvas.Text, s webui.Style, x, y float32) {
+	b.PlaceText(t, s, x, y)
+	if t == nil {
+		return
+	}
+	if line, ok := t.Layout.(*Line); ok && line.backend == b {
+		editor := *line
+		editor.editorLineTopSnap = true
+		t.Layout = &editor
+	}
 }
 
 func (b *Backend) Editor(multiline bool, s webui.Style, onChange func(string)) webui.Editor {
