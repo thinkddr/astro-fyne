@@ -34,7 +34,16 @@ export SKIA_INCLUDE_ROOT="$task_work/skia"
   python3 bin/fetch-gn
   sha256sum bin/gn
   bin/gn --version
-  python3 tools/git-sync-deps
+  task_dependencies_ready=false
+  for task_attempt in 1 2 3; do
+    echo "Pinned Skia dependency sync attempt $task_attempt"
+    if python3 tools/git-sync-deps; then
+      task_dependencies_ready=true
+      break
+    fi
+    if [[ "$task_attempt" -lt 3 ]]; then sleep "$((task_attempt * 5))"; fi
+  done
+  [[ "$task_dependencies_ready" == true ]]
   bin/gn gen out/text-probe --fail-on-unused-args --args="$(cat "$task_proposal/gn.args")"
   ninja -j2 -C out/text-probe skia
   ninja -C out/text-probe -t commands skia > "$task_work/evidence/skia-commands.txt"
