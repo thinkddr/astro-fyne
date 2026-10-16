@@ -921,7 +921,7 @@ test("HTML forms require native submission behavior rather than a silent contain
   expect(emitGo(supported, options)).toContain('actions["save"]()');
 });
 
-test("responsive reverse directions retain declarations and source action order", async () => {
+test("responsive reverse directions retain declarations and source child order", async () => {
   for (const direction of ["row-reverse", "column-reverse"]) {
     const source =
       await program(`export function Page({observe}) { return <div id="root" style={{display:'flex',flexDirection:'${direction}',width:'100%',height:100,boxSizing:'border-box'}}>
@@ -930,7 +930,11 @@ test("responsive reverse directions retain declarations and source action order"
     </div>; }`);
     const go = emitGo(source, options);
     expect(go).toContain(`Direction: "${direction}"`);
-    expect(go.indexOf('ID: "first"')).toBeLessThan(go.indexOf('ID: "second"'));
+    const first = go.indexOf('ID: webui.String("first")');
+    const second = go.indexOf('ID: webui.String("second")');
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(second).toBeGreaterThanOrEqual(0);
+    expect(first).toBeLessThan(second);
   }
   const legacy = await program(
     `export function Page(){return <div id="legacy" style={{flexDirection:'row-reverse'}}/>;}`,
