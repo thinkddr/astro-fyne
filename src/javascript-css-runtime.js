@@ -131,60 +131,134 @@ export function createCSSCascade() {
       if (matches(selector, p, index - 1)) return true;
     return false;
   }
+  function nextVariable(value, start) {
+    let at = -1,
+      quoted = null;
+    for (let i = start; i < value.length; i++) {
+      if (value[i] === "\\") {
+        i++;
+        continue;
+      }
+      if (quoted) {
+        if (value[i] === quoted) quoted = null;
+      } else if (value[i] === '"' || value[i] === "'") quoted = value[i];
+      else if (value.slice(i, i + 4) === "var(") {
+        at = i;
+        break;
+      }
+    }
+    if (at < 0) return null;
+    let end = at + 4,
+      depth = 1,
+      comma = -1;
+    for (; end < value.length && depth; end++) {
+      if (value[end] === "\\") {
+        end++;
+        continue;
+      }
+      if (quoted) {
+        if (value[end] === quoted) quoted = null;
+      } else if (value[end] === '"' || value[end] === "'") quoted = value[end];
+      else if (value[end] === "(") depth++;
+      else if (value[end] === ")") depth--;
+      else if (value[end] === "," && depth === 1 && comma < 0) comma = end;
+    }
+    if (depth) throw new Error("Invalid CSS variable function");
+    return {
+      at,
+      end,
+      name: value.slice(at + 4, comma < 0 ? end - 1 : comma).trim(),
+      fallback: comma < 0 ? undefined : value.slice(comma + 1, end - 1).trim(),
+    };
+  }
   function variable(value, variables, seen = []) {
     if (typeof value !== "string") return value;
     let output = "",
       start = 0;
     while (true) {
-      let at = -1,
-        quoted = null;
-      for (let i = start; i < value.length; i++) {
-        if (value[i] === "\\") {
-          i++;
-          continue;
-        }
-        if (quoted) {
-          if (value[i] === quoted) quoted = null;
-        } else if (value[i] === '"' || value[i] === "'") quoted = value[i];
-        else if (value.slice(i, i + 4) === "var(") {
-          at = i;
-          break;
-        }
-      }
-      if (at < 0) return output + value.slice(start);
+      const reference = nextVariable(value, start);
+      if (!reference) return output + value.slice(start);
+      const { at, end, name, fallback } = reference;
       output += value.slice(start, at);
-      let end = at + 4,
-        depth = 1,
-        comma = -1;
-      for (; end < value.length && depth; end++) {
-        if (value[end] === "\\") {
-          end++;
-          continue;
-        }
-        if (quoted) {
-          if (value[end] === quoted) quoted = null;
-        } else if (value[end] === '"' || value[end] === "'")
-          quoted = value[end];
-        else if (value[end] === "(") depth++;
-        else if (value[end] === ")") depth--;
-        else if (value[end] === "," && depth === 1 && comma < 0) comma = end;
-      }
-      if (depth) throw new Error("Invalid CSS variable function");
-      const name = value.slice(at + 4, comma < 0 ? end - 1 : comma).trim();
       let replacement =
         seen.includes(name) || seen.length > 32
           ? undefined
           : variable(variables[name], variables, [...seen, name]);
-      if (replacement === undefined && comma >= 0)
-        replacement = variable(
-          value.slice(comma + 1, end - 1).trim(),
-          variables,
-          seen,
-        );
+      if (replacement === undefined && fallback !== undefined)
+        replacement = variable(fallback, variables, seen);
       if (replacement === undefined) return undefined;
       output += replacement;
       start = end;
     }
+  }
+  function references(value) {
+    const names = new Set(),
+      pending = [value];
+    while (pending.length) {
+      const text = pending.pop();
+      if (typeof text !== "string") continue;
+      let start = 0;
+      while (true) {
+        const reference = nextVariable(text, start);
+        if (!reference) break;
+        names.add(reference.name);
+        if (reference.fallback !== undefined) pending.push(reference.fallback);
+        start = reference.end;
+      }
+    }
+    return names;
+  }
+  function cyclicVariables(values) {
+    const graph = new Map(),
+      reversed = new Map();
+    for (const name of Object.keys(values)) reversed.set(name, []);
+    for (const [name, value] of Object.entries(values)) {
+      const edges = [...references(value)].filter((name) => reversed.has(name));
+      graph.set(name, edges);
+      for (const target of edges) reversed.get(target).push(name);
+    }
+    const visited = new Set(),
+      finished = [];
+    for (const name of graph.keys()) {
+      if (visited.has(name)) continue;
+      visited.add(name);
+      const pending = [{ name, index: 0 }];
+      while (pending.length) {
+        const current = pending[pending.length - 1],
+          edges = graph.get(current.name);
+        if (current.index < edges.length) {
+          const next = edges[current.index++];
+          if (!visited.has(next)) {
+            visited.add(next);
+            pending.push({ name: next, index: 0 });
+          }
+        } else {
+          finished.push(current.name);
+          pending.pop();
+        }
+      }
+    }
+    visited.clear();
+    const cyclic = new Set();
+    for (let index = finished.length - 1; index >= 0; index--) {
+      const name = finished[index];
+      if (visited.has(name)) continue;
+      visited.add(name);
+      const component = [],
+        pending = [name];
+      while (pending.length) {
+        const current = pending.pop();
+        component.push(current);
+        for (const next of reversed.get(current)) {
+          if (visited.has(next)) continue;
+          visited.add(next);
+          pending.push(next);
+        }
+      }
+      if (component.length > 1 || graph.get(name).includes(name))
+        for (const member of component) cyclic.add(member);
+    }
+    return cyclic;
   }
   function declarations(name, value) {
     if (name === "padding") {
@@ -256,6 +330,9 @@ export function createCSSCascade() {
     const variables = { ...parent.variables };
     for (const [name, item] of Object.entries(winners))
       if (name.startsWith("--")) variables[name] = item.value;
+    // Cycles invalidate each member even when an inner fallback could resolve.
+    // Inherited entries are already computed values, not declarations to replay.
+    for (const name of cyclicVariables(variables)) variables[name] = undefined;
     const computedVariables = {};
     for (const name of Object.keys(variables))
       computedVariables[name] = variable(variables[name], variables, [name]);
