@@ -270,7 +270,7 @@ export function createDocument() {
         : this.childNodes.map((child) => child.textContent).join("");
     }
     set textContent(value) {
-      value = value == null ? "" : String(value);
+      value = domString(value == null ? "" : value);
       if (this.nodeType === 3) {
         this.data = String(value);
         return;

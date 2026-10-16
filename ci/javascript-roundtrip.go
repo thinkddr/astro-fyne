@@ -95,6 +95,13 @@ func main() {
 			characterObjects[id] = object
 		}
 	}
+	textContentIDs := []string{"js-textcontent-guard", "js-textcontent-input", "js-textcontent-text", "js-textcontent-pristine", "js-textcontent-dirty"}
+	textContentObjects := make(map[string]fyne.CanvasObject)
+	for _, id := range textContentIDs {
+		if object := view.Object(id); object != nil {
+			textContentObjects[id] = object
+		}
+	}
 	perform := func(step step) {
 		object := view.Object(step.ID)
 		if object == nil {
@@ -140,6 +147,11 @@ func main() {
 				panic("CharacterData replaced native object " + id + " after " + step.ID)
 			}
 		}
+		for id, object := range textContentObjects {
+			if view.Object(id) != object {
+				panic("textContent replaced native object " + id + " after " + step.ID)
+			}
+		}
 	}
 	if os.Args[2] == "export" {
 		for _, step := range scenario.Prefix {
@@ -164,7 +176,7 @@ func main() {
 		}
 		frames = append(frames, snapshot.Frame)
 	}
-	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil, "hierarchyIdentityChecked": hierarchy != nil, "ancestorIdentityChecked": ancestor != nil, "removalIdentityChecked": removal != nil, "characterDataIdentityChecked": len(characterObjects) == len(characterIDs)})
+	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil, "hierarchyIdentityChecked": hierarchy != nil, "ancestorIdentityChecked": ancestor != nil, "removalIdentityChecked": removal != nil, "characterDataIdentityChecked": len(characterObjects) == len(characterIDs), "textContentIdentityChecked": len(textContentObjects) == len(textContentIDs)})
 	if err != nil {
 		panic(err)
 	}

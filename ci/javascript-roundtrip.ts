@@ -67,6 +67,8 @@ const scenario = astro
         { id: "js-ancestor-input", value: "edited" },
         { id: "js-removal-input", value: "edited" },
         { id: "js-data-dirty", value: "edited" },
+        { id: "js-textcontent-input", value: "edited" },
+        { id: "js-textcontent-dirty", value: "edited" },
       ],
       suffix: [
         ...tap(
@@ -136,6 +138,13 @@ const scenario = astro
           "js-data-number",
           "js-data-symbol",
         ),
+        ...tap(
+          "js-textcontent-null",
+          "js-textcontent-undefined",
+          "js-textcontent-number",
+          "js-textcontent-symbol",
+          "js-textcontent-parent-symbol",
+        ),
       ],
       follow: [
         ...tap(
@@ -161,6 +170,8 @@ const scenario = astro
         { id: "js-ancestor-input", value: "continued" },
         { id: "js-removal-input", value: "continued" },
         { id: "js-data-dirty", value: "continued" },
+        { id: "js-textcontent-input", value: "continued" },
+        { id: "js-textcontent-dirty", value: "continued" },
         ...tap(
           "js-insert-invalid",
           "js-insert-move",
@@ -192,6 +203,13 @@ const scenario = astro
           "js-data-undefined",
           "js-data-number",
           "js-data-symbol",
+        ),
+        ...tap(
+          "js-textcontent-null",
+          "js-textcontent-undefined",
+          "js-textcontent-number",
+          "js-textcontent-symbol",
+          "js-textcontent-parent-symbol",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -1252,6 +1270,281 @@ function assertCharacterTimeline(
   }
   assert.equal(operations, 4, `Missing CharacterData operations: ${label}`);
 }
+const textContentIDs = [
+  "js-textcontent-text",
+  "js-textcontent-pristine",
+  "js-textcontent-dirty",
+] as const;
+type TextContentState = {
+  data: string;
+  dirty: string;
+  input: string;
+  result: "ready" | Record<string, unknown>;
+};
+const textContentOperations: Record<string, string> = {
+  "js-textcontent-null": "null",
+  "js-textcontent-undefined": "undefined",
+  "js-textcontent-number": "number",
+  "js-textcontent-symbol": "symbol",
+  "js-textcontent-parent-symbol": "parent-symbol",
+};
+function textContentStep(
+  state: TextContentState,
+  step: { id: string; value?: string },
+): TextContentState {
+  if (step.id === "js-textcontent-dirty") {
+    assert.ok(typeof step.value === "string", "textContent edit needs a value");
+    return { ...state, dirty: step.value };
+  }
+  if (step.id === "js-textcontent-input") {
+    assert.ok(
+      typeof step.value === "string",
+      "textContent input edit needs a value",
+    );
+    return { ...state, input: step.value };
+  }
+  const operation = textContentOperations[step.id];
+  if (!operation) return state;
+  const data =
+    operation === "null" || operation === "undefined"
+      ? ""
+      : operation === "number"
+        ? "42"
+        : state.data;
+  const error =
+    operation === "symbol" || operation === "parent-symbol"
+      ? "TypeError"
+      : "none";
+  return {
+    ...state,
+    data,
+    result: {
+      operation,
+      errors: Array<string>(operation === "parent-symbol" ? 4 : 3).fill(error),
+      same: true,
+      text: { data, textContent: data },
+      pristine: { data, textContent: data, defaultValue: data, value: data },
+      dirty: {
+        data,
+        textContent: data,
+        defaultValue: data,
+        value: state.dirty,
+      },
+      guard: {
+        same: true,
+        parent: true,
+        defaultValue: "initial",
+        rawValue: "initial",
+        value: state.input,
+        textContent: "caption",
+      },
+    },
+  };
+}
+const textContentStart = (): TextContentState => ({
+  data: "seed",
+  dirty: "edited",
+  input: "edited",
+  result: "ready",
+});
+const textContentFollowStart = () =>
+  textContentStep(
+    { ...textContentStart(), data: "42" },
+    { id: "js-textcontent-parent-symbol" },
+  );
+function assertTextContentValues(
+  values: Record<string, string>,
+  state: TextContentState,
+  label: string,
+) {
+  for (const [id, expected] of [
+    ["js-textcontent-text", state.data],
+    ["js-textcontent-pristine", state.data],
+    ["js-textcontent-dirty", state.dirty],
+    ["js-textcontent-input", state.input],
+    ["js-textcontent-guard", "caption"],
+  ] as const)
+    assert.equal(
+      values[id],
+      expected,
+      `textContent value ${id} differs: ${label}`,
+    );
+  const result = values["js-textcontent-result"];
+  assert.ok(typeof result === "string", `Missing textContent result: ${label}`);
+  assert.deepEqual(
+    state.result === "ready" ? result : JSON.parse(result),
+    state.result,
+    `textContent outcome differs: ${label}`,
+  );
+}
+function assertTextContentTimeline(
+  frames: JavascriptFrame[][],
+  steps: { id: string; value?: string }[],
+  state: TextContentState,
+  label: string,
+) {
+  assert.equal(
+    frames.length,
+    steps.length + 1,
+    `Missing textContent frames: ${label}`,
+  );
+  const identities = new Map<string, { parent: string; text: string }>();
+  let operations = 0;
+  for (const [index, roots] of frames.entries()) {
+    if (index) {
+      const step = steps[index - 1]!;
+      state = textContentStep(state, step);
+      if (textContentOperations[step.id]) operations++;
+    }
+    const nodes = new Map<
+      string,
+      { frame: JavascriptFrame; parent?: string }
+    >();
+    const visit = (children: JavascriptFrame[], parent?: string) => {
+      for (const frame of children) {
+        const id = frame.attrs?.id;
+        if (
+          id &&
+          (textContentIDs.some((value) => value === id) ||
+            id === "js-textcontent-guard" ||
+            id === "js-textcontent-input")
+        ) {
+          assert.equal(
+            nodes.has(id),
+            false,
+            `Duplicate textContent node ${id}: ${label}`,
+          );
+          nodes.set(id, { frame, parent });
+        }
+        visit(frame.children ?? [], id);
+      }
+    };
+    visit(roots);
+    for (const id of textContentIDs) {
+      const node = nodes.get(id);
+      assert.ok(node, `Missing textContent node ${id}: ${label}`);
+      assert.equal(
+        node.parent,
+        "js-textcontent-host",
+        `textContent parent ${id} differs: ${label}`,
+      );
+      assert.equal(
+        node.frame.children?.length,
+        1,
+        `textContent child count ${id} differs: ${label}`,
+      );
+      const text = node.frame.children?.[0];
+      assert.ok(
+        text?.uid && node.frame.uid,
+        `Missing textContent UIDs ${id}: ${label}`,
+      );
+      assert.equal(
+        text.tag,
+        "#text",
+        `textContent child kind ${id} differs: ${label}`,
+      );
+      assert.equal(
+        text.text,
+        state.data,
+        `textContent text ${id} differs: ${label}`,
+      );
+      assert.equal(
+        text.children?.length ?? 0,
+        0,
+        `textContent acquired children ${id}: ${label}`,
+      );
+      if (!identities.has(id))
+        identities.set(id, { parent: node.frame.uid, text: text.uid });
+      assert.deepEqual(
+        { parent: node.frame.uid, text: text.uid },
+        identities.get(id),
+        `textContent identity ${id} differs: ${label}`,
+      );
+      if (id !== "js-textcontent-text") {
+        assert.equal(
+          node.frame.attrs?.value,
+          undefined,
+          `textContent invented value attribute ${id}: ${label}`,
+        );
+        assert.equal(
+          node.frame.value,
+          id === "js-textcontent-dirty" ? state.dirty : state.data,
+          `textContent live frame ${id} differs: ${label}`,
+        );
+      }
+    }
+    const guard = nodes.get("js-textcontent-guard"),
+      input = nodes.get("js-textcontent-input");
+    assert.ok(
+      guard?.frame.uid && input?.frame.uid,
+      `Missing textContent guard/input UIDs: ${label}`,
+    );
+    assert.equal(
+      guard.parent,
+      "js-textcontent-host",
+      `textContent guard parent differs: ${label}`,
+    );
+    assert.equal(
+      input.parent,
+      "js-textcontent-guard",
+      `textContent detached edited input: ${label}`,
+    );
+    assert.equal(
+      input.frame.attrs?.value,
+      "initial",
+      `textContent changed raw input default: ${label}`,
+    );
+    assert.equal(
+      input.frame.value,
+      state.input,
+      `textContent changed live input: ${label}`,
+    );
+    assert.equal(
+      guard.frame.children?.length,
+      2,
+      `textContent guard child count differs: ${label}`,
+    );
+    assert.equal(
+      guard.frame.children?.[0]?.uid,
+      input.frame.uid,
+      `textContent input order differs: ${label}`,
+    );
+    const caption = guard.frame.children?.[1];
+    assert.ok(caption?.uid, `Missing textContent caption UID: ${label}`);
+    assert.equal(
+      caption.tag,
+      "#text",
+      `textContent caption kind differs: ${label}`,
+    );
+    assert.equal(
+      caption.text,
+      "caption",
+      `textContent replaced caption: ${label}`,
+    );
+    assert.equal(
+      caption.children?.length ?? 0,
+      0,
+      `textContent caption acquired children: ${label}`,
+    );
+    for (const [id, identity] of [
+      ["js-textcontent-guard", { parent: guard.frame.uid, text: caption.uid }],
+      ["js-textcontent-input", { parent: input.frame.uid, text: "" }],
+    ] as const) {
+      if (!identities.has(id)) identities.set(id, identity);
+      assert.deepEqual(
+        identity,
+        identities.get(id),
+        `textContent guard/input identity differs: ${label}`,
+      );
+    }
+    assertTextContentValues(
+      frameValues(roots),
+      state,
+      `${label}, frame ${index}`,
+    );
+  }
+  assert.equal(operations, 5, `Missing textContent operations: ${label}`);
+}
 const attributeFields = {
   input: [
     "tag",
@@ -1525,6 +1818,17 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
   );
 }
 if (!astro) {
+  assert.equal(
+    nativeResult.textContentIdentityChecked,
+    true,
+    "Native textContent pointer checks did not run",
+  );
+  assertTextContentTimeline(
+    nativeResult.frames,
+    scenario.suffix,
+    textContentStart(),
+    "native suffix",
+  );
   assert.equal(
     nativeResult.characterDataIdentityChecked,
     true,
@@ -1821,6 +2125,139 @@ try {
     });
     assertCharacterValues(values, browserCharacterState, label);
   };
+  const captureTextContentHandles = () =>
+    Promise.all(
+      textContentIDs.map((id) =>
+        page.locator(`[id=${JSON.stringify(id)}]`).evaluateHandle((parent) => {
+          const text = parent.firstChild;
+          if (!(text instanceof Text))
+            throw new Error("Missing actual textContent Text node");
+          return { parent, text };
+        }),
+      ),
+    );
+  let textContentHandles = astro ? [] : await captureTextContentHandles();
+  const captureTextContentGuard = () =>
+    page.locator('[id="js-textcontent-guard"]').evaluateHandle((parent) => {
+      const input = parent.firstChild,
+        caption = input?.nextSibling;
+      if (!(input instanceof HTMLInputElement) || !(caption instanceof Text))
+        throw new Error("Missing textContent guard input or caption");
+      return { parent, input, caption };
+    });
+  let textContentGuard = astro ? null : await captureTextContentGuard();
+  let browserTextContentState = textContentStart();
+  const assertBrowserTextContent = async (label: string) => {
+    if (astro) return;
+    assert.equal(
+      textContentHandles.length,
+      textContentIDs.length,
+      `Missing textContent browser handles: ${label}`,
+    );
+    for (const [index, handle] of textContentHandles.entries()) {
+      const id = textContentIDs[index];
+      assert.ok(id, `Unexpected textContent browser handle: ${label}`);
+      const actual = await handle.evaluate(
+        ({ parent, text }, id) => ({
+          sameParent: document.getElementById(id) === parent,
+          sameText: parent.firstChild === text,
+          attached:
+            text.parentNode === parent &&
+            parent.parentElement?.id === "js-textcontent-host",
+          count: document.querySelectorAll(`[id=${JSON.stringify(id)}]`).length,
+          children: parent.childNodes.length,
+          data: text.data,
+          textContent: parent.textContent,
+          defaultValue:
+            parent instanceof HTMLTextAreaElement ? parent.defaultValue : null,
+          value: parent instanceof HTMLTextAreaElement ? parent.value : null,
+          rawValue: parent.getAttribute("value"),
+        }),
+        id,
+      );
+      assert.deepEqual(
+        actual,
+        {
+          sameParent: true,
+          sameText: true,
+          attached: true,
+          count: 1,
+          children: 1,
+          data: browserTextContentState.data,
+          textContent: browserTextContentState.data,
+          defaultValue:
+            id === "js-textcontent-text" ? null : browserTextContentState.data,
+          value:
+            id === "js-textcontent-text"
+              ? null
+              : id === "js-textcontent-dirty"
+                ? browserTextContentState.dirty
+                : browserTextContentState.data,
+          rawValue: null,
+        },
+        `Actual browser textContent identity/default/live values differ for ${id}: ${label}`,
+      );
+    }
+    assert.ok(textContentGuard, `Missing textContent browser guard: ${label}`);
+    assert.deepEqual(
+      await textContentGuard.evaluate(({ parent, input, caption }) => ({
+        sameParent: document.getElementById("js-textcontent-guard") === parent,
+        sameInput: document.getElementById("js-textcontent-input") === input,
+        parent:
+          input.parentNode === parent &&
+          parent.parentElement?.id === "js-textcontent-host",
+        order:
+          parent.firstChild === input &&
+          input.nextSibling === caption &&
+          caption.nextSibling === null,
+        children: parent.childNodes.length,
+        caption: caption.data,
+        textContent: parent.textContent,
+        defaultValue: input.defaultValue,
+        rawValue: input.getAttribute("value"),
+        value: input.value,
+      })),
+      {
+        sameParent: true,
+        sameInput: true,
+        parent: true,
+        order: true,
+        children: 2,
+        caption: "caption",
+        textContent: "caption",
+        defaultValue: "initial",
+        rawValue: "initial",
+        value: browserTextContentState.input,
+      },
+      `Actual browser textContent guard/input identity/default/live values differ: ${label}`,
+    );
+    const values = await page.evaluate(() => {
+      const text = document.getElementById("js-textcontent-text"),
+        pristine = document.getElementById("js-textcontent-pristine"),
+        dirty = document.getElementById("js-textcontent-dirty"),
+        result = document.getElementById("js-textcontent-result"),
+        input = document.getElementById("js-textcontent-input"),
+        guard = document.getElementById("js-textcontent-guard");
+      if (
+        !text ||
+        !(pristine instanceof HTMLTextAreaElement) ||
+        !(dirty instanceof HTMLTextAreaElement) ||
+        !result ||
+        !(input instanceof HTMLInputElement) ||
+        !guard
+      )
+        throw new Error("Missing textContent browser values");
+      return {
+        "js-textcontent-text": text.textContent ?? "",
+        "js-textcontent-pristine": pristine.value,
+        "js-textcontent-dirty": dirty.value,
+        "js-textcontent-result": result.textContent ?? "",
+        "js-textcontent-input": input.value,
+        "js-textcontent-guard": guard.textContent ?? "",
+      };
+    });
+    assertTextContentValues(values, browserTextContentState, label);
+  };
   const assertBrowserRemoval = async (label: string) => {
     if (astro) return;
     assert.ok(removalElement, `Missing browser removal input: ${label}`);
@@ -2087,6 +2524,7 @@ try {
   await assertBrowserAncestor("restored browser initial");
   await assertBrowserRemoval("restored browser initial");
   await assertBrowserCharacter("restored browser initial");
+  await assertBrowserTextContent("restored browser initial");
   await assertBrowserInputReflection("restored browser initial");
   assert.deepEqual(
     await page.evaluate(() => window.afyJavascript.calls()),
@@ -2121,12 +2559,14 @@ try {
       browserAncestorState = ancestorStep(browserAncestorState, step);
       browserRemovalState = removalStep(browserRemovalState, step);
       browserCharacterState = characterStep(browserCharacterState, step);
+      browserTextContentState = textContentStep(browserTextContentState, step);
       if (step.id === "js-attrs-step") browserAttributePhase++;
       await assertBrowserInsertion(`after ${step.id}`);
       await assertBrowserHierarchy(`after ${step.id}`);
       await assertBrowserAncestor(`after ${step.id}`);
       await assertBrowserRemoval(`after ${step.id}`);
       await assertBrowserCharacter(`after ${step.id}`);
+      await assertBrowserTextContent(`after ${step.id}`);
       await assertBrowserInputReflection(`after ${step.id}`);
     }
   };
@@ -2144,6 +2584,13 @@ try {
       frames,
       scenario.suffix,
       insertionStart(),
+      "restored browser suffix",
+    );
+  if (!astro)
+    assertTextContentTimeline(
+      frames,
+      scenario.suffix,
+      textContentStart(),
       "restored browser suffix",
     );
   if (!astro)
@@ -2204,6 +2651,12 @@ try {
   }
   const followCalls = await page.evaluate(() => window.afyJavascript.calls());
   if (!astro) {
+    assertTextContentTimeline(
+      follow,
+      scenario.follow,
+      textContentFollowStart(),
+      "restored browser follow",
+    );
     assertCharacterTimeline(
       follow,
       scenario.follow,
@@ -2291,6 +2744,16 @@ try {
     for (const handle of characterHandles) await handle.dispose();
     characterHandles = await captureCharacterHandles();
     browserCharacterState = { data: "seed", dirty: "seed", result: "ready" };
+    for (const handle of textContentHandles) await handle.dispose();
+    textContentHandles = await captureTextContentHandles();
+    await textContentGuard?.dispose();
+    textContentGuard = await captureTextContentGuard();
+    browserTextContentState = {
+      data: "seed",
+      dirty: "seed",
+      input: "initial",
+      result: "ready",
+    };
     browserAttributePhase = 0;
     browserStage = "original";
     await assertBrowserInsertion("original browser initial");
@@ -2298,6 +2761,7 @@ try {
     await assertBrowserAncestor("original browser initial");
     await assertBrowserRemoval("original browser initial");
     await assertBrowserCharacter("original browser initial");
+    await assertBrowserTextContent("original browser initial");
     await assertBrowserInputReflection("original browser initial");
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
@@ -2355,6 +2819,11 @@ try {
       assertCharacterValues(
         values as Record<string, string>,
         browserCharacterState,
+        `original suffix, frame ${i}`,
+      );
+      assertTextContentValues(
+        values as Record<string, string>,
+        browserTextContentState,
         `original suffix, frame ${i}`,
       );
       assert.deepEqual(
@@ -2503,6 +2972,11 @@ try {
         browserCharacterState,
         `original follow, frame ${i}`,
       );
+      assertTextContentValues(
+        values as Record<string, string>,
+        browserTextContentState,
+        `original follow, frame ${i}`,
+      );
       const followFrame = follow[i];
       assert.ok(followFrame, `Missing restored browser follow frame ${i}`);
       assert.deepEqual(
@@ -2574,6 +3048,17 @@ const webResult = JSON.parse(
   await readFile(join(evidence, "browser.json"), "utf8"),
 );
 if (!astro) {
+  assert.equal(
+    restored.textContentIdentityChecked,
+    true,
+    "Restored native textContent pointer checks did not run",
+  );
+  assertTextContentTimeline(
+    restored.frames,
+    scenario.follow,
+    textContentFollowStart(),
+    "restored native follow",
+  );
   assert.equal(
     restored.characterDataIdentityChecked,
     true,
@@ -2683,6 +3168,12 @@ await writeFile(
               followOperations: 3,
               nativePointerIdentityChecked: true,
               browserElementIdentityChecked: true,
+            },
+            textContent: {
+              suffixOperations: 5,
+              followOperations: 5,
+              nativeObjectIdentityChecked: true,
+              browserTextAndElementIdentityChecked: true,
             },
             characterData: {
               suffixOperations: 4,
