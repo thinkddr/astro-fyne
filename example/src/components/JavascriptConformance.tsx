@@ -6,6 +6,7 @@ import { JavascriptAttributes } from "./JavascriptAttributes";
 import { JavascriptCheckboxes } from "./JavascriptCheckboxes";
 import { JavascriptCSS } from "./JavascriptCSS";
 import { JavascriptEvents } from "./JavascriptEvents";
+import { JavascriptInsertion } from "./JavascriptInsertion";
 import {
   useCallback,
   useContext,
@@ -114,6 +115,7 @@ export function JavascriptConformance({
       <JavascriptCSS />
       <JavascriptEvents observe={observe} />
       <JavascriptAttributes />
+      <JavascriptInsertion />
       <p id="js-count">{count}</p>
       <p id="js-standard">
         {String(

@@ -144,6 +144,14 @@ HTML element and attribute names use ASCII case folding. Supported controls reta
 boolean `disabled` presence, dirty input values, reflected checkbox/button values and
 text/checkbox value-mode transitions. Textareas retain child-text defaults and normalized
 line endings independently of edited values. Unsupported input types still require adapters.
+`insertBefore` [validates a non-null reference](https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity)
+before detaching the inserted node.
+A foreign reference, including a foreign self reference, throws an error named
+`NotFoundError` without changing the tree or edited input. Valid same-parent moves
+retain the virtual node and native control. This bounded contract does not provide
+a global `DOMException` constructor or complete DOM hierarchy validation.
+Restored browser inputs retain their raw value attribute separately from the live
+editor value, including attribute absence and an edited value with an unchanged default.
 Checkboxes preserve `checked`/`defaultChecked`, dirty local state, the default `on`
 value, click preactivation and cancellation, input/change ordering, disabled behavior,
 Space activation and associated plain-text labels. Native refreshes retain the control
@@ -210,6 +218,8 @@ It compares the unmodified original component, archived browser continuation and
 frames at every recorded step, and proves that restoration repeats zero host effects. Frame
 counts are recorded in `comparison.json`. The attribute scenario independently checks default
 and edited values, case folding, disabled presence, type changes and textarea child mutations.
+The insertion scenario checks rejected references and valid moves against fixed tree/value
+expectations, stable virtual IDs, native object pointers and actual browser element identity.
 The CSS scenario additionally compares native
 cascade values against Chromium's original computed styles in an isolated shadow tree,
 including self/mutual cycles, selected/unused fallbacks, comments and function-name boundaries,
