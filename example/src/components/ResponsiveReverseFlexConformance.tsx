@@ -13,7 +13,7 @@ export function ResponsiveReverseFlexConformance({
         display: "flex",
         flexDirection: "column",
         width: "100%",
-        height: 1680,
+        height: 2400,
         boxSizing: "border-box",
         paddingLeft: 12,
         paddingRight: 20,
@@ -1076,6 +1076,726 @@ export function ResponsiveReverseFlexConformance({
               flexShrink: 0,
               flexBasis: 30,
               backgroundColor: "#d38a22",
+            }}
+          />
+        </div>
+      </div>
+      <div
+        id="negative-flex-start"
+        style={{
+          minWidth: 0,
+          minHeight: 0,
+          boxSizing: "border-box",
+          flexGrow: 0,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "row",
+          flexBasis: 112,
+          paddingLeft: 48,
+          paddingTop: 40,
+          gap: 8,
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <div
+          id="negative-flex-start-row-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "row-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "flex-start",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-flex-start-row-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              height: 20,
+            }}
+          />
+          <div
+            id="negative-flex-start-row-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              height: 20,
+            }}
+          />
+        </div>
+        <div
+          id="negative-flex-start-column-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "column-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "flex-start",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-flex-start-column-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              width: 20,
+            }}
+          />
+          <div
+            id="negative-flex-start-column-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              width: 20,
+            }}
+          />
+        </div>
+      </div>
+      <div
+        id="negative-flex-end"
+        style={{
+          minWidth: 0,
+          minHeight: 0,
+          boxSizing: "border-box",
+          flexGrow: 0,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "row",
+          flexBasis: 112,
+          paddingLeft: 48,
+          paddingTop: 40,
+          gap: 8,
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <div
+          id="negative-flex-end-row-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "row-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "flex-end",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-flex-end-row-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              height: 20,
+            }}
+          />
+          <div
+            id="negative-flex-end-row-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              height: 20,
+            }}
+          />
+        </div>
+        <div
+          id="negative-flex-end-column-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "column-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "flex-end",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-flex-end-column-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              width: 20,
+            }}
+          />
+          <div
+            id="negative-flex-end-column-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              width: 20,
+            }}
+          />
+        </div>
+      </div>
+      <div
+        id="negative-center"
+        style={{
+          minWidth: 0,
+          minHeight: 0,
+          boxSizing: "border-box",
+          flexGrow: 0,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "row",
+          flexBasis: 112,
+          paddingLeft: 48,
+          paddingTop: 40,
+          gap: 8,
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <div
+          id="negative-center-row-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "row-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "center",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-center-row-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              height: 20,
+            }}
+          />
+          <div
+            id="negative-center-row-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              height: 20,
+            }}
+          />
+        </div>
+        <div
+          id="negative-center-column-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "column-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "center",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-center-column-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              width: 20,
+            }}
+          />
+          <div
+            id="negative-center-column-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              width: 20,
+            }}
+          />
+        </div>
+      </div>
+      <div
+        id="negative-space-between"
+        style={{
+          minWidth: 0,
+          minHeight: 0,
+          boxSizing: "border-box",
+          flexGrow: 0,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "row",
+          flexBasis: 112,
+          paddingLeft: 48,
+          paddingTop: 40,
+          gap: 8,
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <div
+          id="negative-space-between-row-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "row-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "space-between",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-space-between-row-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              height: 20,
+            }}
+          />
+          <div
+            id="negative-space-between-row-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              height: 20,
+            }}
+          />
+        </div>
+        <div
+          id="negative-space-between-column-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "column-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "space-between",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-space-between-column-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              width: 20,
+            }}
+          />
+          <div
+            id="negative-space-between-column-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              width: 20,
+            }}
+          />
+        </div>
+      </div>
+      <div
+        id="negative-space-around"
+        style={{
+          minWidth: 0,
+          minHeight: 0,
+          boxSizing: "border-box",
+          flexGrow: 0,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "row",
+          flexBasis: 112,
+          paddingLeft: 48,
+          paddingTop: 40,
+          gap: 8,
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <div
+          id="negative-space-around-row-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "row-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "space-around",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-space-around-row-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              height: 20,
+            }}
+          />
+          <div
+            id="negative-space-around-row-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              height: 20,
+            }}
+          />
+        </div>
+        <div
+          id="negative-space-around-column-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "column-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "space-around",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-space-around-column-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              width: 20,
+            }}
+          />
+          <div
+            id="negative-space-around-column-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              width: 20,
+            }}
+          />
+        </div>
+      </div>
+      <div
+        id="negative-space-evenly"
+        style={{
+          minWidth: 0,
+          minHeight: 0,
+          boxSizing: "border-box",
+          flexGrow: 0,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "row",
+          flexBasis: 112,
+          paddingLeft: 48,
+          paddingTop: 40,
+          gap: 8,
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <div
+          id="negative-space-evenly-row-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "row-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "space-evenly",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-space-evenly-row-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              height: 20,
+            }}
+          />
+          <div
+            id="negative-space-evenly-row-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              height: 20,
+            }}
+          />
+        </div>
+        <div
+          id="negative-space-evenly-column-reverse"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            flexGrow: 0,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "column-reverse",
+            flexBasis: 70,
+            height: 70,
+            paddingLeft: 8,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 7,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "#193443",
+            gap: 10,
+            justifyContent: "space-evenly",
+            backgroundColor: "#eaf0f4",
+          }}
+        >
+          <div
+            id="negative-space-evenly-column-reverse-1"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 40,
+              backgroundColor: "#d94a37",
+              width: 20,
+            }}
+          />
+          <div
+            id="negative-space-evenly-column-reverse-2"
+            style={{
+              minWidth: 0,
+              minHeight: 0,
+              boxSizing: "border-box",
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: 50,
+              backgroundColor: "#2e66c5",
+              width: 20,
             }}
           />
         </div>

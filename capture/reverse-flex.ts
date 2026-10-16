@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import type { ElementHandle } from "playwright";
 import { validateSceneDocument } from "../src/reverse.ts";
+import { validateReverseFlexScenario } from "./reverse-flex-contract.ts";
 
 const args = new Map<string, string>();
 for (let i = 2; i < process.argv.length; i += 2) {
@@ -42,21 +43,9 @@ const hash = (data: string | Uint8Array) =>
 const scenarioBytes = await readFile(
   new URL("../reverse-flex-scenario.json", import.meta.url),
 );
-const scenario = JSON.parse(scenarioBytes.toString()) as {
-  schema: number;
-  cases: { name: string; width: number; height: number; scale: number }[];
-  ids: string[];
-  buttons: string[];
-  expectedPointerActions: string[];
-  expectedFocusOrder: string[];
-};
-assert.equal(scenario.schema, 1);
-assert.equal(scenario.cases.length, 6);
-assert.ok(
-  scenario.ids.length > 50 &&
-    new Set(scenario.ids).size === scenario.ids.length,
+const scenario = validateReverseFlexScenario(
+  JSON.parse(scenarioBytes.toString()),
 );
-assert.deepEqual(scenario.buttons, ["action-a", "action-b", "action-c"]);
 const scenarioHash = hash(scenarioBytes);
 const scene =
   mode === "scene"
@@ -79,7 +68,7 @@ try {
   for (const item of scenario.cases) {
     assert.match(item.name, /^[A-Za-z0-9_-]+$/);
     assert.ok(
-      [1, 2].includes(item.scale) && item.width > 0 && item.height === 1680,
+      [1, 2].includes(item.scale) && item.width > 0 && item.height === 2400,
     );
     const retained = context !== undefined && scale === item.scale;
     if (!retained) {

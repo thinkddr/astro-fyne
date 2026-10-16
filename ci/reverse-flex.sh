@@ -16,6 +16,9 @@ finish() {
 import json,pathlib,sys
 p=pathlib.Path(sys.argv[1]);phases=[json.loads(l) for l in (p/'phases.jsonl').read_text().splitlines()] if (p/'phases.jsonl').exists() else []
 scenario=json.loads(pathlib.Path('reverse-flex-scenario.json').read_text());results=[]
+expected=[{'name':name,'width':width,'height':2400,'scale':scale} for name,width,scale in [('01-224',224,1),('02-368',368,1),('03-512',512,1),('04-368',368,1),('05-224',224,1),('06-224-scale2',224,2)]]
+scenario_valid=scenario.get('schema')==1 and scenario.get('height')==2400 and scenario.get('cases')==expected
+scenario_valid=scenario_valid and len(set(v['name'] for v in scenario['cases']))==6
 for case in scenario['cases']:
  for name in ['source-native','native-inverse','native-reconstruction']:
   f=p/case['name']/(name+'-comparison.json')
@@ -24,8 +27,8 @@ for case in scenario['cases']:
    exact=valid and result['accepted'] is True and result['exact'] is True and result['changedPixels']==0 and result['pixelsOverTolerance']==0 and result['maxChannelDelta']==0
   except (OSError,ValueError,KeyError):result=None;valid=exact=False
   results.append({'case':case['name'],'name':name,'valid':valid,'accepted':exact,'result':result})
-accepted=sys.argv[2]=='0' and sys.argv[3]=='0' and all(v['exitCode']==0 for v in phases) and len(results)==18 and all(v['accepted'] for v in results)
-(p/'summary.json').write_text(json.dumps({'schema':1,'accepted':accepted,'sourceOnly':True,'sceneSchema':2,'tolerance':{'channel':0,'pixels':0},'comparisons':results,'phases':phases},indent=2)+'\n')
+accepted=scenario_valid and sys.argv[2]=='0' and sys.argv[3]=='0' and all(v['exitCode']==0 for v in phases) and len(results)==18 and all(v['accepted'] for v in results)
+(p/'summary.json').write_text(json.dumps({'schema':1,'accepted':accepted,'sourceOnly':True,'sceneSchema':2,'scenarioSequenceValid':scenario_valid,'tolerance':{'channel':0,'pixels':0},'comparisons':results,'phases':phases},indent=2)+'\n')
 sys.exit(0 if accepted else 1)
 PY
   task_summary_status=$?
