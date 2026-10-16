@@ -88,3 +88,36 @@
   --keyword-ink: initial;
   color: var(--keyword-ink, #cc3300);
 }
+
+#css-token-whitespace {
+  --token-width: 120px;
+  --token-top: 2px;
+  --token-sides: 4px;
+  --token-bottom: 6px;
+  width: var(--token-width);
+  padding: var(--token-top) var(--token-sides) var(--token-bottom);
+}
+#css-token-rgb {
+  --token-red: 17;
+  --token-green: 35;
+  --token-blue: 43;
+  --token-alpha: 0.5;
+  color: rgb(var(--token-red), var(--token-green), var(--token-blue));
+  background-color: rgba(
+    var(--token-red),
+    var(--token-green),
+    var(--token-blue),
+    var(--token-alpha)
+  );
+}
+#css-token-fallback {
+  --token-channels: 17 35 43;
+  --token-ready: rgb(var(--token-channels));
+  --token-number: 1;
+  /* prettier-ignore */
+  --token-cycle:var(--token-cycle,var(--token-number)0px);
+  width: var(--missing-width, var(--missing-size, 120px));
+  height: var(--token-cycle, 24px);
+  /* prettier-ignore */
+  color:var(--token-ready,/* unselected */var(--token-number)0);
+}

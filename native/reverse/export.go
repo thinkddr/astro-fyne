@@ -203,6 +203,23 @@ func (e *exporter) object(object fyne.CanvasObject, path string) (Node, error) {
 		if snapshot.Measured && (snapshot.CaptureScale != e.opts.Viewport.Scale || snapshot.Size != fyne.NewSize(e.opts.Viewport.Width, e.opts.Viewport.Height)) {
 			return Node{}, fmt.Errorf("reverse: View %q capture viewport or scale differs from export", id)
 		}
+		// References belong to this View's source IDs, even when another View
+		// uses the same IDs with different host aliases.
+		aliases := map[string]string{}
+		sourceIDs := map[string]bool{}
+		var collect func([]webui.SnapshotNode)
+		collect = func(nodes []webui.SnapshotNode) {
+			for _, node := range nodes {
+				exportedID := node.Node.ID
+				if alias, ok := e.opts.IDs[node.Object]; ok {
+					exportedID = alias
+				}
+				aliases[node.Node.ID] = exportedID
+				sourceIDs[exportedID] = true
+				collect(node.Children)
+			}
+		}
+		collect(snapshot.Roots)
 		if e.opts.PreserveLayout {
 			if path != "native-root" || !snapshot.Responsive || len(snapshot.Roots) != 1 || snapshot.Size != fyne.NewSize(e.opts.Viewport.Width, e.opts.Viewport.Height) || object.Position() != (fyne.Position{}) || !object.Visible() {
 				return Node{}, fmt.Errorf("reverse: preserving layout requires a visible responsive View at the viewport origin and size")
@@ -217,24 +234,11 @@ func (e *exporter) object(object fyne.CanvasObject, path string) (Node, error) {
 				e.usedBindings[object] = true
 			}
 			delete(e.ids, id) // The transparent implementation wrapper has no scene node.
-			return e.snapshot(snapshot.Roots[0])
+			return e.snapshot(snapshot.Roots[0], aliases)
 		}
 		// Implementation wrappers must not steal an existing source node ID.
 		// Explicit host wrapper IDs still fail on a collision, as ordinary IDs do.
 		if _, explicit := e.opts.IDs[object]; !explicit {
-			sourceIDs := map[string]bool{}
-			var collect func([]webui.SnapshotNode)
-			collect = func(nodes []webui.SnapshotNode) {
-				for _, node := range nodes {
-					sourceID := node.Node.ID
-					if alias, ok := e.opts.IDs[node.Object]; ok {
-						sourceID = alias
-					}
-					sourceIDs[sourceID] = true
-					collect(node.Children)
-				}
-			}
-			collect(snapshot.Roots)
 			if sourceIDs[id] {
 				delete(e.ids, id)
 				for suffix := 1; ; suffix++ {
@@ -249,7 +253,7 @@ func (e *exporter) object(object fyne.CanvasObject, path string) (Node, error) {
 		}
 		n.Kind = "container"
 		for _, child := range snapshot.Roots {
-			exported, err := e.snapshot(child)
+			exported, err := e.snapshot(child, aliases)
 			if err != nil {
 				return Node{}, err
 			}
@@ -407,13 +411,20 @@ func (e *exporter) object(object fyne.CanvasObject, path string) (Node, error) {
 	return n, nil
 }
 
-func (e *exporter) snapshot(source webui.SnapshotNode) (Node, error) {
+func (e *exporter) snapshot(source webui.SnapshotNode, aliases map[string]string) (Node, error) {
 	id, err := e.identify(source.Object, source.Node.ID)
 	if err != nil {
 		return Node{}, err
 	}
 	s := source.Node
 	n := Node{ID: id, Kind: s.Kind, Text: s.Text, Value: s.Value, Placeholder: s.Placeholder, PlaceholderColor: source.PlaceholderColor, Disabled: s.Disabled, AccessibleLabel: s.AccessibleLabel, LabelFor: s.LabelFor, Style: s.Style, Children: []Node{}}
+	if n.LabelFor != "" {
+		target, ok := aliases[n.LabelFor]
+		if !ok {
+			return Node{}, fmt.Errorf("reverse: labelFor at %q must reference an input/textarea in the same View", id)
+		}
+		n.LabelFor = target
+	}
 	if e.opts.PreserveLayout {
 		if source.SourceStyle == nil || source.SourceStyle.Flex == nil {
 			return Node{}, fmt.Errorf("reverse: %q is missing responsive source declarations", id)
@@ -474,7 +485,7 @@ func (e *exporter) snapshot(source webui.SnapshotNode) (Node, error) {
 		return Node{}, err
 	}
 	for _, child := range source.Children {
-		exported, err := e.snapshot(child)
+		exported, err := e.snapshot(child, aliases)
 		if err != nil {
 			return Node{}, err
 		}

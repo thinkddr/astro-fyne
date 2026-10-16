@@ -94,7 +94,7 @@ export function createCSSCascade() {
           if (name === "checked")
             return (
               node.localName === "input" &&
-              node.attrs.type === "checkbox" &&
+              asciiLower(node.attrs.type ?? "") === "checkbox" &&
               node._checked
             );
           if (name === "disabled" || name === "enabled")
@@ -221,6 +221,30 @@ export function createCSSCascade() {
     }
     throw new Error("Invalid CSS string");
   }
+  function substitutionBoundary(value, reference, replacement) {
+    const { at, end, name } = reference,
+      before = value[at - 1],
+      after = value[end];
+    if (
+      (at > 0 && !cssSpace(before) && before !== "(" && before !== ",") ||
+      (end < value.length && !cssSpace(after) && after !== ")" && after !== ",")
+    )
+      throw new Error(
+        `CSS token adjacency around var(${name}) requires a native token-stream adapter`,
+      );
+    if (typeof replacement !== "string") return;
+    for (let index = 0; index < replacement.length;) {
+      if (replacement[index] === '"' || replacement[index] === "'")
+        index = stringEnd(replacement, index);
+      else if (replacement[index] === "\\")
+        index = escape(replacement, index).end;
+      else if (replacement.slice(index, index + 2) === "/*")
+        throw new Error(
+          `CSS comments in the replacement for var(${name}) require a native token-stream adapter`,
+        );
+      else index++;
+    }
+  }
   function nextVariable(value, start) {
     for (let at = start; at < value.length;) {
       if (value.slice(at, at + 2) === "/*") {
@@ -293,12 +317,16 @@ export function createCSSCascade() {
         end,
         name: argument.name,
         fallback:
-          comma < 0 ? undefined : value.slice(comma + 1, end - 1).trim(),
+          comma < 0
+            ? undefined
+            : value
+                .slice(comma + 1, end - 1)
+                .replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, ""),
       };
     }
     return null;
   }
-  function variable(value, lookup) {
+  function variable(value, lookup, invalidContext = () => false) {
     if (typeof value !== "string") return value;
     let output = "",
       start = 0;
@@ -308,9 +336,11 @@ export function createCSSCascade() {
       const { at, end, name, fallback } = reference;
       output += value.slice(start, at);
       let replacement = lookup(name);
+      if (invalidContext()) return undefined;
       if (replacement === undefined && fallback !== undefined)
-        replacement = variable(fallback, lookup);
+        replacement = variable(fallback, lookup, invalidContext);
       if (replacement === undefined) return undefined;
+      substitutionBoundary(value, reference, replacement);
       output += replacement;
       start = end;
     }
@@ -419,7 +449,9 @@ export function createCSSCascade() {
       active.push(name);
       let resolved;
       try {
-        resolved = variable(variables[name], resolveVariable);
+        resolved = variable(variables[name], resolveVariable, () =>
+          cyclic.has(name),
+        );
       } finally {
         active.pop();
       }

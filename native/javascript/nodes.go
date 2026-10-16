@@ -45,9 +45,10 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 				node.Href = frame.Attrs["href"]
 			case "input":
 				node.Kind = "input"
-				if frame.Attrs["type"] == "checkbox" {
+				kind := asciiLower(frame.Attrs["type"])
+				if kind == "checkbox" {
 					node.Kind, node.Checked = "checkbox", frame.Checked
-				} else if kind := frame.Attrs["type"]; kind != "" && kind != "text" {
+				} else if kind != "" && kind != "text" {
 					return nil, fmt.Errorf("javascript: input type %s requires a native control adapter", kind)
 				}
 			case "textarea":
@@ -61,8 +62,12 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 				}
 				switch name {
 				case "checked":
-					if node.Kind != "checkbox" {
-						return nil, fmt.Errorf("javascript: checked requires a native checkbox")
+					if frame.Tag != "input" || (node.Kind != "input" && node.Kind != "checkbox") {
+						return nil, fmt.Errorf("javascript: checked requires a supported native input")
+					}
+				case "disabled":
+					if node.Kind != "input" && node.Kind != "textarea" && node.Kind != "button" && node.Kind != "checkbox" {
+						return nil, fmt.Errorf("javascript: disabled requires a native input, textarea, button or checkbox")
 					}
 				case "id", "class", "type", "placeholder", "aria-label", "for", "href", "value":
 				default:
@@ -78,7 +83,11 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 			}
 			if frame.CSS {
 				for _, name := range []string{"width", "height", "fontSize", "lineHeight", "borderRadius"} {
-					if value, ok := frame.Style[name]; ok && (value == float64(0) || value == "0px" || value == "0") {
+					value := frame.Style[name]
+					if text, ok := value.(string); ok {
+						value = strings.Trim(text, " \t\r\n\f")
+					}
+					if value == float64(0) || value == "0px" || value == "0" {
 						return nil, fmt.Errorf("javascript: CSS zero %s requires presence-aware native sizing", name)
 					}
 				}
@@ -102,6 +111,13 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 						return nil, fmt.Errorf("javascript: rich text in <%s> requires a native rich-text adapter", frame.Tag)
 					}
 					node.Text += child.Text
+				}
+			} else if node.Kind == "textarea" {
+				// The DOM snapshot resolves default text and dirty edits into Value.
+				for _, child := range frame.Children {
+					if child.Tag != "#text" {
+						return nil, fmt.Errorf("javascript: rich text in <textarea> requires a native textarea adapter")
+					}
 				}
 			} else {
 				node.Children, err = walk(frame.Children, depth+1)
@@ -130,6 +146,16 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 	return walk(frames, 0)
 }
 
+func asciiLower(value string) string {
+	data := []byte(value)
+	for i, ch := range data {
+		if ch >= 'A' && ch <= 'Z' {
+			data[i] = ch + ('a' - 'A')
+		}
+	}
+	return string(data)
+}
+
 func sourceStyle(properties map[string]any) (webui.Style, error) {
 	style := webui.Style{}
 	number := func(value any) (float32, error) {
@@ -139,6 +165,7 @@ func sourceStyle(properties map[string]any) (webui.Style, error) {
 				return float32(v), nil
 			}
 		case string:
+			v = strings.Trim(v, " \t\r\n\f")
 			if strings.HasSuffix(v, "px") {
 				n, err := strconv.ParseFloat(strings.TrimSuffix(v, "px"), 32)
 				if err == nil && n >= 0 && !math.IsInf(n, 0) {

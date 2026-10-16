@@ -7,6 +7,39 @@ import { createCSSCascade } from "./javascript-css-runtime.js";
 export function createDocument() {
   let next = 0;
   const css = createCSSCascade();
+  const asciiLower = (value) => value.replace(/[A-Z]/g, (c) => c.toLowerCase());
+  function domString(value) {
+    if (typeof value === "symbol")
+      throw new TypeError("A DOM string cannot be a symbol");
+    return validJavascriptText(String(value));
+  }
+  const attributeName = (value) => asciiLower(domString(value));
+  function inputType(node, value = node.attrs.type) {
+    const type = asciiLower(value ?? "text") || "text";
+    if (type !== "text" && type !== "checkbox")
+      throw new Error(`Input type ${type} requires a native control adapter`);
+    return type;
+  }
+  const textInput = (node) =>
+    node.localName === "input" && inputType(node) === "text";
+  const checkboxInput = (node) =>
+    node.localName === "input" && inputType(node) === "checkbox";
+  const inputValue = (value) => value.replace(/[\r\n]/g, "");
+  const textareaValue = (value) => value.replace(/\r\n?/g, "\n");
+  const childText = (node) =>
+    node.childNodes
+      .filter((child) => child.nodeType === 3)
+      .map((child) => child.data)
+      .join("");
+  function changeInputType(node, before, after) {
+    if (before === after) return;
+    if (after === "checkbox") {
+      if (node._value !== "") node.attrs.value = node._value;
+    } else {
+      node._value = inputValue(node.attrs.value ?? "");
+      node._valueDirty = false;
+    }
+  }
   function captureOption(options) {
     return options !== null &&
       (typeof options === "object" || typeof options === "function")
@@ -66,7 +99,6 @@ export function createDocument() {
       this._valueDirty = false;
       this._checked = false;
       this._checkedDirty = false;
-      this.disabled = false;
       this._clickInProgress = false;
       this.listeners = Object.create(null);
       this._propertyHandlers = Object.create(null);
@@ -141,24 +173,44 @@ export function createDocument() {
     get value() {
       if (!["input", "textarea", "button"].includes(this.localName))
         throw new Error("DOM value reads require a native control adapter");
-      if (
-        this.localName === "input" &&
-        this.attrs.type === "checkbox" &&
-        !this._valueDirty
-      )
-        return this.attrs.value ?? "on";
+      if (checkboxInput(this)) return this.attrs.value ?? "on";
+      if (this.localName === "button") return this.attrs.value ?? "";
+      if (this.localName === "textarea")
+        return textareaValue(this._valueDirty ? this._value : childText(this));
       return this._value;
     }
     set value(value) {
-      this._value = validJavascriptText(String(value));
+      if (!["input", "textarea", "button"].includes(this.localName))
+        throw new Error("DOM value writes require a native control adapter");
+      if (value === null && this.localName !== "button") value = "";
+      value = domString(value);
+      if (this.localName === "button" || checkboxInput(this)) {
+        this.setAttribute("value", value);
+        return;
+      }
+      this._value = textInput(this) ? inputValue(value) : value;
       this._valueDirty = true;
     }
     get defaultValue() {
+      if (this.localName === "textarea") return childText(this);
+      if (this.localName !== "input")
+        throw new Error("DOM defaultValue requires a native input or textarea");
       return this.attrs.value ?? "";
     }
     set defaultValue(value) {
-      this.attrs.value = validJavascriptText(String(value));
-      if (!this._valueDirty) this._value = this.attrs.value;
+      if (this.localName === "textarea") this.textContent = domString(value);
+      else if (this.localName === "input") this.setAttribute("value", value);
+      else
+        throw new Error("DOM defaultValue requires a native input or textarea");
+    }
+    get disabled() {
+      return Object.hasOwn(this.attrs, "disabled");
+    }
+    set disabled(value) {
+      if (!["input", "button", "textarea"].includes(this.localName))
+        throw new Error("DOM disabled requires a native control adapter");
+      if (value) this.setAttribute("disabled", "");
+      else this.removeAttribute("disabled");
     }
     get checked() {
       if (this.localName !== "input")
@@ -254,15 +306,38 @@ export function createDocument() {
       if (this.parentNode) this.parentNode.removeChild(this);
     }
     setAttribute(name, value) {
-      this.attrs[name] = validJavascriptText(String(value));
+      name = attributeName(name);
+      value = domString(value);
+      if (!name || /[\0\t\n\f\r /=>]/.test(name)) {
+        const error = new Error("Invalid HTML attribute name");
+        error.name = "InvalidCharacterError";
+        throw error;
+      }
+      const before =
+        name === "type" && this.localName === "input" ? inputType(this) : null;
+      const after = before === null ? null : inputType(this, value);
+      this.attrs[name] = value;
+      if (before !== null) changeInputType(this, before, after);
       if (name === "checked" && !this._checkedDirty) this._checked = true;
+      if (name === "value" && textInput(this) && !this._valueDirty)
+        this._value = inputValue(this.attrs.value);
     }
     removeAttribute(name) {
+      name = attributeName(name);
+      const before =
+        name === "type" && this.localName === "input" ? inputType(this) : null;
       delete this.attrs[name];
+      if (before !== null) changeInputType(this, before, "text");
       if (name === "checked" && !this._checkedDirty) this._checked = false;
+      if (name === "value" && textInput(this) && !this._valueDirty)
+        this._value = "";
     }
     getAttribute(name) {
+      name = attributeName(name);
       return Object.hasOwn(this.attrs, name) ? this.attrs[name] : null;
+    }
+    hasAttribute(name) {
+      return Object.hasOwn(this.attrs, attributeName(name));
     }
     addEventListener(type, handler, options) {
       if (!["click", "input", "change"].includes(type))
@@ -321,14 +396,22 @@ export function createDocument() {
     }
   }
   const document = {
-    createElement: (name) => new Element(name),
+    createElement: (name) => new Element(asciiLower(domString(name))),
     createElementNS: (namespace, name) => {
       if (namespace !== "http://www.w3.org/1999/xhtml")
         throw new Error("SVG and other namespaces require a native adapter");
       return new Element(name);
     },
     createTextNode: (text) => new Element("#text", String(text)),
-    getElementById: (id) => find((node) => node.id === id),
+    getElementById: (id) => {
+      id = domString(id);
+      return id
+        ? find(
+            (node) => node.nodeType === 1 && node.id === id,
+            document.documentElement,
+          )
+        : null;
+    },
     get activeElement() {
       return document.body;
     },
@@ -339,7 +422,7 @@ export function createDocument() {
   const root = document.createElement("div");
   root.id = "astro-fyne-root";
   document.body.appendChild(root);
-  function find(predicate) {
+  function find(predicate, start = root) {
     function walk(node) {
       if (predicate(node)) return node;
       for (const child of node.childNodes) {
@@ -348,7 +431,7 @@ export function createDocument() {
       }
       return null;
     }
-    return walk(root);
+    return walk(start);
   }
   function snapshot(node, inheritedStyle) {
     if (node.nodeType === 3)
@@ -364,13 +447,10 @@ export function createDocument() {
       attrs: node.attrs,
       style: resolved ? resolved.style : { ...node.style },
       ...(resolved ? { css: true } : {}),
-      value:
-        node.localName === "input" && node.attrs.type === "checkbox"
-          ? node.value
-          : String(node._value),
-      ...(node.localName === "input" && node.attrs.type === "checkbox"
-        ? { checked: node._checked }
-        : {}),
+      value: ["input", "textarea", "button"].includes(node.localName)
+        ? node.value
+        : String(node._value),
+      ...(checkboxInput(node) ? { checked: node._checked } : {}),
       disabled: !!node.disabled,
       events: Object.keys(node.listeners).filter(
         (key) => node.listeners[key].length,
@@ -386,10 +466,7 @@ export function createDocument() {
     if (target.disabled && !activatingTarget)
       throw new Error("Cannot dispatch to a disabled element");
     if (event.value !== undefined) target.value = String(event.value);
-    const checkboxClick =
-      event.type === "click" &&
-      target.localName === "input" &&
-      target.attrs.type === "checkbox";
+    const checkboxClick = event.type === "click" && checkboxInput(target);
     const wasChecked = target._checked;
     if (checkboxClick) target.checked = !wasChecked;
     const path = [];
@@ -521,11 +598,7 @@ export function createDocument() {
       !payload.defaultPrevented
     ) {
       const control = find((node) => node.id === target.attrs.for);
-      if (
-        control?.localName === "input" &&
-        control.attrs.type === "checkbox" &&
-        !control.disabled
-      )
+      if (control && checkboxInput(control) && !control.disabled)
         dispatch({ node: control.uid, type: "click" });
     }
     if (

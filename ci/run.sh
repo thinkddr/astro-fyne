@@ -3,7 +3,11 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-test -z "$(gofmt -l native/generated/typography_probe_test.go ci/fyne-texttrace_test.go)"
+task_unformatted="$(gofmt -l native ci)"
+if [[ -n "$task_unformatted" ]]; then
+  gofmt -d native ci
+  exit 1
+fi
 bun install --frozen-lockfile --ignore-scripts
 # Start with actual Fyne objects, then compile the exported scene into a web page.
 (cd native && GOMAXPROCS=2 go run -p=1 ./reverse/cmd/scene-fixture --out ../artifacts/reverse)
@@ -224,7 +228,10 @@ if [[ "$task_controls_different" -gt 0 ]]; then
 fi
 test "$task_native_test_status" -eq 0
 test "$task_comparison_status" -eq 0
-test -z "$(gofmt -l .)"
+if [[ -n "$(gofmt -l .)" ]]; then
+  gofmt -d .
+  exit 1
+fi
 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 cd ..
 git diff --exit-code HEAD -- native/generated ci/fyne-texttrace_test.go
