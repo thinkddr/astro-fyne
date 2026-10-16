@@ -190,6 +190,51 @@ test("once listeners are removed before a recursive click and disappear from sna
   expect(snapshot()[0].events).toEqual([]);
 });
 
+test("programmatic click suppresses same-element reentry while raw native dispatch remains reentrant", () => {
+  for (const programmatic of [true, false]) {
+    const { document, root, dispatch } = createDocument();
+    const button = document.createElement("button");
+    root.appendChild(button);
+    const calls: string[] = [];
+    button.addEventListener(
+      "click",
+      () => {
+        calls.push("once");
+        button.click();
+      },
+      { once: true },
+    );
+    button.addEventListener("click", () => calls.push("tail"));
+    if (programmatic) button.click();
+    else dispatch({ node: button.uid, type: "click" });
+    expect(calls).toEqual(
+      programmatic ? ["once", "tail"] : ["once", "tail", "tail"],
+    );
+  }
+});
+
+test("programmatic click clears its reentry guard after a listener throws", () => {
+  const { document, root } = createDocument();
+  const button = document.createElement("button");
+  root.appendChild(button);
+  const failure = () => {
+    throw new Error("listener failed");
+  };
+  button.addEventListener("click", failure);
+  expect(() => button.click()).toThrow("listener failed");
+  button.removeEventListener("click", failure);
+  let calls = 0;
+  button.addEventListener("click", () => calls++);
+  button.click();
+  expect(calls).toBe(1);
+  button.disabled = true;
+  button.click();
+  expect(calls).toBe(1);
+  button.disabled = false;
+  button.click();
+  expect(calls).toBe(2);
+});
+
 test("passive click listeners cannot cancel checkbox activation with either legacy API", () => {
   const { document, root, dispatch } = createDocument();
   const field = document.createElement("input");

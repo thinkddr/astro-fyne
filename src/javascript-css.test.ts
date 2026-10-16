@@ -164,7 +164,7 @@ test("mutual cycles invalidate every member while dependents may use their own f
   );
 });
 
-test("references in unused fallbacks still participate in custom-property cycles", async () => {
+test("unselected fallbacks do not introduce a cycle into a resolved custom property", async () => {
   await withCSS(
     `.a{--ready:#112233;--one:var(--ready,var(--two));--two:var(--one);color:var(--one,#cc3300);background-color:var(--two,#445566)}`,
     ({ document, root, snapshot }) => {
@@ -172,13 +172,13 @@ test("references in unused fallbacks still participate in custom-property cycles
       node.className = "a";
       root.appendChild(node);
       const style = snapshot()[0].style;
-      expect(style.color).toBe("#cc3300");
-      expect(style.backgroundColor).toBe("#445566");
+      expect(style.color).toBe("#112233");
+      expect(style.backgroundColor).toBe("#112233");
     },
   );
 });
 
-test("one cycle may include multiple branches of the dependency graph", async () => {
+test("selected fallback branches preserve every participant in a visited cycle", async () => {
   await withCSS(
     `.a{--one:var(--two,var(--three));--two:var(--one);--three:var(--two);color:var(--three,#cc3300)}`,
     ({ document, root, snapshot }) => {
@@ -247,6 +247,153 @@ test("a cyclic variable without a consuming fallback retains the unresolved decl
       node.className = "a";
       root.appendChild(node);
       expect(snapshot).toThrow("CSS variable");
+    },
+  );
+});
+
+test("a selected fallback cycle invalidates its participants when the ready property is absent", async () => {
+  await withCSS(
+    `.a{--one:var(--ready,var(--two));--two:var(--one);color:var(--one,#cc3300);background-color:var(--two,#445566)}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      const style = snapshot()[0].style;
+      expect(style.color).toBe("#cc3300");
+      expect(style.backgroundColor).toBe("#445566");
+    },
+  );
+});
+
+test("an acyclic caller keeps its fallback regardless of declaration order", async () => {
+  const cycle = "--one:var(--two,#112233);--two:var(--one,#223344)",
+    outside = "--outside:var(--one,#334455)";
+  for (const declarations of [`${outside};${cycle}`, `${cycle};${outside}`])
+    await withCSS(
+      `.a{${declarations};color:var(--outside);background-color:var(--two,#cc3300)}`,
+      ({ document, root, snapshot }) => {
+        const node = document.createElement("p");
+        node.className = "a";
+        root.appendChild(node);
+        const style = snapshot()[0].style;
+        expect(style.color).toBe("#334455");
+        expect(style.backgroundColor).toBe("#cc3300");
+      },
+    );
+});
+
+test("comments and longer function names do not invent variable references", async () => {
+  for (const fallback of [
+    "/*var(--ink)*/ #445566",
+    "/* ), ((, var(--ink) */ #445566",
+    "notvar(--ink)",
+    "xvar(--ink)",
+    "évar(--ink)",
+    String.raw`x\76 ar(--ink)`,
+    "1var(--ink)",
+    "#var(--ink)",
+    "@var(--ink)",
+  ])
+    await withCSS(
+      `.a{--ready:#112233;--ink:var(--ready,${fallback});color:var(--ink,#cc3300)}`,
+      ({ document, root, snapshot }) => {
+        const node = document.createElement("p");
+        node.className = "a";
+        root.appendChild(node);
+        expect(snapshot()[0].style.color).toBe("#112233");
+      },
+    );
+});
+
+test("comments around a variable name cannot become argument separators or parentheses", async () => {
+  await withCSS(
+    `.a{--ready:#112233;color:var(/* , ) */--ready/* (, */,#cc3300)}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      expect(snapshot()[0].style.color).toBe("#112233");
+    },
+  );
+});
+
+test("direct custom-property inherit and unset use the parent's computed variable", async () => {
+  for (const value of ["inherit", "unset", " /*note*/ InHeRiT /*note*/ "])
+    await withCSS(
+      `.parent{--ink:#112233;color:#445566}.child{--ink:${value};color:var(--ink,#cc3300)}`,
+      ({ document, root, snapshot }) => {
+        const parent = document.createElement("section");
+        parent.className = "parent";
+        const child = document.createElement("p");
+        child.className = "child";
+        parent.appendChild(child);
+        root.appendChild(parent);
+        expect(snapshot()[0].children[0].style.color).toBe("#112233");
+      },
+    );
+});
+
+test("direct custom-property initial supplies an invalid value for the consumer's fallback", async () => {
+  await withCSS(
+    `.parent{--ink:#112233;color:#445566}.child{--ink:initial;color:var(--ink,#cc3300)}`,
+    ({ document, root, snapshot }) => {
+      const parent = document.createElement("section");
+      parent.className = "parent";
+      const child = document.createElement("p");
+      child.className = "child";
+      parent.appendChild(child);
+      root.appendChild(parent);
+      expect(snapshot()[0].children[0].style.color).toBe("#cc3300");
+    },
+  );
+});
+
+test("unsupported variable syntax and replacement semantics receive explicit diagnostics", async () => {
+  for (const [declarations, message] of [
+    ["--ink:revert;color:var(--ink,red)", "cascade-origin adapter"],
+    ["--ink:revert-layer;color:var(--ink,red)", "cascade-origin adapter"],
+    [
+      "--ink:var(--missing,inherit);color:var(--ink,red)",
+      "property-replacement adapter",
+    ],
+    ["color:var(var(--name),red)", "first argument"],
+    [String.raw`color:var(--\69 nk,red)`, "first argument"],
+    [String.raw`color:v\61 r(--ink,red)`, "variable functions"],
+  ])
+    await withCSS(`.a{${declarations}}`, ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      expect(snapshot).toThrow(message);
+    });
+});
+
+test("ordinary Unicode custom-property names remain distinct and supported", async () => {
+  await withCSS(
+    `.a{--é:#112233;--é:#445566;color:var(--é);background-color:var(--é)}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      const style = snapshot()[0].style;
+      expect(style.color).toBe("#112233");
+      expect(style.backgroundColor).toBe("#445566");
+    },
+  );
+});
+
+test("dependency-depth exhaustion is diagnosed instead of selecting a fallback", async () => {
+  const declarations = Array.from(
+    { length: 34 },
+    (_, index) => `--x${index}:var(--x${index + 1},#112233)`,
+  ).join(";");
+  await withCSS(
+    `.a{${declarations};--x34:#445566;color:var(--x0,#cc3300)}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "a";
+      root.appendChild(node);
+      expect(snapshot).toThrow("supported depth of 32");
     },
   );
 });

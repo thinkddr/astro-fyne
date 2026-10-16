@@ -67,6 +67,7 @@ export function createDocument() {
       this._checked = false;
       this._checkedDirty = false;
       this.disabled = false;
+      this._clickInProgress = false;
       this.listeners = Object.create(null);
       this._propertyHandlers = Object.create(null);
       this._propertyListeners = Object.create(null);
@@ -301,7 +302,13 @@ export function createDocument() {
       throw new Error("Programmatic focus requires a native focus adapter");
     }
     click() {
-      if (!this.disabled) dispatch({ node: this.uid, type: "click" });
+      if (this.disabled || this._clickInProgress) return;
+      this._clickInProgress = true;
+      try {
+        dispatch({ node: this.uid, type: "click" });
+      } finally {
+        this._clickInProgress = false;
+      }
     }
     getBoundingClientRect() {
       throw new Error("DOM measurements require a native layout adapter");
