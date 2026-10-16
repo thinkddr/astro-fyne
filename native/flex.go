@@ -277,8 +277,10 @@ func alignSupported(value string, self bool) bool {
 
 func horizontalDecoration(s Style) float32 { return s.PaddingLeft + s.PaddingRight + 2*s.BorderWidth }
 func verticalDecoration(s Style) float32   { return s.PaddingTop + s.PaddingBottom + 2*s.BorderWidth }
-func flexRow(s Style) bool { return s.Direction != "column" && s.Direction != "column-reverse" }
-func flexReverse(s Style) bool { return s.Direction == "row-reverse" || s.Direction == "column-reverse" }
+func flexRow(s Style) bool                 { return s.Direction != "column" && s.Direction != "column-reverse" }
+func flexReverse(s Style) bool {
+	return s.Direction == "row-reverse" || s.Direction == "column-reverse"
+}
 
 // A host may move, resize or hide actual Fyne objects without changing their
 // source declarations. Frozen snapshots preserve that frame, but a responsive

@@ -22,12 +22,16 @@ func TestReverseFlexPreservesSourceObjectsAndPhysicalPadding(t *testing.T) {
 			c := software.NewCanvas()
 			c.SetPadded(false)
 			c.SetContent(v)
-			if err := v.BindCanvas(c); err != nil { t.Fatal(err) }
+			if err := v.BindCanvas(c); err != nil {
+				t.Fatal(err)
+			}
 			first, second := v.Object("a"), v.Object("b")
 			for _, width := range []float32{200, 320, 200} {
 				c.Resize(fyne.NewSize(width, 140))
 				c.Capture()
-				if err := v.Error(); err != nil { t.Fatal(err) }
+				if err := v.Error(); err != nil {
+					t.Fatal(err)
+				}
 				if direction == "row-reverse" {
 					flexTestFrame(t, v, "a", width-13-30, 5, 30, 120)
 					flexTestFrame(t, v, "b", width-13-30-10-50, 5, 50, 120)
@@ -35,9 +39,13 @@ func TestReverseFlexPreservesSourceObjectsAndPhysicalPadding(t *testing.T) {
 					flexTestFrame(t, v, "a", 7, 95, width-20, 30)
 					flexTestFrame(t, v, "b", 7, 35, width-20, 50)
 				}
-				if v.Object("a") != first || v.Object("b") != second { t.Fatal("reverse resize replaced an object") }
+				if v.Object("a") != first || v.Object("b") != second {
+					t.Fatal("reverse resize replaced an object")
+				}
 				snapshot, err := v.Snapshot()
-				if err != nil { t.Fatal(err) }
+				if err != nil {
+					t.Fatal(err)
+				}
 				if snapshot.Measured || !snapshot.Responsive || snapshot.Roots[0].Children[0].Object != first || snapshot.Roots[0].Children[1].Object != second {
 					t.Fatal("reverse layout changed source order or used measurements")
 				}
@@ -48,17 +56,22 @@ func TestReverseFlexPreservesSourceObjectsAndPhysicalPadding(t *testing.T) {
 
 func TestReverseFlexMainAlignmentDistinguishesLogicalStart(t *testing.T) {
 	for _, direction := range []string{"row-reverse", "column-reverse"} {
-		for _, item := range []struct { justify string; first, second float32 }{
+		for _, item := range []struct {
+			justify       string
+			first, second float32
+		}{
 			{"", 160, 110}, {"flex-start", 160, 110}, {"flex-end", 50, 0},
 			{"start", 50, 0}, {"end", 160, 110}, {"center", 105, 55},
-			{"space-between", 160, 0}, {"space-around", 132.5, 27.5}, {"space-evenly", 160-110.0/3, 110-220.0/3},
+			{"space-between", 160, 0}, {"space-around", 132.5, 27.5}, {"space-evenly", 160 - 110.0/3, 110 - 220.0/3},
 		} {
 			t.Run(direction+"/"+item.justify, func(t *testing.T) {
 				root := flexTestRoot(200, flexTestItem("a", 40), flexTestItem("b", 40))
 				root.Style.Direction, root.Style.Gap, root.Style.Flex.JustifyContent = direction, 10, item.justify
 				v := NewView(func() []Node { return []Node{root} })
 				v.Resize(fyne.NewSize(200, 200))
-				if err := v.Error(); err != nil { t.Fatal(err) }
+				if err := v.Error(); err != nil {
+					t.Fatal(err)
+				}
 				if direction == "row-reverse" {
 					flexTestFrame(t, v, "a", item.first, 0, 40, 200)
 					flexTestFrame(t, v, "b", item.second, 0, 40, 200)
@@ -81,12 +94,14 @@ func TestReverseFlexNestedBorderColumnAndCrossPercent(t *testing.T) {
 	panel.Style.PaddingLeft, panel.Style.PaddingRight = 3, 7
 	panel.Style.PaddingTop, panel.Style.PaddingBottom = 5, 9
 	panel.Style.Gap = 4
-	panel.Children = []Node{a,b}
+	panel.Children = []Node{a, b}
 	root := flexTestRoot(100, panel)
 	root.Style.Direction = "row-reverse"
 	v := NewView(func() []Node { return []Node{root} })
 	v.Resize(fyne.NewSize(200, 100))
-	if err := v.Error(); err != nil { t.Fatal(err) }
+	if err := v.Error(); err != nil {
+		t.Fatal(err)
+	}
 	flexTestFrame(t, v, "panel", 80, 0, 120, 100)
 	flexTestFrame(t, v, "a", 5, 69, 106, 20)
 	flexTestFrame(t, v, "b", 81, 35, 30, 30)
@@ -97,15 +112,27 @@ func TestReverseFlexEmptySingleAndOverflowRemainFinite(t *testing.T) {
 		root := flexTestRoot(40)
 		root.Style.Direction = direction
 		v := NewView(func() []Node { return []Node{root} })
-		v.Resize(fyne.NewSize(40,40))
-		if err := v.Error(); err != nil { t.Fatal(err) }
+		v.Resize(fyne.NewSize(40, 40))
+		if err := v.Error(); err != nil {
+			t.Fatal(err)
+		}
 		child := flexTestItem("child", 60)
 		child.Style.Flex.Shrink = FlexValue(0)
 		root.Children = []Node{child}
 		v.Refresh()
-		if err := v.Error(); err != nil { t.Fatal(err) }
-		if direction == "row-reverse" { flexTestFrame(t,v,"child",-20,0,60,40) } else { flexTestFrame(t,v,"child",0,-20,40,60) }
+		if err := v.Error(); err != nil {
+			t.Fatal(err)
+		}
+		if direction == "row-reverse" {
+			flexTestFrame(t, v, "child", -20, 0, 60, 40)
+		} else {
+			flexTestFrame(t, v, "child", 0, -20, 40, 60)
+		}
 	}
-	legacy := NewView(func() []Node { return []Node{{ID:"legacy",Kind:"container",Style:Style{Direction:"row-reverse"}}} })
-	if legacy.Error() == nil { t.Fatal("legacy flow accepted a reverse direction without its layout engine") }
+	legacy := NewView(func() []Node {
+		return []Node{{ID: "legacy", Kind: "container", Style: Style{Direction: "row-reverse"}}}
+	})
+	if legacy.Error() == nil {
+		t.Fatal("legacy flow accepted a reverse direction without its layout engine")
+	}
 }

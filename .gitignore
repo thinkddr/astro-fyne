@@ -27,3 +27,7 @@ example/src/pages/program-roundtrip/
 native/.image-enlargement-source/
 native/.image-enlargement-roundtrip/
 example/src/pages/image-enlargement-reverse/
+
+native/.reverse-flex-source/
+native/.reverse-flex-scene/
+example/src/pages/reverse-flex-scene/

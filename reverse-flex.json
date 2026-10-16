@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "package": "generated",
+  "entries": [
+    {
+      "name": "ReverseFlex",
+      "source": "example/src/components/ResponsiveReverseFlexConformance.tsx",
+      "export": "ResponsiveReverseFlexConformance",
+      "output": "native/.reverse-flex-source/reverse_flex.gen.go",
+      "fonts": [
+        {
+          "family": "AstroNoto",
+          "weight": 400,
+          "style": "normal",
+          "source": "example/public/fonts/NotoSans-Regular.ttf",
+          "webSrc": "/fonts/NotoSans-Regular.ttf"
+        }
+      ]
+    }
+  ]
+}

@@ -240,15 +240,15 @@ for a single measured entry, `--measurements PATH`. Reverse output is checked wi
 
 ## Compatibility and visual accuracy
 
-| Area                 | Current support                                                                                      |
-| -------------------- | ---------------------------------------------------------------------------------------------------- |
-| Source               | Declarative Astro/TSX components, props, supported expressions, `useState`, events and keyed lists   |
-| Native output        | Fyne widgets, generated themes, explicit host actions, local PNG/JPEG resources and static TTF faces |
-| Responsive layout    | Explicit row/column Flexbox, boxes, one-line text, buttons, single-line inputs and bitmap leaves     |
-| Browser measurements | Fixed source/state/viewport/device-scale profiles with validated styles                              |
-| Reverse output       | Fixed native scenes or preserved source Flexbox, with values, resources and named actions            |
-| Program roundtrip    | Opt-in compiler IR, declared props/state and list identities restored in Preact and generated Go     |
-| Still unsupported    | Arbitrary JS/Go, full CSS cascade, grid, wrapping/intrinsic layout, animations and browser APIs      |
+| Area                 | Current support                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Source               | Declarative Astro/TSX components, props, supported expressions, `useState`, events and keyed lists              |
+| Native output        | Fyne widgets, generated themes, explicit host actions, local PNG/JPEG resources and static TTF faces            |
+| Responsive layout    | Single-line LTR Flexbox in four directions, boxes, one-line text, buttons, single-line inputs and bitmap leaves |
+| Browser measurements | Fixed source/state/viewport/device-scale profiles with validated styles                                         |
+| Reverse output       | Fixed native scenes or preserved source Flexbox, with values, resources and named actions                       |
+| Program roundtrip    | Opt-in compiler IR, declared props/state and list identities restored in Preact and generated Go                |
+| Still unsupported    | Arbitrary JS/Go, full CSS cascade, grid, wrapping/intrinsic layout, animations and browser APIs                 |
 
 CI compares browser and native captures and retains the generated code, traces, scene files
 and pixel diffs. The current suite requires **44 exact full-frame visual comparisons**
