@@ -63,6 +63,7 @@ const scenario = astro
       prefix: [
         ...tap("js-increment", "js-a-increment", "js-optional-increment"),
         { id: "js-insert-input", value: "edited" },
+        { id: "js-hierarchy-input", value: "edited" },
       ],
       suffix: [
         ...tap(
@@ -106,6 +107,11 @@ const scenario = astro
           "js-insert-foreign-self",
           "js-insert-self",
         ),
+        ...tap(
+          "js-hierarchy-text-append",
+          "js-hierarchy-text-reference",
+          "js-hierarchy-valid-text",
+        ),
       ],
       follow: [
         ...tap(
@@ -127,11 +133,17 @@ const scenario = astro
           "js-attrs-step",
         ),
         { id: "js-insert-input", value: "continued" },
+        { id: "js-hierarchy-input", value: "continued" },
         ...tap(
           "js-insert-invalid",
           "js-insert-move",
           "js-insert-foreign-self",
           "js-insert-self",
+        ),
+        ...tap(
+          "js-hierarchy-text-append",
+          "js-hierarchy-text-reference",
+          "js-hierarchy-valid-text",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -486,6 +498,164 @@ function assertInsertionTimeline(
   }
   assert.equal(operations, 4, `Missing insertion operations: ${label}`);
 }
+type HierarchyState = {
+  value: string;
+  textFirst: boolean;
+  result: "ready" | Record<string, unknown>;
+};
+const hierarchyOrder = (textFirst: boolean) =>
+  textFirst ? ["caption", "input"] : ["input", "caption"];
+const hierarchyOutcomes: Record<
+  string,
+  { operation: string; error: string; returned: boolean }
+> = {
+  "js-hierarchy-text-append": {
+    operation: "text-append",
+    error: "HierarchyRequestError",
+    returned: false,
+  },
+  "js-hierarchy-text-reference": {
+    operation: "text-reference",
+    error: "HierarchyRequestError",
+    returned: false,
+  },
+  "js-hierarchy-valid-text": {
+    operation: "valid-text",
+    error: "none",
+    returned: true,
+  },
+};
+function hierarchyStep(
+  state: HierarchyState,
+  step: { id: string; value?: string },
+): HierarchyState {
+  if (step.id === "js-hierarchy-input") {
+    assert.ok(typeof step.value === "string", "Hierarchy edit needs a value");
+    return { ...state, value: step.value };
+  }
+  const outcome = hierarchyOutcomes[step.id];
+  if (!outcome) return state;
+  const textFirst = state.textFirst || outcome.operation === "valid-text";
+  return {
+    value: state.value,
+    textFirst,
+    result: {
+      ...outcome,
+      same: true,
+      attached: true,
+      value: state.value,
+      defaultValue: "initial",
+      textChildren: 0,
+      order: hierarchyOrder(textFirst),
+    },
+  };
+}
+const hierarchyStart = (): HierarchyState => ({
+  value: "edited",
+  textFirst: false,
+  result: "ready",
+});
+const hierarchyFollowStart = () =>
+  hierarchyStep(
+    { value: "edited", textFirst: true, result: "ready" },
+    { id: "js-hierarchy-valid-text" },
+  );
+function assertHierarchyValues(
+  values: Record<string, string>,
+  state: HierarchyState,
+  label: string,
+) {
+  assert.equal(
+    values["js-hierarchy-input"],
+    state.value,
+    `Hierarchy input value differs: ${label}`,
+  );
+  const result = values["js-hierarchy-result"];
+  assert.ok(typeof result === "string", `Missing hierarchy result: ${label}`);
+  assert.deepEqual(
+    state.result === "ready" ? result : JSON.parse(result),
+    state.result,
+    `Hierarchy outcome differs: ${label}`,
+  );
+}
+function assertHierarchyTimeline(
+  frames: JavascriptFrame[][],
+  steps: { id: string; value?: string }[],
+  state: HierarchyState,
+  label: string,
+) {
+  assert.equal(
+    frames.length,
+    steps.length + 1,
+    `Missing hierarchy frames: ${label}`,
+  );
+  let uid: string | undefined;
+  let operations = 0;
+  for (const [index, roots] of frames.entries()) {
+    if (index) {
+      const step = steps[index - 1]!;
+      state = hierarchyStep(state, step);
+      if (hierarchyOutcomes[step.id]) operations++;
+    }
+    const nodes = new Map<
+      string,
+      { frame: JavascriptFrame; parent?: string }
+    >();
+    const visit = (children: JavascriptFrame[], parent?: string) => {
+      for (const frame of children) {
+        const id = frame.attrs?.id;
+        if (id?.startsWith("js-hierarchy-")) {
+          assert.equal(
+            nodes.has(id),
+            false,
+            `Duplicate hierarchy node ${id}: ${label}`,
+          );
+          nodes.set(id, { frame, parent });
+        }
+        visit(frame.children ?? [], id);
+      }
+    };
+    visit(roots);
+    const input = nodes.get("js-hierarchy-input");
+    assert.ok(input, `Missing hierarchy input: ${label}, frame ${index}`);
+    assert.ok(input.frame.uid, `Missing hierarchy input UID: ${label}`);
+    uid ??= input.frame.uid;
+    assert.equal(
+      input.frame.uid,
+      uid,
+      `Hierarchy changed input identity: ${label}`,
+    );
+    assert.equal(
+      input.parent,
+      "js-hierarchy-host",
+      `Hierarchy detached input: ${label}`,
+    );
+    assert.equal(
+      input.frame.attrs?.value,
+      "initial",
+      `Hierarchy changed default: ${label}`,
+    );
+    const host = nodes.get("js-hierarchy-host");
+    assert.ok(host, `Missing hierarchy host: ${label}`);
+    assert.deepEqual(
+      (host.frame.children ?? []).map((child) =>
+        child.attrs?.id === "js-hierarchy-input"
+          ? "input"
+          : child.tag === "#text" && child.text === "caption"
+            ? "caption"
+            : "unexpected",
+      ),
+      hierarchyOrder(state.textFirst),
+      `Hierarchy tree differs: ${label}, frame ${index}`,
+    );
+    assertHierarchyValues(
+      frameValues(roots),
+      state,
+      `${label}, frame ${index}`,
+    );
+  }
+  assert.equal(operations, 3, `Missing hierarchy operations: ${label}`);
+}
 const attributeFields = {
   input: [
     "tag",
@@ -760,6 +930,17 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
 }
 if (!astro) {
   assert.equal(
+    nativeResult.hierarchyIdentityChecked,
+    true,
+    "Native hierarchy pointer checks did not run",
+  );
+  assertHierarchyTimeline(
+    nativeResult.frames,
+    scenario.suffix,
+    hierarchyStart(),
+    "native suffix",
+  );
+  assert.equal(
     nativeResult.insertionIdentityChecked,
     true,
     "Native insertion pointer checks did not run",
@@ -914,6 +1095,59 @@ try {
     ? null
     : await page.locator('[id="js-insert-input"]').elementHandle();
   let browserInsertionState = insertionStart();
+  let hierarchyElement = astro
+    ? null
+    : await page.locator('[id="js-hierarchy-input"]').elementHandle();
+  let browserHierarchyState = hierarchyStart();
+  const assertBrowserHierarchy = async (label: string) => {
+    if (astro) return;
+    assert.ok(hierarchyElement, `Missing browser hierarchy input: ${label}`);
+    const actual = await hierarchyElement.evaluate((element) => {
+      if (!(element instanceof HTMLInputElement))
+        throw new Error("Hierarchy target is not an input");
+      const host = document.getElementById("js-hierarchy-host");
+      if (!host) throw new Error("Missing hierarchy host");
+      return {
+        same: document.getElementById("js-hierarchy-input") === element,
+        count: document.querySelectorAll('[id="js-hierarchy-input"]').length,
+        attached: element.parentNode === host,
+        value: element.value,
+        defaultValue: element.defaultValue,
+        attr: element.getAttribute("value"),
+        order: Array.from(host.childNodes).map((child) =>
+          child === element
+            ? "input"
+            : child.nodeType === 3 && child.textContent === "caption"
+              ? "caption"
+              : "unexpected",
+        ),
+        result: document.getElementById("js-hierarchy-result")?.textContent,
+      };
+    });
+    const { result, ...control } = actual;
+    assert.deepEqual(
+      control,
+      {
+        same: true,
+        count: 1,
+        attached: true,
+        value: browserHierarchyState.value,
+        defaultValue: "initial",
+        attr: "initial",
+        order: hierarchyOrder(browserHierarchyState.textFirst),
+      },
+      `Browser hierarchy input/tree differs: ${label}`,
+    );
+    assert.ok(
+      typeof result === "string",
+      `Missing browser hierarchy result: ${label}`,
+    );
+    assertHierarchyValues(
+      { "js-hierarchy-input": actual.value, "js-hierarchy-result": result },
+      browserHierarchyState,
+      label,
+    );
+  };
   let browserAttributePhase = 0;
   let browserStage = "restored";
   const assertBrowserInputReflection = async (label: string) => {
@@ -1012,6 +1246,7 @@ try {
     );
   };
   await assertBrowserInsertion("restored browser initial");
+  await assertBrowserHierarchy("restored browser initial");
   await assertBrowserInputReflection("restored browser initial");
   assert.deepEqual(
     await page.evaluate(() => window.afyJavascript.calls()),
@@ -1042,8 +1277,10 @@ try {
     await settle();
     if (!astro) {
       browserInsertionState = insertionStep(browserInsertionState, step);
+      browserHierarchyState = hierarchyStep(browserHierarchyState, step);
       if (step.id === "js-attrs-step") browserAttributePhase++;
       await assertBrowserInsertion(`after ${step.id}`);
+      await assertBrowserHierarchy(`after ${step.id}`);
       await assertBrowserInputReflection(`after ${step.id}`);
     }
   };
@@ -1061,6 +1298,13 @@ try {
       frames,
       scenario.suffix,
       insertionStart(),
+      "restored browser suffix",
+    );
+  if (!astro)
+    assertHierarchyTimeline(
+      frames,
+      scenario.suffix,
+      hierarchyStart(),
       "restored browser suffix",
     );
   const calls = await page.evaluate(() => window.afyJavascript.calls());
@@ -1093,6 +1337,12 @@ try {
   }
   const followCalls = await page.evaluate(() => window.afyJavascript.calls());
   if (!astro) {
+    assertHierarchyTimeline(
+      follow,
+      scenario.follow,
+      hierarchyFollowStart(),
+      "restored browser follow",
+    );
     assertInsertionTimeline(
       follow,
       scenario.follow,
@@ -1130,9 +1380,19 @@ try {
       .locator('[id="js-insert-input"]')
       .elementHandle();
     browserInsertionState = { value: "initial", moved: false, result: "ready" };
+    await hierarchyElement?.dispose();
+    hierarchyElement = await page
+      .locator('[id="js-hierarchy-input"]')
+      .elementHandle();
+    browserHierarchyState = {
+      value: "initial",
+      textFirst: false,
+      result: "ready",
+    };
     browserAttributePhase = 0;
     browserStage = "original";
     await assertBrowserInsertion("original browser initial");
+    await assertBrowserHierarchy("original browser initial");
     await assertBrowserInputReflection("original browser initial");
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
@@ -1170,6 +1430,11 @@ try {
       assertInsertionValues(
         values as Record<string, string>,
         browserInsertionState,
+        `original suffix, frame ${i}`,
+      );
+      assertHierarchyValues(
+        values as Record<string, string>,
+        browserHierarchyState,
         `original suffix, frame ${i}`,
       );
       assert.deepEqual(
@@ -1298,6 +1563,11 @@ try {
         browserInsertionState,
         `original follow, frame ${i}`,
       );
+      assertHierarchyValues(
+        values as Record<string, string>,
+        browserHierarchyState,
+        `original follow, frame ${i}`,
+      );
       const followFrame = follow[i];
       assert.ok(followFrame, `Missing restored browser follow frame ${i}`);
       assert.deepEqual(
@@ -1370,6 +1640,17 @@ const webResult = JSON.parse(
 );
 if (!astro) {
   assert.equal(
+    restored.hierarchyIdentityChecked,
+    true,
+    "Restored native hierarchy pointer checks did not run",
+  );
+  assertHierarchyTimeline(
+    restored.frames,
+    scenario.follow,
+    hierarchyFollowStart(),
+    "restored native follow",
+  );
+  assert.equal(
     restored.insertionIdentityChecked,
     true,
     "Restored native insertion pointer checks did not run",
@@ -1428,6 +1709,12 @@ await writeFile(
               nativePointerIdentityChecked: true,
               browserElementIdentityChecked: true,
               inputReflectionObservations: inputReflections.length,
+            },
+            hierarchy: {
+              suffixOperations: 3,
+              followOperations: 3,
+              nativePointerIdentityChecked: true,
+              browserElementIdentityChecked: true,
             },
           }
         : {}),

@@ -281,6 +281,11 @@ export function createDocument() {
         this.appendChild(document.createTextNode(String(value)));
     }
     insertBefore(child, before) {
+      if (this.nodeType !== 1) {
+        const error = new Error("A text node cannot contain child nodes");
+        error.name = "HierarchyRequestError";
+        throw error;
+      }
       if (before != null && before.parentNode !== this) {
         const error = new Error(
           "The reference node is not a child of this parent",

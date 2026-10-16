@@ -150,6 +150,10 @@ A foreign reference, including a foreign self reference, throws an error named
 `NotFoundError` without changing the tree or edited input. Valid same-parent moves
 retain the virtual node and native control. This bounded contract does not provide
 a global `DOMException` constructor or complete DOM hierarchy validation.
+Text nodes also reject child insertion with an error named `HierarchyRequestError`
+before reference validation or detachment. Elements still accept text children.
+Ancestor cycles, document/fragment rules and other hierarchy constraints remain outside
+this bounded correction.
 Restored browser inputs retain their raw value attribute separately from the live
 editor value, including attribute absence and an edited value with an unchanged default.
 Checkboxes preserve `checked`/`defaultChecked`, dirty local state, the default `on`
@@ -220,6 +224,8 @@ counts are recorded in `comparison.json`. The attribute scenario independently c
 and edited values, case folding, disabled presence, type changes and textarea child mutations.
 The insertion scenario checks rejected references and valid moves against fixed tree/value
 expectations, stable virtual IDs, native object pointers and actual browser element identity.
+The separate hierarchy scenario catches Text-parent insertion errors before mutation and
+reference validation, then verifies valid Element-to-Text insertion across the same continuation.
 The CSS scenario additionally compares native
 cascade values against Chromium's original computed styles in an isolated shadow tree,
 including self/mutual cycles, selected/unused fallbacks, comments and function-name boundaries,

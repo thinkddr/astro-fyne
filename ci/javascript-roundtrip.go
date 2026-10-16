@@ -85,6 +85,7 @@ func main() {
 		panic(err)
 	}
 	insertion := view.Object("js-insert-input")
+	hierarchy := view.Object("js-hierarchy-input")
 	perform := func(step step) {
 		object := view.Object(step.ID)
 		if object == nil {
@@ -116,6 +117,9 @@ func main() {
 		if insertion != nil && view.Object("js-insert-input") != insertion {
 			panic("insertion replaced the existing native input object after " + step.ID)
 		}
+		if hierarchy != nil && view.Object("js-hierarchy-input") != hierarchy {
+			panic("hierarchy mutation replaced the existing native input after " + step.ID)
+		}
 	}
 	if os.Args[2] == "export" {
 		for _, step := range scenario.Prefix {
@@ -140,7 +144,7 @@ func main() {
 		}
 		frames = append(frames, snapshot.Frame)
 	}
-	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil})
+	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil, "hierarchyIdentityChecked": hierarchy != nil})
 	if err != nil {
 		panic(err)
 	}
