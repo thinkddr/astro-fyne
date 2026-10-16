@@ -153,7 +153,7 @@ isolated patched renderer. The candidate still uses the broader bilinear fallbac
 outside its bounded helper, so this result does not validate that fallback or
 universal conversion. The original failing variants remain available.
 
-## Bounded variant under validation
+## Validated bounded variant
 
 `native-legacy` separates the successful helper from the experiment's broad
 bilinear fallback. Its direct patch input is the published `.16` source blob
@@ -162,8 +162,14 @@ fork base `2236726ac36e11116c689dc64b0890d91be8ced6`.
 `ci/image-sampling/native-legacy-pin.json` binds the patch, original and final
 source, unchanged helper inputs, licenses and new routing tests by SHA-256.
 The wrapper also verifies that remote formatting reproduces the previously
-tested helper bytes. The minimal variant needs its own hosted proof; the earlier
-successful run does not establish a result for a different patch.
+tested helper bytes.
+
+[Run 38893097982](https://github.com/thinkddr/astro-fyne/actions/runs/38893097982)
+tested this minimal variant at `27168b4c8a21a458542904e345ee86f9fcb8b9e7`.
+All six complete-frame comparisons passed with zero changed pixels and zero
+channel tolerance. All 22 ARM64 phases passed, including helper, scope, routing
+and generated native race tests. The browser PNGs are byte-identical to the
+original failing baseline captures.
 
 Automatic runs select this variant on the dedicated enlargement branches and
 matching pull requests. Its ARM64 job retains the six strict frame comparisons
@@ -196,9 +202,15 @@ every failed fixture with its hash under `fork-failed-fixtures/`. Both module
 graphs run even if one fails. The x86 choice matches existing fixture provenance;
 it does not weaken the ARM64 browser/native comparisons or excuse failed tests.
 
-Keep existing image, Raster, Pixels, Fastest, alpha and clipping goldens unchanged
-for the first run. Review any changed fixture individually against its real
-source, physical size and sampling route. An unexpected change outside the new
-route is a regression to diagnose, not a reason to refresh a whole directory.
-No dependency adoption, tag publication or broader parity claim follows from
-adding this validation lane.
+The same run passed all three complete packages under both dependency graphs:
+the converter resolved x/image v0.46.0 and the fork resolved v0.24.0, before and
+after testing. All eight regression phases passed. Existing image, Raster,
+Pixels, Fastest, alpha and clipping goldens remained unchanged; no failed fixture
+images were produced.
+
+Review any future changed fixture individually against its real source, physical
+size and sampling route. An unexpected change outside the new route is a
+regression to diagnose, not a reason to refresh a whole directory. These results
+validate the retained software-renderer corpus and selected packages. They do
+not publish a fork tag, change the production dependency or establish broader
+pixel parity.
