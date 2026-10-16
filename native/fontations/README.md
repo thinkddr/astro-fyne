@@ -53,6 +53,14 @@ Single-line editors use the existing native editing engine. Multiline editing,
 contextual caret mapping, generated-widget visual parity, reverse-conversion
 typography, GPU rendering and universal 1:1 conversion remain unverified.
 
+The hosted generated-controls gate injects this backend into the ordinary
+`NewResponsiveControls` constructor. It keeps the original source, font and
+21 interaction actions, captures all 22 DPR 1 frames, and compares complete
+images at zero RGBA tolerance. The retained text layouts and binary/source
+bindings are separate from the seven-row provider evidence. See
+[`test-controls-remote.sh`](../../ci/text-engine-probe/test-controls-remote.sh)
+for the hosted invocation; no browser measurements enter the native layout.
+
 The canonical C ABI lives in [`cabi`](cabi/). Its hosted source build, compiler
 receipts, notices and strict transport/rendering checks are documented in
 [`ci/text-engine-probe`](../../ci/text-engine-probe/README.md). Run builds and tests

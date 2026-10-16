@@ -6,7 +6,8 @@ This diagnostic builds a native Fontations, HarfBuzz, Skia and OTS pipeline and
 compares it with the original Astro typography page. The verified N32 run matches
 both complete original browser frames at zero RGBA tolerance.
 Existing fonts, fixtures, browser settings and reference pixels are unchanged.
-Fyne widget, editor, reverse-conversion and GPU integration remain pending.
+The optional Fyne provider also matches those frames. Broader widget, editor,
+reverse-conversion and GPU parity remain unverified.
 
 The canonical C ABI source and header live in
 [`native/fontations/cabi`](../../native/fontations/cabi/), inside the native Go
@@ -48,6 +49,21 @@ scales, scripts or fonts fail visibly. Empty lines retain native metrics without
 painting pixels. These development checks do not establish generated-widget,
 editor, reverse-conversion or GPU parity; see the package documentation for its
 current limits.
+
+The workflow also exercises the unchanged `ResponsiveControls` source with this
+backend. It generates the widget, captures the original browser page, and runs
+the same 21 pointer, typing, focus, resize and commit actions through a separate
+native test binary. All 22 complete frames use zero RGBA tolerance. Geometry,
+object identity and behavior checks remain mandatory. The default backend's
+existing diagnostics are retained independently.
+
+`test-controls-remote.sh` runs the generated-controls test from its package
+directory. `compare-controls.py` binds the actual race-enabled test binary,
+published Fyne module, generated and handwritten sources, original fixture,
+scenario, font, policy and engine library. Its sidecar records all ten actual
+native text layouts in every frame. Each capture retains its raw strict result,
+stderr and diff, including failures. These checks cover only the original DPR 1
+scenario and do not certify general editing or universal conversion.
 
 The workflow is `.github/workflows/native-fontations-text.yml`. It runs on pushes
 and pull requests affecting its source, inputs or comparator, and supports manual

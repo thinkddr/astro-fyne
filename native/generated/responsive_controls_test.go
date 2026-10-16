@@ -37,6 +37,13 @@ type controlsObservation struct {
 	Previous int    `json:"previous"`
 }
 
+type controlsCaptureOptions struct {
+	output      string
+	backend     webui.Backend
+	transparent bool
+	inspect     func(*testing.T, string, *ResponsiveControlsWidget, software.WindowlessCanvas, image.Image, webui.ViewSnapshot)
+}
+
 func controlsSnapshotNodes(snapshot webui.ViewSnapshot) map[string]webui.SnapshotNode {
 	nodes := map[string]webui.SnapshotNode{}
 	var visit func([]webui.SnapshotNode)
@@ -79,6 +86,11 @@ func controlsTap(t *testing.T, view *ResponsiveControlsWidget, target software.W
 }
 
 func TestGeneratedResponsiveControlsPointerTypingResizeAndCommit(t *testing.T) {
+	runResponsiveControls(t, controlsCaptureOptions{output: os.Getenv("ASTRO_FYNE_RESPONSIVE_CONTROLS_ARTIFACTS")})
+}
+
+func runResponsiveControls(t *testing.T, options controlsCaptureOptions) {
+	t.Helper()
 	data, err := os.ReadFile("../../responsive-controls-scenario.json")
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +122,7 @@ func TestGeneratedResponsiveControlsPointerTypingResizeAndCommit(t *testing.T) {
 	}
 	fontDigest := sha256.Sum256(font.Content())
 	fontHash := hex.EncodeToString(fontDigest[:])
-	out := os.Getenv("ASTRO_FYNE_RESPONSIVE_CONTROLS_ARTIFACTS")
+	out := options.output
 	if out != "" {
 		if os.Getenv("ASTRO_FYNE_RESPONSIVE_CONTROLS_SOURCE_HASH") != ResponsiveControlsSourceHash {
 			t.Fatal("controls source hash differs from browser analysis")
@@ -137,18 +149,24 @@ func TestGeneratedResponsiveControlsPointerTypingResizeAndCommit(t *testing.T) {
 	}
 	app := test.NewApp()
 	t.Cleanup(app.Quit)
-	// Exercise the generated font backend's default path, without an injected
-	// measurement profile or hand-written host font substitution.
-	view, err := NewResponsiveControls(webui.Scope{}, webui.Actions{})
+	var backends []webui.Backend
+	if options.backend != nil {
+		backends = []webui.Backend{options.backend}
+	}
+	view, err := NewResponsiveControls(webui.Scope{}, webui.Actions{}, backends...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	target := software.NewCanvas()
+	if options.transparent {
+		target = software.NewTransparentCanvas()
+	}
 	target.SetPadded(false)
 	target.SetScale(1)
 	width := 224
 	target.Resize(fyne.NewSize(float32(width), 320))
 	target.SetContent(view)
+	t.Cleanup(func() { target.SetContent(nil) })
 	if err := view.BindCanvas(target); err != nil {
 		t.Fatal(err)
 	}
@@ -181,6 +199,9 @@ func TestGeneratedResponsiveControlsPointerTypingResizeAndCommit(t *testing.T) {
 		}
 		if state.Measured || state.Size != fyne.NewSize(float32(width), 320) {
 			t.Fatal("controls layout must be source-only at its actual viewport")
+		}
+		if options.inspect != nil {
+			options.inspect(t, action, view, target, capture, state)
 		}
 		rectangles, err := responsiveSnapshotRectangles(state)
 		if err != nil {
