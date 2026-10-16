@@ -102,6 +102,13 @@ func main() {
 			textContentObjects[id] = object
 		}
 	}
+	cssCaseIDs := []string{"css-case-input", "css-case-misapplied", "css-case-ascii"}
+	cssCaseObjects := make(map[string]fyne.CanvasObject)
+	for _, id := range cssCaseIDs {
+		if object := view.Object(id); object != nil {
+			cssCaseObjects[id] = object
+		}
+	}
 	perform := func(step step) {
 		object := view.Object(step.ID)
 		if object == nil {
@@ -152,6 +159,11 @@ func main() {
 				panic("textContent replaced native object " + id + " after " + step.ID)
 			}
 		}
+		for id, object := range cssCaseObjects {
+			if view.Object(id) != object {
+				panic("CSS attribute mutation replaced native object " + id + " after " + step.ID)
+			}
+		}
 	}
 	if os.Args[2] == "export" {
 		for _, step := range scenario.Prefix {
@@ -176,7 +188,7 @@ func main() {
 		}
 		frames = append(frames, snapshot.Frame)
 	}
-	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil, "hierarchyIdentityChecked": hierarchy != nil, "ancestorIdentityChecked": ancestor != nil, "removalIdentityChecked": removal != nil, "characterDataIdentityChecked": len(characterObjects) == len(characterIDs), "textContentIdentityChecked": len(textContentObjects) == len(textContentIDs)})
+	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil, "hierarchyIdentityChecked": hierarchy != nil, "ancestorIdentityChecked": ancestor != nil, "removalIdentityChecked": removal != nil, "characterDataIdentityChecked": len(characterObjects) == len(characterIDs), "textContentIdentityChecked": len(textContentObjects) == len(textContentIDs), "cssCaseIdentityChecked": len(cssCaseObjects) == len(cssCaseIDs)})
 	if err != nil {
 		panic(err)
 	}

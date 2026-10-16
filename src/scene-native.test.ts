@@ -177,6 +177,85 @@ test("one responsive scene emits native declarations and forward-compatible stat
   expect(lowered).toContain("Shrink: webui.FlexValue(0)");
 });
 
+test("responsive root tokens survive static web and source-only native reimport with their exact case and strings", async () => {
+  const document = responsive();
+  document.tokens = {
+    "--Accent": "#112233",
+    "--accent": "#445566",
+    "--space": "8px",
+    "--color-primary": "#11232b",
+    "--quoted-comment": '"/* literal */"',
+  };
+  const native = formatted(emitNativeScene(document, nativeOptions).code);
+  const web = emitWebScene(document, { name: "ResponsiveTokens" });
+  expect(web.preact).not.toMatch(/import | class=/);
+  const path = join(directory, "ResponsiveTokens.tsx");
+  await writeFile(path, web.preact);
+  const program = await compile(path);
+  expect(program.hasStyles).not.toBe(true);
+  const component = program.components.find(
+    (value) => value.name === program.entry,
+  )!;
+  const root = component.body[0]!;
+  expect(root.kind).toBe("element");
+  if (root.kind !== "element") throw new Error("Missing responsive root");
+  const inline = root.attrs.style;
+  expect(inline?.kind).toBe("object");
+  if (inline?.kind !== "object") throw new Error("Missing inline styles");
+  const child = root.children.find((node) => node.kind === "element");
+  expect(child).toBeDefined();
+  if (child?.kind !== "element" || child.attrs.style?.kind !== "object")
+    throw new Error("Missing responsive child styles");
+  const restored = formatted(
+    emitGo(program, { name: "RestoredTokens", packageName: "generated" }),
+  );
+  for (const [name, value] of Object.entries(document.tokens)) {
+    expect(inline.entries[name]).toEqual({ kind: "literal", value });
+    expect(Object.hasOwn(child.attrs.style.entries, name)).toBe(false);
+    const declaration = `${JSON.stringify(name)}: ${JSON.stringify(value)}`;
+    expect(native).toContain(declaration);
+    expect(restored).toContain(declaration);
+  }
+  expect(restored).toContain("WidthPercent: webui.FlexValue(100)");
+  expect(restored).toContain("Shrink: webui.FlexValue(0)");
+  expect(restored).not.toContain("ApplyMeasurements");
+  expect(restored).not.toContain("SetTheme(");
+});
+
+test("responsive token substitution is diagnosed before emitting source that cannot roundtrip", () => {
+  for (const value of ["", "inherit", "var(--base)", "#112233 !important"]) {
+    const document = responsive();
+    document.tokens = { "--accent": value };
+    expect(() => emitWebScene(document, { name: "ResponsiveTokens" })).toThrow(
+      "resolved literal strings",
+    );
+  }
+});
+
+test("interactive responsive scenes retain their existing stylesheet token substitution route", () => {
+  const document = responsive();
+  const button = document.roots[0]!.children[0]!;
+  button.kind = "button";
+  button.text = "Save";
+  button.events = { tap: "tap" };
+  button.sourceStyle!.fontFamily = "Host";
+  Object.assign(button.sourceStyle!.flex, {
+    marginSet: true,
+    appearance: "none",
+    borderStyle: "solid",
+  });
+  document.requiredActions = ["tap"];
+  document.tokens = { "--base": "#112233", "--accent": "var(--base)" };
+  const web = emitWebScene(document, {
+    name: "InteractiveTokens",
+    actionsModule: "./actions.ts",
+  });
+  expect(web.css).toContain("--base:#112233;--accent:var(--base);");
+  expect(web.preact).toContain('import "./InteractiveTokens.css"');
+  expect(web.preact).toContain('class={"af-InteractiveTokens af-node ');
+  expect(web.preact).not.toContain('"--accent"');
+});
+
 test("responsive metadata is versioned and validates declarations before generation", () => {
   const edits: ((scene: SceneDocument) => void)[] = [
     (s) => {

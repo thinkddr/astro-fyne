@@ -4,6 +4,7 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { inspectBitmap } from "./resources.ts";
+import { resolvedRootToken } from "./root-css-tokens.ts";
 import {
   sourceStyleCSS,
   validateResponsiveScene,
@@ -621,7 +622,8 @@ function tokenValue(value: string, path: string): string {
   // These are stylesheet values, never interpreted JS or HTML.
   let quote = "";
   let parentheses = 0;
-  for (const character of value) {
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index]!;
     if (/[\\\u0000-\u001f<>]/.test(character))
       fail(path, "unsafe CSS token value");
     if (quote) {
@@ -629,14 +631,15 @@ function tokenValue(value: string, path: string): string {
       continue;
     }
     if (character === '"' || character === "'") quote = character;
+    else if (character === "/" && value[index + 1] === "*")
+      fail(path, "unbalanced or commented CSS token");
     else if (/[;{}]/.test(character))
       fail(path, "CSS token cannot escape its declaration");
     else if (character === "(") parentheses++;
     else if (character === ")" && --parentheses < 0)
       fail(path, "unbalanced CSS token");
   }
-  if (quote || parentheses || /\/\*/.test(value))
-    fail(path, "unbalanced or commented CSS token");
+  if (quote || parentheses) fail(path, "unbalanced or commented CSS token");
   return value;
 }
 
@@ -679,6 +682,15 @@ export function emitWebScene(
     rootID = `fyne-root-${suffix}`;
   const staticScene = !hasControls && !document.requiredActions.length;
   const responsive = document.schema === 2;
+  const rootTokens =
+    responsive && staticScene
+      ? Object.fromEntries(
+          Object.entries(document.tokens).map(([name, value]) => [
+            name,
+            resolvedRootToken(name, value, `$.tokens.${name}`),
+          ]),
+        )
+      : undefined;
   if (responsive) rootID = document.roots[0]!.id;
   const rules: string[] = [
     `.${scope}{position:relative;box-sizing:border-box;width:${responsive ? "100%" : `${document.viewport.width}px`};height:${document.viewport.height}px;margin:0;padding:0;border:0;overflow:hidden;${tokens}}`,
@@ -702,7 +714,10 @@ export function emitWebScene(
       );
     const classes = `${node.id === rootID && responsive ? scope + " " : ""}af-node ${className}`;
     const sourceCSS = responsive
-      ? sourceStyleCSS(node.sourceStyle!)
+      ? {
+          ...sourceStyleCSS(node.sourceStyle!),
+          ...(node.id === rootID && rootTokens ? rootTokens : {}),
+        }
       : undefined;
     const inline = sourceCSS ? ` style={${literal(sourceCSS)}}` : "";
     const attrs = `id={${literal(node.id)}}${responsive && staticScene ? "" : ` class={${literal(classes)}}`}${inline}${node.accessibleLabel ? ` aria-label={${literal(node.accessibleLabel)}}` : ""}`;

@@ -91,6 +91,140 @@ test("CSS class and attribute tokens use HTML ASCII whitespace", async () => {
     },
   );
 });
+test("HTML attribute values use the fixed default ASCII-insensitive list", async () => {
+  const names = [
+    "accept",
+    "accept-charset",
+    "align",
+    "alink",
+    "axis",
+    "bgcolor",
+    "charset",
+    "checked",
+    "clear",
+    "codetype",
+    "color",
+    "compact",
+    "declare",
+    "defer",
+    "dir",
+    "direction",
+    "disabled",
+    "enctype",
+    "face",
+    "frame",
+    "hreflang",
+    "http-equiv",
+    "lang",
+    "language",
+    "link",
+    "media",
+    "method",
+    "multiple",
+    "nohref",
+    "noresize",
+    "noshade",
+    "nowrap",
+    "readonly",
+    "rel",
+    "rev",
+    "rules",
+    "scope",
+    "scrolling",
+    "selected",
+    "shape",
+    "target",
+    "text",
+    "type",
+    "valign",
+    "valuetype",
+    "vlink",
+  ];
+  await withCSS(
+    names.map((name) => `[${name}="mixed"]{color:red}`).join(""),
+    ({ document, root, snapshot }) => {
+      for (const name of names) {
+        // These comparisons apply even when the attribute has no effect on div.
+        const node = document.createElement("div");
+        node.setAttribute(name.toUpperCase(), "MiXeD");
+        root.appendChild(node);
+      }
+      const frames = snapshot();
+      expect(frames).toHaveLength(names.length);
+      for (const [index, frame] of frames.entries()) {
+        expect(frame.style.color).toBe("red");
+        expect(frame.attrs[names[index]!]).toBe("MiXeD");
+      }
+    },
+  );
+});
+test("attribute flags override HTML defaults without folding raw data, classes or IDs", async () => {
+  await withCSS(
+    `[TYPE="text"]{color:red}[type="text" S]{background:blue}[type="text" I]{padding:2px}[data-case="mixed"]{width:10px}[class="token"]{height:10px}[id="case"]{border-width:1px}[data-unicode="ä" i]{font-size:10px}[type="ä"]{color:green}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("input");
+      node.id = "Case";
+      node.className = "Token";
+      node.setAttribute("TYPE", "TEXT");
+      node.setAttribute("data-case", "MiXeD");
+      node.setAttribute("data-unicode", "Ä");
+      root.appendChild(node);
+      const other = document.createElement("div");
+      other.setAttribute("type", "Ä");
+      root.appendChild(other);
+      expect(snapshot()[1].style).toEqual({});
+      expect(snapshot()[1].attrs.type).toBe("Ä");
+      expect(snapshot()[0].style).toEqual({
+        color: "red",
+        paddingTop: "2px",
+        paddingRight: "2px",
+        paddingBottom: "2px",
+        paddingLeft: "2px",
+      });
+      expect(snapshot()[0].attrs.type).toBe("TEXT");
+      node.setAttribute("type", "text");
+      node.setAttribute("data-case", "mixed");
+      node.className = "token";
+      node.id = "case";
+      const frame = snapshot()[0];
+      expect(frame.style.backgroundColor).toBe("blue");
+      expect(frame.style.width).toBe("10px");
+      expect(frame.style.height).toBe("10px");
+      expect(frame.style.borderWidth).toBe("1px");
+      expect(frame.style.fontSize).toBeUndefined();
+      expect(frame.attrs["data-unicode"]).toBe("Ä");
+    },
+  );
+});
+test("default attribute folding applies to every value-matching operator", async () => {
+  for (const [operator, value, expected] of [
+    ["=", "MiXeD", "mixed"],
+    ["~=", "other MiXeD", "mixed"],
+    ["|=", "MiXeD-case", "mixed"],
+    ["^=", "MiXeD-case", "mixed"],
+    ["$=", "case-MiXeD", "mixed"],
+    ["*=", "case-MiXeD-tail", "mixed"],
+  ]) {
+    await withCSS(
+      `[type${operator}"${expected}"]{color:red}[type${operator}"${expected}" s]{background:blue}[data-case${operator}"${expected}" i]{padding:2px}`,
+      ({ document, root, snapshot }) => {
+        const node = document.createElement("div");
+        node.setAttribute("type", value);
+        node.setAttribute("data-case", value);
+        root.appendChild(node);
+        const frame = snapshot()[0];
+        expect(frame.style.color).toBe("red");
+        expect(frame.style.backgroundColor).toBeUndefined();
+        expect(frame.style.paddingLeft).toBe("2px");
+        expect(frame.attrs.type).toBe(value);
+      },
+    );
+  }
+  for (const selector of ["[type=text x]", "[type i]"])
+    await expect(withCSS(`${selector}{color:red}`, () => {})).rejects.toThrow(
+      /adapter/,
+    );
+});
 test(":checked recognizes ASCII-case-insensitive input types without styling the checkbox", async () => {
   await withCSS(
     ".peer:checked+span{color:#112233}",

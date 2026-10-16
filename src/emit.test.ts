@@ -31,6 +31,94 @@ const responsiveControlReset =
 const responsiveLeaf = (leaf: string) =>
   `export function Page() { return <main id="root" style={{display:'flex',width:'100%',height:80,boxSizing:'border-box'}}>${leaf}</main>; }`;
 
+test("literal responsive root custom properties survive in the opt-in theme without changing native paint", async () => {
+  const source = await program(
+    `export function Page() { return <main id="root" style={{display:'flex',width:'100%',height:80,boxSizing:'border-box',backgroundColor:'#ffffff','--Accent':'#112233','--accent':'#445566','--space':'8px','--quoted':'"var(--literal)"','--channels':'rgba(17, 35, 43, 0.5)'}}/>; }`,
+  );
+  const go = emitGo(source, { ...options, portableProgram: true });
+  expect(go).toContain("webui.NewCapturedTheme(map[string]string{");
+  for (const declaration of [
+    '"--Accent": "#112233"',
+    '"--accent": "#445566"',
+    '"--channels": "rgba(17, 35, 43, 0.5)"',
+    '"--quoted": "\\\"var(--literal)\\\""',
+    '"--space": "8px"',
+  ])
+    expect(go).toContain(declaration);
+  expect(go).toContain('Background: "#ffffff"');
+  expect(go).not.toContain("SetTheme(");
+  expect(go).toContain("ExportProgram()");
+});
+
+test("root token declarations reject unsupported resolution or scope instead of discarding CSS", async () => {
+  for (const value of [
+    "",
+    "  ",
+    "inherit",
+    "INITIAL",
+    "unset",
+    "revert",
+    "revert-layer",
+    "var(--base)",
+    "VAR(--base)",
+    "rgb(var(--channels))",
+    "env(safe-area-inset-top)",
+    "calc(1px + 2px)",
+    "#112233 !important",
+    "#112233; color:red",
+    "/* token */ #112233",
+    "\\69 nherit",
+    "\ud800",
+  ]) {
+    const source = await program(
+      responsiveLeaf("").replace(
+        "boxSizing:'border-box'",
+        `boxSizing:'border-box','--accent':${JSON.stringify(value)}`,
+      ),
+    );
+    expect(() => emitGo(source, options)).toThrow("resolved literal strings");
+  }
+  for (const source of [
+    `export function Page({color}) { return <main style={{display:'flex',width:'100%',height:80,boxSizing:'border-box','--accent':color}}/>; }`,
+    responsiveLeaf(`<div style={{'--accent':'#112233'}}/>`),
+    `export function Page() { return <main style={{'--accent':'#112233'}}/>; }`,
+    `function Child() { return <main style={{display:'flex',width:'100%',height:80,boxSizing:'border-box','--accent':'#112233'}}/>; } export function Page(){return <Child/>;}`,
+  ]) {
+    const parsed = await program(source);
+    expect(() => emitGo(parsed, options)).toThrow("CSS");
+  }
+  const variablePaint = await program(
+    responsiveLeaf("").replace(
+      "boxSizing:'border-box'",
+      "boxSizing:'border-box','--accent':'#112233',backgroundColor:'var(--accent)'",
+    ),
+  );
+  expect(() => emitGo(variablePaint, options)).toThrow("color");
+});
+
+test("measured theme tokens retain capture precedence over authored root declarations", async () => {
+  const source = await program(
+    responsiveLeaf("").replace(
+      "boxSizing:'border-box'",
+      "boxSizing:'border-box','--accent':'#112233'",
+    ),
+  );
+  const go = emitGo(source, {
+    ...options,
+    measurements: {
+      schema: 1,
+      sourceHash: sourceHash(source),
+      state: "default",
+      viewport: { width: 100, height: 80, scale: 1 },
+      nodes: { root: { measured: true, width: 100, height: 80 } },
+      tokens: { "--accent": "#445566" },
+    },
+  });
+  expect(go).toContain(
+    'webui.NewCapturedTheme(map[string]string{"--accent": "#445566"},base)',
+  );
+});
+
 test("CSS family identifiers collapse spaces and reserved tokens require quotes", async () => {
   const make = (family: string) =>
     responsiveLeaf(

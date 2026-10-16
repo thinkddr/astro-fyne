@@ -79,10 +79,15 @@ export async function compileJavascriptCSS(
                   : 2
             ]!++;
         } else if (node.type === "AttributeSelector") {
+          const flags = node.flags
+            ? css.ident
+                .decode(node.flags)
+                .replace(/[A-Z]/g, (c: string) => c.toLowerCase())
+            : null;
           if (
             !node.name ||
             node.name.type !== "Identifier" ||
-            (node.flags && !["i", "s"].includes(node.flags))
+            (flags && (!node.matcher || !["i", "s"].includes(flags)))
           )
             throw new Error("CSS attribute selector requires an adapter");
           tests.push([
@@ -94,7 +99,7 @@ export async function compileJavascriptCSS(
               : node.value
                 ? css.ident.decode(node.value.name)
                 : null,
-            node.flags,
+            flags,
           ]);
           score[1]!++;
         } else if (node.type === "PseudoClassSelector") {

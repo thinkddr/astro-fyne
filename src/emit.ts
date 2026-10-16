@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { inspectFont, validateFontFaces } from "./fonts.ts";
 import { validatePortableProgram } from "./program-contract.ts";
+import { resolvedRootToken } from "./root-css-tokens.ts";
 import type {
   BitmapResource,
   Component,
@@ -212,6 +213,7 @@ function style(
   node: Extract<Node, { kind: "element" }>,
   measured: boolean,
   bitmap?: BitmapResource,
+  rootTokens?: Readonly<Record<string, string>>,
 ): string {
   const values: Record<string, string | number> = {};
   const flex: Record<string, string | number | boolean> = {};
@@ -494,6 +496,13 @@ function style(
       flexDirection: "Direction",
     };
     for (const [property, val] of Object.entries(node.attrs.style.entries)) {
+      if (property.startsWith("--")) {
+        if (!rootTokens || !Object.hasOwn(rootTokens, property))
+          throw new Error(
+            `${node.id}: CSS custom properties require literal declarations on the sole responsive entry root; nested or indirect scopes require a CSS adapter.`,
+          );
+        continue;
+      }
       if (bitmap && ["objectFit", "objectPosition"].includes(property)) {
         if (
           val.kind !== "literal" ||
@@ -721,6 +730,10 @@ function style(
       if (["Background", "Color", "BorderColor", "Direction"].includes(field)) {
         if (typeof val.value !== "string")
           throw new Error(`${node.id}: ${property} requires a string.`);
+        if (field !== "Direction" && /var\s*\(/i.test(val.value))
+          throw new Error(
+            `${node.id}: CSS ${property} requires a resolved literal color; var() requires a CSS adapter.`,
+          );
         if (
           field === "Direction" &&
           ![
@@ -857,6 +870,8 @@ interface EmitContext {
   measured: boolean;
   textCounter: number;
   resources: Map<string, BitmapResource>;
+  tokenRoot?: Extract<Node, { kind: "element" }>;
+  rootTokens: Record<string, string>;
 }
 function textNodeCode(
   node: Extract<Node, { kind: "text" }>,
@@ -978,7 +993,7 @@ function nodeCode(
     `ID: ${node.attrs.id ? `webui.String(${attributeValue("id")})` : `prefix + ${quote("/" + node.id)}`}`,
     `Identity: prefix + ${quote("/" + (node.identity ?? node.id))}`,
     `Kind: ${quote(kind)}`,
-    `Style: ${style(node, measured, bitmap)}`,
+    `Style: ${style(node, measured, bitmap, context.tokenRoot === node ? context.rootTokens : undefined)}`,
   ];
   let capturedAttributes = "";
   if (measured) {
@@ -1103,11 +1118,40 @@ export function emitGo(
       );
   }
   const resources = program.resources ?? [];
+  const entry = program.components.find(
+    (component) => component.name === program.entry,
+  );
+  const root = entry?.body.length === 1 ? entry.body[0] : undefined;
+  const tokenRoot =
+    !measured &&
+    root?.kind === "element" &&
+    containers.has(root.tag) &&
+    root.attrs.style?.kind === "object" &&
+    root.attrs.style.entries.display?.kind === "literal" &&
+    root.attrs.style.entries.display.value === "flex"
+      ? root
+      : undefined;
+  const rootTokens = Object.fromEntries(
+    tokenRoot?.attrs.style?.kind === "object"
+      ? Object.entries(tokenRoot.attrs.style.entries)
+          .filter(([property]) => property.startsWith("--"))
+          .map(([property, value]) => [
+            property,
+            resolvedRootToken(
+              property,
+              value.kind === "literal" ? value.value : undefined,
+              `${tokenRoot.id}: CSS ${property}`,
+            ),
+          ])
+      : [],
+  );
   const context: EmitContext = {
     name: options.name,
     measured,
     textCounter: 0,
     resources: new Map(resources.map((resource) => [resource.name, resource])),
+    tokenRoot,
+    rootTokens,
   };
   if (context.resources.size !== resources.length)
     throw new Error("Duplicate bitmap resource names.");
@@ -1235,7 +1279,7 @@ export function emitGo(
   const measurementSetup = options.measurements
     ? `view.SetViewport(${options.measurements.viewport.width}, ${options.measurements.viewport.height})\n if err := view.SetCaptureScale(${options.measurements.viewport.scale}); err != nil { return nil, err }\n if err := view.ApplyMeasurements(${measurementsGo(options.measurements)}); err != nil { return nil, err }`
     : "";
-  const tokens = Object.entries(options.measurements?.tokens ?? {})
+  const tokens = Object.entries(options.measurements?.tokens ?? rootTokens)
     .sort(([a], [b]) => a.localeCompare(b, "en"))
     .map(([key, value]) => `${quote(key)}: ${quote(value)}`)
     .join(", ");

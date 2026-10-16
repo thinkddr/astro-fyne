@@ -30,6 +30,9 @@ supported selectors, flat layers, specificity/order/importance, variables and de
 inheritance are reevaluated after source state changes. Original-browser computed styles
 are compared with native frames. General CSS layout, media/state/font/resource adapters
 and pixel equivalence remain pending.
+CSS migration is required in both directions. The
+[CSS round-trip guide](docs/css-roundtrip.md) distinguishes retained stylesheet
+behavior from resolved scene CSS and records the remaining boundaries.
 Selected custom-property replacements with unsupported token adjacency or unquoted comments
 are diagnosed instead of concatenated into a fabricated native dimension or color.
 

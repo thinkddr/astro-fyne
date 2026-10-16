@@ -121,3 +121,38 @@
   /* prettier-ignore */
   color:var(--token-ready,/* unselected */var(--token-number)0);
 }
+
+#css-case-input {
+  font-size: inherit;
+  line-height: inherit;
+  color: #223344;
+  background-color: #eeeeee;
+  padding: 2px 4px;
+}
+#css-case-input[type="text"] {
+  color: #123456;
+}
+#css-case-input[type="text" I] {
+  background-color: #ddeeff;
+}
+#css-case-input[data-case="mixed"] {
+  padding-left: 7px;
+}
+#css-case-input[data-case="MIXED" i] {
+  padding-right: 9px;
+}
+#css-case-input[class="casetoken"] {
+  padding-top: 11px;
+}
+#css-case-input[id="CSS-CASE-INPUT"] {
+  padding-bottom: 13px;
+}
+#css-case-misapplied[type="brief"] {
+  color: #345678;
+}
+#css-case-ascii {
+  color: #456789;
+}
+#css-case-ascii[data-case="ä" i] {
+  color: #ff0000;
+}
