@@ -63,12 +63,12 @@ the exact Rust CXX bridge from the pinned Skia tree and selects the features
 listed by Chromium's GN files for the three font crates.
 
 The standalone host/build dependency graph is **not** claimed to be Chromium's
-entire GN graph. Cargo resolves and retains its real checksums and transitive
-versions in `assembly/Cargo.lock`, metadata and a feature tree, then the build
-uses `--locked`. The copied Chromium lock is retained separately for comparison.
-There is no fabricated Cargo lock here: the first actual resolution has not
-run. Any version/API/feature conflict is a concrete first-build failure to fix,
-not a reason to silently fall back to standalone Skia's older font crates.
+entire GN graph. The committed `Cargo.lock` is the actual hosted standalone
+resolution, retained and verified in [run 38909746057](https://github.com/thinkddr/astro-fyne/actions/runs/38909746057).
+Its SHA-256 is `7b4f8f8ae78aab9edf28cadbdd6a51c34704fe9b8124ce46b1fb02790336e801`.
+Resolution checks metadata with `--locked`; compilation also uses `--locked`.
+The Chromium lock remains separate comparison evidence. Dependency changes need
+a new real hosted resolution and review of that lock and its notices.
 
 The build uses GN for CPU-only base Skia with Fontations disabled, then compiles
 the exact Fontations CXX/Rust bridge using Cargo/cxx against that same base.
@@ -79,6 +79,18 @@ exceptions remain enabled for the C ABI's caught errors. All native C++ uses
 the installed Clang/libstdc++ consistently. Tool versions, actual compiler
 hashes, GN hash, link map and linked-library inventory are retained. This is
 a declared hosted toolchain profile, not an immutable container-image claim.
+
+The resolver also materializes Chromium's exact CXX forwarding header and its
+already verified vendor header at their original relative paths. The assembly
+include root reaches dependency builds through Cargo's `CXXFLAGS`.
+
+This standalone profile explicitly sets `skia_use_partition_alloc=false`.
+GN and external C++ leave `SK_USE_PARTITION_ALLOC` undefined and select Skia's
+supported no-op raw pointer/reference implementation. Chromium's PartitionAlloc
+and BackupRefPtr protection are not part of this profile. Font source, shaping,
+hinting, gamma and paint requests are unchanged by this allocator choice.
+The build retains actual GN commands and checks that the observed missing
+PartitionAlloc symbols are absent from the rebuilt Skia archive.
 
 HarfBuzz is built without FreeType, ICU, Graphite or platform shapers for this
 bounded Latin/OT case. OTS is the pinned sanitizer with Blink's table-action
@@ -193,12 +205,20 @@ these supplement the installed distribution's generated notices. The collector
 fails if those generated dependency notices are absent, rather than replacing
 them with a short MIT/Apache label. No Rust version or notice is invented.
 
-The remaining build blockers are concrete unproven boundaries: first Cargo
-resolution/checksums, exact GN↔CXX link/source ABI compatibility, OTS/HarfBuzz
-target output paths, the installed hosted toolchain, and the 45-minute resource
-budget. Source inspection found and corrected the RTTI mismatch, but it cannot
-replace a real compilation. The first job may fail there. Preserve that failure
-and fix the stated boundary; do not claim that a library or render has worked.
+[Run 38906332429](https://github.com/thinkddr/astro-fyne/actions/runs/38906332429)
+resolved real sources and built Skia/HarfBuzz, then exposed OTS's missing Google
+Test build dependency. [Run 38908188798](https://github.com/thinkddr/astro-fyne/actions/runs/38908188798)
+also built OTS, then exposed Chromium's CXX include layout requirement.
+[Run 38909746057](https://github.com/thinkddr/astro-fyne/actions/runs/38909746057)
+compiled Fontations/CXX and the C ABI source, then failed at final linking on
+PartitionAlloc dependencies. These failures and actual dependency locks remain
+retained; no rendering was reached by those runs.
+
+The standalone allocator profile needs a clean hosted rebuild and successful
+link. Remaining unproven boundaries include complete notice collection, loading
+the real ABI, shaping/painting every source row and both strict frame comparisons
+within the hosted resource budget. Compilation alone never establishes pixel or
+widget parity.
 
 Before treating browser policy as reproduced, complete
 the instrumentation or explicitly retain the independent-policy qualification.

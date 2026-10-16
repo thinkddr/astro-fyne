@@ -14,7 +14,7 @@ fi
 [[ -f "$task_work/sources.json" && -f "$task_work/assembly/Cargo.lock" ]]
 mkdir -p "$task_work/evidence"
 exec > >(tee "$task_work/evidence/build.log") 2>&1
-for task_tool in clang clang++ llvm-ar ninja cmake meson rustc cargo; do
+for task_tool in clang clang++ llvm-ar llvm-nm ninja cmake meson rustc cargo; do
   command -v "$task_tool"
   "$task_tool" --version
   sha256sum "$(realpath "$(command -v "$task_tool")")"
@@ -48,6 +48,15 @@ export SKIA_INCLUDE_ROOT="$task_work/skia"
   ninja -j2 -C out/text-probe skia
   ninja -C out/text-probe -t commands skia > "$task_work/evidence/skia-commands.txt"
 )
+llvm-nm --undefined-only --demangle "$task_work/skia/out/text-probe/libskia.a" \
+  > "$task_work/evidence/skia-undefined-symbols.txt"
+python3 - "$task_work/evidence/skia-undefined-symbols.txt" <<'PY'
+import pathlib, re, sys
+symbols = pathlib.Path(sys.argv[1]).read_text()
+if ("PartitionAddressSpace::setup_" in symbols or
+        re.search(r"RawPtrBackupRefImpl(?:<[^>]+>)?::(?:AcquireInternal|ReleaseInternal)", symbols)):
+    raise RuntimeError("Unexpected PartitionAlloc dependency in the declared standalone profile")
+PY
 cmake -S "$task_work/harfbuzz" -B "$task_work/harfbuzz/out" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_SHARED_LIBS=OFF \
   -DHB_HAVE_FREETYPE=OFF -DHB_HAVE_ICU=OFF -DHB_HAVE_GLIB=OFF -DHB_HAVE_GRAPHITE2=OFF \

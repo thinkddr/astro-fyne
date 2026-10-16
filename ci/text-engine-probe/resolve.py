@@ -35,7 +35,7 @@ def main():
     prototype = pathlib.Path(__file__).resolve().parent
     assembly = work / "assembly"
     assembly.mkdir(exist_ok=True)
-    for name in ["Cargo.toml", "build.rs", "text_engine.h", "text_engine.cc", "driver.py", "policy.json", "probe-pin.json"]:
+    for name in ["Cargo.toml", "Cargo.lock", "build.rs", "text_engine.h", "text_engine.cc", "driver.py", "policy.json", "probe-pin.json"]:
         shutil.copyfile(prototype / name, assembly / name)
     source_records = {}
     for name, (url, revision) in PINS.items():
@@ -100,12 +100,9 @@ def main():
         forwarding_path: {"gitBlob": forwarding_blob, "sha256": hashlib.sha256(forwarding_bytes).hexdigest()},
         included_path: {"verifiedVendorPath": "cxx-v1/include/cxx.h", "sha256": hashlib.sha256(included_bytes).hexdigest()},
     }
-    # Retain Chromium's lock as evidence. Cargo resolves the actual standalone
-    # graph/checksums; it is not claimed to equal Chromium's GN build graph.
+    # Keep Chromium's lock separately; assembly uses the actual hosted standalone lock.
     chrome_lock = fetch(f"https://raw.githubusercontent.com/chromium/chromium/{CHROMIUM}/third_party/rust/chromium_crates_io/Cargo.lock")
     (work / "chromium-Cargo.lock").write_bytes(chrome_lock)
-    (assembly / "Cargo.lock").write_bytes(chrome_lock)
-    run("cargo", "generate-lockfile", cwd=assembly)
     metadata = subprocess.check_output(["cargo", "metadata", "--locked", "--format-version", "1"], cwd=assembly)
     (work / "cargo-metadata.json").write_bytes(metadata)
     actual = json.loads(metadata)
@@ -128,7 +125,7 @@ def main():
         for source in directory.iterdir():
             if source.is_file() and source.name.upper().startswith(("LICENSE", "COPYING", "NOTICE")):
                 shutil.copyfile(source, target / source.name)
-    print("Resolved source and Cargo locks; not yet compiled")
+    print("Resolved pinned source and verified the committed Cargo lock; not yet compiled")
 
 if __name__ == "__main__":
     main()

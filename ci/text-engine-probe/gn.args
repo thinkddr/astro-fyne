@@ -4,6 +4,7 @@ cc = "clang"
 cxx = "clang++"
 ar = "llvm-ar"
 skia_use_fontations = false
+skia_use_partition_alloc = false
 skia_build_rust_targets = false
 skia_use_freetype = false
 skia_use_fontconfig = false

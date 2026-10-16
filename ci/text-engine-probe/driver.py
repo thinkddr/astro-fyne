@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Astro Fyne contributors.
-"""Unbuilt hosted prototype driver; no reference-image input or fitting path."""
+"""Hosted native probe driver; no reference-image input or fitting path."""
 import argparse, ctypes as C, hashlib, json, pathlib, struct, zlib
 
 FONT_HASH = "6b04c8dd65af6b73eb4279472ed1580b29102d6496a377340e80a40cdb3b22c9"

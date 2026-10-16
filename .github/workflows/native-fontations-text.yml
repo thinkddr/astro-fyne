@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y clang llvm ninja-build cmake meson pkg-config libgtest-dev libwoff-dev zlib1g-dev
-      - name: Resolve pinned source and record the actual standalone Cargo lock
+      - name: Resolve pinned source and verify the committed standalone Cargo lock
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
