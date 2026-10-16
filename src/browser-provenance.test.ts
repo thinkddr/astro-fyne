@@ -5,9 +5,41 @@ import { expect, test } from "bun:test";
 import {
   browserPID,
   elfArchitecture,
+  observeCDPCommandLine,
   parseKernelArguments,
   provenanceHash,
 } from "../capture/browser-provenance.ts";
+
+test("an actual CDP automation refusal stays explicitly unavailable", async () => {
+  expect(
+    await observeCDPCommandLine(async () => {
+      throw new Error(
+        "Protocol error (Browser.getBrowserCommandLine): Command line not returned because --enable-automation not set.",
+      );
+    }),
+  ).toEqual({
+    arguments: null,
+    unavailableReason: "enable-automation-not-set",
+  });
+});
+
+test("other CDP failures do not become an unavailable command line", async () => {
+  await expect(
+    observeCDPCommandLine(async () => {
+      throw new Error("Session closed");
+    }),
+  ).rejects.toThrow("Session closed");
+});
+
+test("available CDP arguments retain boundaries and reject empty output", async () => {
+  const arguments_ = ["/tmp/browser", "--user-data-dir=/tmp/a b"];
+  expect(
+    await observeCDPCommandLine(async () => ({ arguments: arguments_ })),
+  ).toEqual({ arguments: arguments_, unavailableReason: null });
+  await expect(
+    observeCDPCommandLine(async () => ({ arguments: [] })),
+  ).rejects.toThrow("missing actual CDP browser command line");
+});
 
 test("browser PID is unambiguous and integral", () => {
   expect(

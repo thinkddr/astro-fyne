@@ -53,6 +53,34 @@ export function provenanceHash(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+export async function observeCDPCommandLine(
+  send: () => Promise<{ arguments: string[] }>,
+) {
+  let command;
+  try {
+    command = await send();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.endsWith(
+        "Command line not returned because --enable-automation not set.",
+      )
+    )
+      return {
+        arguments: null,
+        unavailableReason: "enable-automation-not-set" as const,
+      };
+    throw error;
+  }
+  if (
+    !Array.isArray(command.arguments) ||
+    !command.arguments.length ||
+    command.arguments.some((argument) => typeof argument !== "string")
+  )
+    fail("missing actual CDP browser command line");
+  return { arguments: command.arguments, unavailableReason: null };
+}
+
 async function executable(pid: number) {
   const path = `/proc/${pid}/exe`;
   const handle = await open(path, "r");
@@ -82,7 +110,9 @@ export async function collectBrowserProvenance(browser: Browser) {
   const session = await browser.newBrowserCDPSession();
   try {
     const version = await session.send("Browser.getVersion");
-    const command = await session.send("Browser.getBrowserCommandLine");
+    const command = await observeCDPCommandLine(() =>
+      session.send("Browser.getBrowserCommandLine"),
+    );
     const processes = await session.send("SystemInfo.getProcessInfo");
     const pid = browserPID(processes.processInfo);
     const kernelArguments = parseKernelArguments(
@@ -91,12 +121,6 @@ export async function collectBrowserProvenance(browser: Browser) {
     const binary = await executable(pid);
     if ((await realpath(kernelArguments[0]!)) !== binary.path)
       fail("kernel argv[0] and actual process executable differ");
-    if (
-      !Array.isArray(command.arguments) ||
-      !command.arguments.length ||
-      command.arguments.some((argument) => typeof argument !== "string")
-    )
-      fail("missing actual CDP browser command line");
     for (const field of [
       "protocolVersion",
       "product",
@@ -120,8 +144,12 @@ export async function collectBrowserProvenance(browser: Browser) {
       commandLine: {
         kernel: kernelArguments,
         cdp: command.arguments,
+        cdpUnavailableReason: command.unavailableReason,
         orderAndValuesEqual:
-          JSON.stringify(kernelArguments) === JSON.stringify(command.arguments),
+          command.arguments === null
+            ? null
+            : JSON.stringify(kernelArguments) ===
+              JSON.stringify(command.arguments),
       },
       fontPolicy: {
         observed: false,

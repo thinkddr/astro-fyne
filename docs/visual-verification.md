@@ -120,6 +120,10 @@ It checks the executable, arguments and identity again after both captures and
 binds its sidecar to their screenshot hashes and source/font identity. Each frame
 records the observation hash. This identifies the launched executable rather
 than assuming that Playwright's default executable path was used.
+The kernel argument array is required. If CDP refuses its command-line method
+because automation is disabled, the sidecar records that specific refusal and
+null CDP arguments. It keeps the existing launch options; other protocol errors
+remain fatal.
 
 The sidecar leaves effective font policy explicitly unobserved: renderer preferences,
 typeface/scaler backend, mask format, gamma, contrast and pixel geometry remain null.
