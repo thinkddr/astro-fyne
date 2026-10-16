@@ -56,9 +56,9 @@ type controlsNativeBuildRecord struct {
 	FontLicenseHash      string            `json:"fontLicenseHash"`
 	PolicyHash           string            `json:"policyHash"`
 	LibraryHash          string            `json:"libraryHash"`
-	ProductionGoModHash   string            `json:"productionGoModHash"`
-	ProductionGoSumHash   string            `json:"productionGoSumHash"`
-	Binary struct {
+	ProductionGoModHash  string            `json:"productionGoModHash"`
+	ProductionGoSumHash  string            `json:"productionGoSumHash"`
+	Binary               struct {
 		Name   string `json:"name"`
 		SHA256 string `json:"sha256"`
 	} `json:"binary"`
