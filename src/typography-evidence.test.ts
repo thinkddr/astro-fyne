@@ -4,6 +4,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
+  boundTypographyPixels,
   compareNativeShaping,
   comparePainterPackages,
   compareSidecarModules,
@@ -298,6 +299,120 @@ test("pixel deltas and exact frames preserve zero-tolerance acceptance", () => {
     expect(() => strictTypographyPixels(item, "pixels")).toThrow(
       "zero-tolerance",
     );
+});
+
+function boundPixels() {
+  const inputs = {
+    reference: { path: "scale-1/web.png", hash: "a".repeat(64) },
+    native: {
+      path: "fork-v2.8.1-sytue.16/scale-1/native.png",
+      hash: "b".repeat(64),
+    },
+  };
+  return {
+    expected: structuredClone(inputs),
+    result: {
+      changedPixels: 0,
+      exact: true,
+      accepted: true,
+      tolerance: { channel: 0, pixels: 0 },
+      inputs,
+    },
+  };
+}
+
+test("typography pixel results bind both PNG byte hashes and portable artifact paths", () => {
+  const { result, expected } = boundPixels();
+  expect(boundTypographyPixels(result, expected, "pixels").exact).toBe(true);
+  result.changedPixels = 3;
+  result.exact = result.accepted = false;
+  expect(boundTypographyPixels(result, expected, "pixels").accepted).toBe(
+    false,
+  );
+});
+
+test("missing PNG pair identities cannot claim a typography pixel result", () => {
+  const absent = boundPixels();
+  Reflect.deleteProperty(absent.result, "inputs");
+  expect(() =>
+    boundTypographyPixels(absent.result, absent.expected, "pixels"),
+  ).toThrow();
+  for (const role of ["reference", "native"] as const) {
+    const missingRole = boundPixels();
+    Reflect.deleteProperty(missingRole.result.inputs, role);
+    expect(() =>
+      boundTypographyPixels(missingRole.result, missingRole.expected, "pixels"),
+    ).toThrow("input roles");
+    for (const field of ["path", "hash"] as const) {
+      const missingField = boundPixels();
+      Reflect.deleteProperty(missingField.result.inputs[role], field);
+      expect(() =>
+        boundTypographyPixels(
+          missingField.result,
+          missingField.expected,
+          "pixels",
+        ),
+      ).toThrow("artifact-relative path and PNG SHA256");
+    }
+  }
+});
+
+test("replayed exact results from another PNG pair, scale or direction fail", () => {
+  for (const role of ["reference", "native"] as const) {
+    const stale = boundPixels();
+    stale.expected[role].hash = "c".repeat(64);
+    expect(() =>
+      boundTypographyPixels(stale.result, stale.expected, "pixels"),
+    ).toThrow(`${role} PNG binding`);
+    const otherScale = boundPixels();
+    otherScale.result.inputs[role].path = otherScale.result.inputs[
+      role
+    ].path.replace("scale-1", "scale-2");
+    expect(() =>
+      boundTypographyPixels(otherScale.result, otherScale.expected, "pixels"),
+    ).toThrow(`${role} PNG binding`);
+  }
+  const reversed = boundPixels();
+  [reversed.result.inputs.reference, reversed.result.inputs.native] = [
+    reversed.result.inputs.native,
+    reversed.result.inputs.reference,
+  ];
+  expect(() =>
+    boundTypographyPixels(reversed.result, reversed.expected, "pixels"),
+  ).toThrow("reference PNG binding");
+});
+
+test("PNG bindings reject malformed digests, ambiguous paths and unknown fields", () => {
+  for (const path of [
+    "/absolute/web.png",
+    "../web.png",
+    "./web.png",
+    "scale-1//web.png",
+    "scale-1\\web.png",
+  ]) {
+    const invalid = boundPixels();
+    invalid.result.inputs.reference.path = path;
+    expect(() =>
+      boundTypographyPixels(invalid.result, invalid.expected, "pixels"),
+    ).toThrow("artifact-relative path and PNG SHA256");
+  }
+  for (const hash of ["", "a".repeat(63), "A".repeat(64), "g".repeat(64)]) {
+    const invalid = boundPixels();
+    invalid.result.inputs.native.hash = hash;
+    expect(() =>
+      boundTypographyPixels(invalid.result, invalid.expected, "pixels"),
+    ).toThrow("artifact-relative path and PNG SHA256");
+  }
+  const extra = boundPixels();
+  Reflect.set(extra.result.inputs.native, "ignored", true);
+  expect(() =>
+    boundTypographyPixels(extra.result, extra.expected, "pixels"),
+  ).toThrow("artifact-relative path and PNG SHA256");
+  const tolerant = boundPixels();
+  tolerant.result.tolerance.channel = 1;
+  expect(() =>
+    boundTypographyPixels(tolerant.result, tolerant.expected, "pixels"),
+  ).toThrow("zero-tolerance");
 });
 
 function browserSample() {
