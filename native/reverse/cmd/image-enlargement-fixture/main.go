@@ -26,22 +26,29 @@ import (
 )
 
 type asset struct {
-	ID string `json:"id"`
-	Path string `json:"path"`
-	Src string `json:"src"`
-	Hash string `json:"hash"`
-	MediaType string `json:"mediaType"`
-	Width int `json:"width"`
-	Height int `json:"height"`
-	X int `json:"x"`
-	Y int `json:"y"`
-	RenderWidth int `json:"renderWidth"`
-	RenderHeight int `json:"renderHeight"`
+	ID           string `json:"id"`
+	Path         string `json:"path"`
+	Src          string `json:"src"`
+	Hash         string `json:"hash"`
+	MediaType    string `json:"mediaType"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	X            int    `json:"x"`
+	Y            int    `json:"y"`
+	RenderWidth  int    `json:"renderWidth"`
+	RenderHeight int    `json:"renderHeight"`
 }
 type corpus struct {
-	Schema int `json:"schema"`
-	Viewport struct { Width int `json:"width"`; Height int `json:"height"` } `json:"viewport"`
-	Cases []struct { Name string `json:"name"`; Entry string `json:"entry"`; Scale int `json:"scale"` } `json:"cases"`
+	Schema   int `json:"schema"`
+	Viewport struct {
+		Width  int `json:"width"`
+		Height int `json:"height"`
+	} `json:"viewport"`
+	Cases []struct {
+		Name  string `json:"name"`
+		Entry string `json:"entry"`
+		Scale int    `json:"scale"`
+	} `json:"cases"`
 	Assets []asset `json:"assets"`
 }
 
@@ -63,13 +70,19 @@ func run(root, out string, deviceScale int) error {
 		return fmt.Errorf("--out is required; --scale must be 1 or 2")
 	}
 	scenarioBytes, err := os.ReadFile(filepath.Join(root, "image-enlargement-scenario.json"))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	wrapperBytes, err := os.ReadFile(filepath.Join(root, "example/src/pages/image-enlargement.astro"))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	var scenario corpus
 	decoder := json.NewDecoder(bytes.NewReader(scenarioBytes))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&scenario); err != nil { return err }
+	if err := decoder.Decode(&scenario); err != nil {
+		return err
+	}
 	if scenario.Schema != 1 || scenario.Viewport.Width != 160 || scenario.Viewport.Height != 80 || len(scenario.Cases) != 2 || len(scenario.Assets) != 3 {
 		return fmt.Errorf("enlargement corpus must contain three images at both device scales")
 	}
@@ -91,11 +104,17 @@ func run(root, out string, deviceScale int) error {
 			return fmt.Errorf("unexpected %s image declaration", name)
 		}
 		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(item.Path)))
-		if err != nil { return err }
-		if hash(content) != item.Hash { return fmt.Errorf("%s original bitmap hash differs", name) }
+		if err != nil {
+			return err
+		}
+		if hash(content) != item.Hash {
+			return fmt.Errorf("%s original bitmap hash differs", name)
+		}
 		resource := fyne.NewStaticResource(item.Path, content)
 		size, err := webui.ValidateBitmap(resource)
-		if err != nil || size != fyne.NewSize(16, 16) { return fmt.Errorf("invalid %s original bitmap: %v", name, err) }
+		if err != nil || size != fyne.NewSize(16, 16) {
+			return fmt.Errorf("invalid %s original bitmap: %v", name, err)
+		}
 		bitmap := canvas.NewImageFromResource(resource)
 		bitmap.FillMode, bitmap.ScaleMode = canvas.ImageFillStretch, canvas.ImageScaleSmooth
 		bitmap.Move(fyne.NewPos(float32(item.X), float32(item.Y)))
@@ -112,26 +131,42 @@ func run(root, out string, deviceScale int) error {
 	c.Resize(fyne.NewSize(160, 80))
 	c.SetContent(rootObject)
 	frame := c.Capture()
-	if frame.Bounds() != image.Rect(0, 0, 160*deviceScale, 80*deviceScale) { return fmt.Errorf("unexpected physical canvas bounds: %v", frame.Bounds()) }
+	if frame.Bounds() != image.Rect(0, 0, 160*deviceScale, 80*deviceScale) {
+		return fmt.Errorf("unexpected physical canvas bounds: %v", frame.Bounds())
+	}
 	scene, err := reverse.Export(rootObject, reverse.Options{Viewport: reverse.Viewport{Width: 160, Height: 80, Scale: float32(deviceScale)}, Canvas: c, IDs: ids})
-	if err != nil { return err }
-	if len(scene.Resources) != 3 { return fmt.Errorf("export lost original bitmap resources") }
+	if err != nil {
+		return err
+	}
+	if len(scene.Resources) != 3 {
+		return fmt.Errorf("export lost original bitmap resources")
+	}
 	for i, resource := range scene.Resources {
 		if resource.Hash != scenario.Assets[i].Hash || resource.Width != 16 || resource.Height != 16 || hash(resource.Content) != resource.Hash {
 			return fmt.Errorf("export resampled or changed original bitmap bytes")
 		}
 	}
 	var pixels bytes.Buffer
-	if err := png.Encode(&pixels, frame); err != nil { return err }
+	if err := png.Encode(&pixels, frame); err != nil {
+		return err
+	}
 	sceneBytes, err := json.MarshalIndent(scene, "", "  ")
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	sceneBytes = append(sceneBytes, '\n')
 	metadata := map[string]any{"schema": 1, "case": fmt.Sprintf("scale-%d", deviceScale), "scenarioHash": hash(scenarioBytes), "wrapperHash": hash(wrapperBytes), "viewport": scene.Viewport, "screenshotHash": hash(pixels.Bytes()), "sceneFileHash": hash(sceneBytes), "resources": scenario.Assets, "visualVerified": false}
 	metadataBytes, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil { return err }
-	if err := os.MkdirAll(out, 0755); err != nil { return err }
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(out, 0755); err != nil {
+		return err
+	}
 	for name, data := range map[string][]byte{"scene.json": sceneBytes, "original-native.png": pixels.Bytes(), "original-native.json": append(metadataBytes, '\n')} {
-		if err := os.WriteFile(filepath.Join(out, name), data, 0644); err != nil { return err }
+		if err := os.WriteFile(filepath.Join(out, name), data, 0644); err != nil {
+			return err
+		}
 	}
 	return nil
 }
