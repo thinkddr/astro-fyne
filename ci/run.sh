@@ -21,7 +21,7 @@ bun src/cli.ts reverse --scene artifacts/reverse-controls/scene.json --out examp
 cp example/src/pages/reverse-controls/ReverseControls.* artifacts/reverse-controls/
 bun run typecheck
 bun test src
-bunx --no-install prettier --check README.md docs src capture example ci/program-roundtrip.ts ci/javascript-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json typography-probe.json image-enlargement.json image-enlargement-scenario.json ci/image-sampling/*.md ci/image-sampling/source-pin.json package.json tsconfig.json
+bunx --no-install prettier --check README.md docs src capture example ci/program-roundtrip.ts ci/javascript-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json typography-probe.json image-enlargement.json image-enlargement-scenario.json ci/image-sampling/*.md ci/image-sampling/source-pin.json ci/image-production-pin.json package.json tsconfig.json
 bun src/cli.ts generate --config astro-fyne.json
 bun src/cli.ts check --config astro-fyne.json
 bun src/cli.ts generate --config conformance.json
@@ -236,3 +236,9 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 cd ..
 git diff --exit-code HEAD -- native/generated ci/fyne-texttrace_test.go
 test -z "$(git ls-files --others --exclude-standard -- native/generated)"
+
+# The production enlargement gate owns its preview process and uses native/go.mod.
+kill "$task_preview_pid" 2>/dev/null || true
+wait "$task_preview_pid" 2>/dev/null || true
+trap - EXIT
+bash ci/image-enlargement.sh production

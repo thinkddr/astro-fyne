@@ -8,6 +8,8 @@ on:
       - .github/workflows/image-enlargement.yml
       - ci/image-enlargement*
       - ci/image-sampling/**
+      - ci/image-production-provenance.py
+      - ci/image-production-pin.json
       - capture/image-enlargement.ts
       - image-enlargement*.json
       - example/src/components/ImageEnlargementConformance.tsx
@@ -24,11 +26,19 @@ on:
   workflow_dispatch:
     inputs:
       variant:
-        description: Isolated renderer to exercise; baseline may fail strict pixel comparisons
+        description: Renderer to exercise; production requires the adopted release; historical baseline may fail
         type: choice
         default: all
         options:
-          [all, baseline, bilinear, skia-lowp, skia-legacy, native-legacy]
+          [
+            all,
+            baseline,
+            bilinear,
+            skia-lowp,
+            skia-legacy,
+            native-legacy,
+            production,
+          ]
 permissions:
   contents: read
 concurrency:
@@ -71,6 +81,8 @@ jobs:
             artifacts/image-enlargement
             artifacts/formatted
             ci/image-enlargement.sh
+            ci/image-production-provenance.py
+            ci/image-production-pin.json
             ci/image-enlargement-source_test.go
             ci/image-enlargement-roundtrip_test.go
             ci/image-sampling
@@ -113,5 +125,7 @@ jobs:
           path: |
             artifacts/image-enlargement/native-legacy
             ci/image-enlargement.sh
+            ci/image-production-provenance.py
+            ci/image-production-pin.json
             ci/image-sampling
           if-no-files-found: warn

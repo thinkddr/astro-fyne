@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "logicalModule": {
+    "path": "fyne.io/fyne/v2",
+    "version": "v2.8.1"
+  },
+  "replacement": {
+    "path": "github.com/thinkddr/fyne/v2",
+    "version": "v2.8.1-sytue.18",
+    "sum": "h1:k780PnLSsuzwqvrl6ehDzq0UXThixmAD+kHH1uxvoWQ=",
+    "goModSum": "h1:kpeuFrClm0fiAgJYr2soTfwKMT5rzNcSKzmgGjxvHOY="
+  },
+  "softwareSourceFiles": {
+    "draw.go": "c03707cd8e9d66c95cd7d35ad5ee594bac6dd774c34b6444325241402465a6ed",
+    "skia_legacy_enlargement.go": "569d76d50e31f6317a1f05b7517d272614013cb25931ba05e3372b2d116835fc"
+  },
+  "licenses": {
+    "LICENSE": "68a1eafb90581708e62e1d269e7f6e92e6b0b5cdae93f45ede832d42912c7014",
+    "LICENSE-Fyne.txt": "68a1eafb90581708e62e1d269e7f6e92e6b0b5cdae93f45ede832d42912c7014",
+    "LICENSE-Skia.txt": "5f787c1dee3c56547f09ccc2906ab5f5293c4d8dd6c8654e573216c38e908dbd"
+  }
+}
