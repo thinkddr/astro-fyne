@@ -64,6 +64,7 @@ const scenario = astro
         ...tap("js-increment", "js-a-increment", "js-optional-increment"),
         { id: "js-insert-input", value: "edited" },
         { id: "js-hierarchy-input", value: "edited" },
+        { id: "js-ancestor-input", value: "edited" },
       ],
       suffix: [
         ...tap(
@@ -112,6 +113,15 @@ const scenario = astro
           "js-hierarchy-text-reference",
           "js-hierarchy-valid-text",
         ),
+        ...tap(
+          "js-ancestor-reference",
+          "js-ancestor-self-append",
+          "js-ancestor-append",
+          "js-ancestor-cross",
+          "js-ancestor-reorder",
+          "js-ancestor-back",
+          "js-ancestor-valid-self",
+        ),
       ],
       follow: [
         ...tap(
@@ -134,6 +144,7 @@ const scenario = astro
         ),
         { id: "js-insert-input", value: "continued" },
         { id: "js-hierarchy-input", value: "continued" },
+        { id: "js-ancestor-input", value: "continued" },
         ...tap(
           "js-insert-invalid",
           "js-insert-move",
@@ -144,6 +155,15 @@ const scenario = astro
           "js-hierarchy-text-append",
           "js-hierarchy-text-reference",
           "js-hierarchy-valid-text",
+        ),
+        ...tap(
+          "js-ancestor-reference",
+          "js-ancestor-self-append",
+          "js-ancestor-append",
+          "js-ancestor-cross",
+          "js-ancestor-reorder",
+          "js-ancestor-back",
+          "js-ancestor-valid-self",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -656,6 +676,210 @@ function assertHierarchyTimeline(
   }
   assert.equal(operations, 3, `Missing hierarchy operations: ${label}`);
 }
+type AncestorLocation = "inner" | "right-first" | "right-last";
+type AncestorState = {
+  value: string;
+  location: AncestorLocation;
+  result: "ready" | Record<string, unknown>;
+};
+const ancestorTree = (location: AncestorLocation) => ({
+  parent: location === "inner" ? "js-ancestor-inner" : "js-ancestor-right",
+  mount: ["js-ancestor-outer", "js-ancestor-right"],
+  outer: ["js-ancestor-inner"],
+  inner:
+    location === "inner"
+      ? ["js-ancestor-input", "js-ancestor-left-anchor"]
+      : ["js-ancestor-left-anchor"],
+  right:
+    location === "inner"
+      ? ["js-ancestor-right-anchor"]
+      : location === "right-first"
+        ? ["js-ancestor-input", "js-ancestor-right-anchor"]
+        : ["js-ancestor-right-anchor", "js-ancestor-input"],
+});
+const ancestorOutcomes: Record<
+  string,
+  {
+    operation: string;
+    error: string;
+    returned: boolean;
+    location?: AncestorLocation;
+  }
+> = {
+  "js-ancestor-reference": {
+    operation: "ancestor-reference",
+    error: "HierarchyRequestError",
+    returned: false,
+  },
+  "js-ancestor-self-append": {
+    operation: "self-append",
+    error: "HierarchyRequestError",
+    returned: false,
+  },
+  "js-ancestor-append": {
+    operation: "ancestor-append",
+    error: "HierarchyRequestError",
+    returned: false,
+  },
+  "js-ancestor-cross": {
+    operation: "cross-parent",
+    error: "none",
+    returned: true,
+    location: "right-first",
+  },
+  "js-ancestor-reorder": {
+    operation: "same-parent",
+    error: "none",
+    returned: true,
+    location: "right-last",
+  },
+  "js-ancestor-back": {
+    operation: "move-back",
+    error: "none",
+    returned: true,
+    location: "inner",
+  },
+  "js-ancestor-valid-self": {
+    operation: "valid-self",
+    error: "none",
+    returned: true,
+  },
+};
+function ancestorStep(
+  state: AncestorState,
+  step: { id: string; value?: string },
+): AncestorState {
+  if (step.id === "js-ancestor-input") {
+    assert.ok(typeof step.value === "string", "Ancestor edit needs a value");
+    return { ...state, value: step.value };
+  }
+  const outcome = ancestorOutcomes[step.id];
+  if (!outcome) return state;
+  const { location: next, ...result } = outcome;
+  const location = next ?? state.location;
+  return {
+    value: state.value,
+    location,
+    result: {
+      ...result,
+      same: true,
+      outerAttached: true,
+      innerAttached: true,
+      ...ancestorTree(location),
+      value: state.value,
+      defaultValue: "initial",
+      rawValue: "initial",
+    },
+  };
+}
+const ancestorStart = (): AncestorState => ({
+  value: "edited",
+  location: "inner",
+  result: "ready",
+});
+const ancestorFollowStart = () =>
+  ancestorStep(ancestorStart(), { id: "js-ancestor-valid-self" });
+function assertAncestorValues(
+  values: Record<string, string>,
+  state: AncestorState,
+  label: string,
+) {
+  assert.equal(
+    values["js-ancestor-input"],
+    state.value,
+    `Ancestor input value differs: ${label}`,
+  );
+  const result = values["js-ancestor-result"];
+  assert.ok(typeof result === "string", `Missing ancestor result: ${label}`);
+  assert.deepEqual(
+    state.result === "ready" ? result : JSON.parse(result),
+    state.result,
+    `Ancestor outcome differs: ${label}`,
+  );
+}
+function assertAncestorTimeline(
+  frames: JavascriptFrame[][],
+  steps: { id: string; value?: string }[],
+  state: AncestorState,
+  label: string,
+) {
+  assert.equal(
+    frames.length,
+    steps.length + 1,
+    `Missing ancestor frames: ${label}`,
+  );
+  let uid: string | undefined;
+  let operations = 0;
+  for (const [index, roots] of frames.entries()) {
+    if (index) {
+      const step = steps[index - 1]!;
+      state = ancestorStep(state, step);
+      if (ancestorOutcomes[step.id]) operations++;
+    }
+    const nodes = new Map<
+      string,
+      { frame: JavascriptFrame; parent?: string }
+    >();
+    const visit = (children: JavascriptFrame[], parent?: string) => {
+      for (const frame of children) {
+        const id = frame.attrs?.id;
+        if (id?.startsWith("js-ancestor-")) {
+          assert.equal(
+            nodes.has(id),
+            false,
+            `Duplicate ancestor node ${id}: ${label}`,
+          );
+          nodes.set(id, { frame, parent });
+        }
+        visit(frame.children ?? [], id);
+      }
+    };
+    visit(roots);
+    const input = nodes.get("js-ancestor-input");
+    assert.ok(input, `Missing ancestor input: ${label}, frame ${index}`);
+    assert.ok(input.frame.uid, `Missing ancestor UID: ${label}`);
+    uid ??= input.frame.uid;
+    assert.equal(input.frame.uid, uid, `Ancestor changed input UID: ${label}`);
+    assert.equal(
+      input.parent,
+      ancestorTree(state.location).parent,
+      `Ancestor input parent differs: ${label}`,
+    );
+    assert.equal(
+      input.frame.attrs?.value,
+      "initial",
+      `Ancestor default value differs: ${label}`,
+    );
+    for (const [id, parent] of [
+      ["js-ancestor-outer", "js-ancestor-host"],
+      ["js-ancestor-inner", "js-ancestor-outer"],
+      ["js-ancestor-right", "js-ancestor-host"],
+    ] as const) {
+      assert.equal(
+        nodes.get(id)?.parent,
+        parent,
+        `Ancestor relationship ${id} differs: ${label}`,
+      );
+    }
+    const tree = ancestorTree(state.location);
+    for (const [id, order] of [
+      ["js-ancestor-host", tree.mount],
+      ["js-ancestor-outer", tree.outer],
+      ["js-ancestor-inner", tree.inner],
+      ["js-ancestor-right", tree.right],
+    ] as const) {
+      const node = nodes.get(id);
+      assert.ok(node, `Missing ancestor parent ${id}: ${label}`);
+      assert.deepEqual(
+        (node.frame.children ?? []).map((child) => child.attrs?.id),
+        order,
+        `Ancestor tree ${id} differs: ${label}, frame ${index}`,
+      );
+    }
+    assertAncestorValues(frameValues(roots), state, `${label}, frame ${index}`);
+  }
+  assert.equal(operations, 7, `Missing ancestor operations: ${label}`);
+}
 const attributeFields = {
   input: [
     "tag",
@@ -930,6 +1154,17 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
 }
 if (!astro) {
   assert.equal(
+    nativeResult.ancestorIdentityChecked,
+    true,
+    "Native ancestor pointer checks did not run",
+  );
+  assertAncestorTimeline(
+    nativeResult.frames,
+    scenario.suffix,
+    ancestorStart(),
+    "native suffix",
+  );
+  assert.equal(
     nativeResult.hierarchyIdentityChecked,
     true,
     "Native hierarchy pointer checks did not run",
@@ -1099,6 +1334,70 @@ try {
     ? null
     : await page.locator('[id="js-hierarchy-input"]').elementHandle();
   let browserHierarchyState = hierarchyStart();
+  let ancestorElement = astro
+    ? null
+    : await page.locator('[id="js-ancestor-input"]').elementHandle();
+  let browserAncestorState = ancestorStart();
+  const assertBrowserAncestor = async (label: string) => {
+    if (astro) return;
+    assert.ok(ancestorElement, `Missing browser ancestor input: ${label}`);
+    const actual = await ancestorElement.evaluate((element) => {
+      if (!(element instanceof HTMLInputElement))
+        throw new Error("Ancestor target is not an input");
+      const node = (id: string) => {
+        const found = document.getElementById(id);
+        if (!found) throw new Error(`Missing ancestor node ${id}`);
+        return found;
+      };
+      const order = (id: string) =>
+        Array.from(node(id).childNodes).map((child) => {
+          if (!(child instanceof HTMLElement))
+            throw new Error("Unexpected ancestor child");
+          return child.id;
+        });
+      return {
+        same: document.getElementById("js-ancestor-input") === element,
+        count: document.querySelectorAll('[id="js-ancestor-input"]').length,
+        outerAttached:
+          node("js-ancestor-outer").parentNode === node("js-ancestor-host"),
+        innerAttached:
+          node("js-ancestor-inner").parentNode === node("js-ancestor-outer"),
+        parent: element.parentElement?.id ?? null,
+        value: element.value,
+        defaultValue: element.defaultValue,
+        rawValue: element.getAttribute("value"),
+        mount: order("js-ancestor-host"),
+        outer: order("js-ancestor-outer"),
+        inner: order("js-ancestor-inner"),
+        right: order("js-ancestor-right"),
+        result: node("js-ancestor-result").textContent,
+      };
+    });
+    const { result, ...control } = actual;
+    assert.deepEqual(
+      control,
+      {
+        same: true,
+        count: 1,
+        outerAttached: true,
+        innerAttached: true,
+        ...ancestorTree(browserAncestorState.location),
+        value: browserAncestorState.value,
+        defaultValue: "initial",
+        rawValue: "initial",
+      },
+      `Browser ancestor identity/tree/value differs: ${label}`,
+    );
+    assert.ok(
+      typeof result === "string",
+      `Missing browser ancestor result: ${label}`,
+    );
+    assertAncestorValues(
+      { "js-ancestor-input": actual.value, "js-ancestor-result": result },
+      browserAncestorState,
+      label,
+    );
+  };
   const assertBrowserHierarchy = async (label: string) => {
     if (astro) return;
     assert.ok(hierarchyElement, `Missing browser hierarchy input: ${label}`);
@@ -1247,6 +1546,7 @@ try {
   };
   await assertBrowserInsertion("restored browser initial");
   await assertBrowserHierarchy("restored browser initial");
+  await assertBrowserAncestor("restored browser initial");
   await assertBrowserInputReflection("restored browser initial");
   assert.deepEqual(
     await page.evaluate(() => window.afyJavascript.calls()),
@@ -1278,9 +1578,11 @@ try {
     if (!astro) {
       browserInsertionState = insertionStep(browserInsertionState, step);
       browserHierarchyState = hierarchyStep(browserHierarchyState, step);
+      browserAncestorState = ancestorStep(browserAncestorState, step);
       if (step.id === "js-attrs-step") browserAttributePhase++;
       await assertBrowserInsertion(`after ${step.id}`);
       await assertBrowserHierarchy(`after ${step.id}`);
+      await assertBrowserAncestor(`after ${step.id}`);
       await assertBrowserInputReflection(`after ${step.id}`);
     }
   };
@@ -1298,6 +1600,13 @@ try {
       frames,
       scenario.suffix,
       insertionStart(),
+      "restored browser suffix",
+    );
+  if (!astro)
+    assertAncestorTimeline(
+      frames,
+      scenario.suffix,
+      ancestorStart(),
       "restored browser suffix",
     );
   if (!astro)
@@ -1337,6 +1646,12 @@ try {
   }
   const followCalls = await page.evaluate(() => window.afyJavascript.calls());
   if (!astro) {
+    assertAncestorTimeline(
+      follow,
+      scenario.follow,
+      ancestorFollowStart(),
+      "restored browser follow",
+    );
     assertHierarchyTimeline(
       follow,
       scenario.follow,
@@ -1389,10 +1704,20 @@ try {
       textFirst: false,
       result: "ready",
     };
+    await ancestorElement?.dispose();
+    ancestorElement = await page
+      .locator('[id="js-ancestor-input"]')
+      .elementHandle();
+    browserAncestorState = {
+      value: "initial",
+      location: "inner",
+      result: "ready",
+    };
     browserAttributePhase = 0;
     browserStage = "original";
     await assertBrowserInsertion("original browser initial");
     await assertBrowserHierarchy("original browser initial");
+    await assertBrowserAncestor("original browser initial");
     await assertBrowserInputReflection("original browser initial");
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
@@ -1435,6 +1760,11 @@ try {
       assertHierarchyValues(
         values as Record<string, string>,
         browserHierarchyState,
+        `original suffix, frame ${i}`,
+      );
+      assertAncestorValues(
+        values as Record<string, string>,
+        browserAncestorState,
         `original suffix, frame ${i}`,
       );
       assert.deepEqual(
@@ -1568,6 +1898,11 @@ try {
         browserHierarchyState,
         `original follow, frame ${i}`,
       );
+      assertAncestorValues(
+        values as Record<string, string>,
+        browserAncestorState,
+        `original follow, frame ${i}`,
+      );
       const followFrame = follow[i];
       assert.ok(followFrame, `Missing restored browser follow frame ${i}`);
       assert.deepEqual(
@@ -1639,6 +1974,17 @@ const webResult = JSON.parse(
   await readFile(join(evidence, "browser.json"), "utf8"),
 );
 if (!astro) {
+  assert.equal(
+    restored.ancestorIdentityChecked,
+    true,
+    "Restored native ancestor pointer checks did not run",
+  );
+  assertAncestorTimeline(
+    restored.frames,
+    scenario.follow,
+    ancestorFollowStart(),
+    "restored native follow",
+  );
   assert.equal(
     restored.hierarchyIdentityChecked,
     true,
@@ -1713,6 +2059,12 @@ await writeFile(
             hierarchy: {
               suffixOperations: 3,
               followOperations: 3,
+              nativePointerIdentityChecked: true,
+              browserElementIdentityChecked: true,
+            },
+            ancestors: {
+              suffixOperations: 7,
+              followOperations: 7,
               nativePointerIdentityChecked: true,
               browserElementIdentityChecked: true,
             },
