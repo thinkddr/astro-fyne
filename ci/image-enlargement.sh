@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 task_root="$(pwd)"
 task_variant="${1:-baseline}"
-case "$task_variant" in baseline|bilinear|skia-lowp|skia-legacy|native-legacy) ;; *) echo 'Variant must be baseline, bilinear, skia-lowp, skia-legacy or native-legacy' >&2; exit 2 ;; esac
+case "$task_variant" in baseline|bilinear|skia-lowp|skia-legacy|native-legacy|production) ;; *) echo 'Variant must be baseline, bilinear, skia-lowp, skia-legacy, native-legacy or production' >&2; exit 2 ;; esac
 task_regressions_only="${ASTRO_FYNE_IMAGE_REGRESSIONS_ONLY:-0}"
 case "$task_regressions_only" in 0|1) ;; *) echo 'ASTRO_FYNE_IMAGE_REGRESSIONS_ONLY must be 0 or 1' >&2; exit 2 ;; esac
 if [[ "$task_regressions_only" == 1 && "$task_variant" != native-legacy ]]; then
@@ -18,6 +18,7 @@ task_modfile="$task_temporary/native.mod"
 task_preview_pid=''
 task_status=0
 mkdir -p "$task_evidence"
+if [[ "$task_variant" == production ]]; then rm -f "$task_evidence/summary.json"; fi
 stop_preview() {
   if [[ -n "$task_preview_pid" ]]; then
     kill "$task_preview_pid" 2>/dev/null || true
@@ -25,7 +26,25 @@ stop_preview() {
     task_preview_pid=''
   fi
 }
-cleanup() { stop_preview; rm -rf "$task_temporary"; }
+cleanup() {
+  local task_exit=$?
+  stop_preview
+  if [[ "$task_variant" == production && -f "$task_evidence/production-modules.sha256" ]]; then
+    if ! sha256sum -c "$task_evidence/production-modules.sha256" > "$task_evidence/production-modules-final-check.log" 2>&1; then
+      task_exit=1
+      python3 - "$task_evidence/summary.json" <<'PY_SUMMARY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+if path.is_file():
+    value = json.loads(path.read_text())
+    value.update(accepted=False, productionDependencyChanged=True)
+    path.write_text(json.dumps(value, indent=2) + "\n")
+PY_SUMMARY
+    fi
+  fi
+  rm -rf "$task_temporary"
+  exit "$task_exit"
+}
 trap cleanup EXIT
 task_phases="$task_evidence/phases.jsonl"
 : > "$task_phases"
@@ -61,7 +80,31 @@ go env -json GOOS GOARCH GOVERSION GOPROXY GOSUMDB > "$task_evidence/go-environm
 uname -a > "$task_evidence/host.txt"
 bun --version > "$task_evidence/bun-version.txt"
 git rev-parse HEAD > "$task_evidence/converter-revision.txt"
+if [[ "$task_variant" == production ]]; then
+  production_committed_modules() {
+    git ls-files --error-unmatch native/go.mod native/go.sum &&
+      git diff --exit-code HEAD -- native/go.mod native/go.sum
+  }
+  run_phase production-committed-modules production_committed_modules
+fi
 sha256sum native/go.mod native/go.sum > "$task_evidence/production-modules.sha256"
+if [[ "$task_variant" == production ]]; then
+  export GOWORK=off
+  export GOFLAGS=-mod=readonly
+  export GOMAXPROCS=2
+  export ASTRO_FYNE_IMAGE_ENLARGEMENT_ARTIFACTS="$task_evidence"
+  production_provenance() {
+    local task_stage="$1" task_suffix=''
+    if [[ "$task_stage" == final ]]; then task_suffix='-final'; fi
+    (cd native && go list -deps -json fyne.io/fyne/v2/internal/painter/software) > "$task_evidence/native-painter-packages$task_suffix.jsonl" || return
+    (cd native && go list -m -json all) > "$task_evidence/native-modules$task_suffix.jsonl" || return
+    (cd native && go env -json GOFLAGS GOWORK GOMOD GOMODCACHE GOPROXY GOSUMDB) > "$task_evidence/production-go-environment$task_suffix.json" || return
+    python3 ci/image-production-provenance.py --root "$task_root" --evidence "$task_evidence" --pin ci/image-production-pin.json --phase "$task_stage"
+  }
+  production_module_verify() { (cd native && go mod verify); }
+  run_phase production-provenance-initial production_provenance initial
+  run_phase production-module-verify production_module_verify
+else
 cp native/go.mod "$task_modfile"
 cp native/go.sum "$task_temporary/native.sum"
 export GOFLAGS="-modfile=$task_modfile -mod=mod"
@@ -215,6 +258,8 @@ PY
   exit "$task_status"
 fi
 
+fi
+
 bun install --frozen-lockfile --ignore-scripts
 bunx --no-install playwright install --with-deps chromium
 bun src/cli.ts generate --config image-enlargement.json
@@ -264,12 +309,17 @@ fi
 stop_preview
 cp -R native/.image-enlargement-source "$task_evidence/generated-source"
 cp -R native/.image-enlargement-roundtrip "$task_evidence/generated-scene"
+if [[ "$task_variant" == production ]]; then
+  cp native/go.mod "$task_evidence/native.mod"
+  cp native/go.sum "$task_evidence/native.sum"
+else
 cp "$task_modfile" "$task_evidence/native.mod"
 cp "$task_temporary/native.sum" "$task_evidence/native.sum"
 cp "$task_temporary/probe.mod" "$task_evidence/probe.mod"
 cp "$task_temporary/probe.sum" "$task_evidence/probe.sum"
 (cd native && go list -m -json all) > "$task_evidence/native-modules-final.jsonl"
 (cd "$task_fork" && env "GOFLAGS=-modfile=$task_temporary/probe.mod -mod=mod" go list -m -json all) > "$task_evidence/probe-modules.jsonl"
+fi
 (cd native && go build -p=1 -o "$task_temporary/compare" ./visual/cmd/astro-fyne-compare)
 task_comparisons="$task_evidence/comparisons.jsonl"
 : > "$task_comparisons"
@@ -306,7 +356,24 @@ for task_scale in 1 2; do
   compare_frame native-inverse "$task_scale" "$task_directory/original-native.png" "$task_directory/inverse-web.png"
   compare_frame native-reconstruction "$task_scale" "$task_directory/original-native.png" "$task_directory/scene-native.png"
 done
+if [[ "$task_variant" == production ]]; then
+  run_phase production-module-verify-final production_module_verify || task_status=1
+  run_phase production-provenance-final production_provenance final || task_status=1
+fi
 task_modules_unchanged=true
 if ! sha256sum -c "$task_evidence/production-modules.sha256"; then task_status=1; task_modules_unchanged=false; fi
-bun -e 'const [root,variant,status,unchanged]=process.argv.slice(1);const comparisons=(await Bun.file(root+"/comparisons.jsonl").text()).trim().split("\n").filter(Boolean).map(JSON.parse);const phases=(await Bun.file(root+"/phases.jsonl").text()).trim().split("\n").filter(Boolean).map(JSON.parse);const complete=comparisons.length===6&&comparisons.every(item=>item.valid===true);const accepted=complete&&Number(status)===0&&unchanged==="true"&&comparisons.every(item=>item.accepted===true)&&phases.every(item=>item.exitCode===0);await Bun.write(root+"/summary.json",JSON.stringify({schema:1,experimental:true,variant,baseline:variant==="baseline",complete,accepted,productionDependencyChanged:unchanged!=="true",tolerance:{channel:0,pixels:0},comparisons,phases},null,2)+"\n");if(!accepted)process.exitCode=1;' "$task_evidence" "$task_variant" "$task_status" "$task_modules_unchanged" || task_status=1
+bun -e '
+  const [root,variant,status,unchanged]=process.argv.slice(1);
+  const comparisons=(await Bun.file(root+"/comparisons.jsonl").text()).trim().split("\n").filter(Boolean).map(JSON.parse);
+  const phases=(await Bun.file(root+"/phases.jsonl").text()).trim().split("\n").filter(Boolean).map(JSON.parse);
+  const production=variant==="production";
+  const expected=new Set([1,2].flatMap(scale=>["source-native","native-inverse","native-reconstruction"].map(name=>`${name}:${scale}`)));
+  const keys=comparisons.map(item=>`${item.name}:${item.scale}`);
+  const complete=comparisons.length===6&&new Set(keys).size===6&&keys.every(key=>expected.has(key))&&comparisons.every(item=>item.valid===true&&item.tolerance?.channel===0&&item.tolerance?.pixels===0);
+  const provenance=production?await Bun.file(root+"/production-provenance-final.json").json():null;
+  const productionReady=!production||(["production-committed-modules","production-provenance-initial","production-module-verify","production-module-verify-final","production-provenance-final"].every(name=>phases.filter(item=>item.name===name&&item.exitCode===0).length===1)&&provenance?.mode==="production"&&provenance?.phase==="final"&&provenance?.usesAdoptedDependency===true&&provenance?.temporaryFyneReplacement===false);
+  const accepted=complete&&productionReady&&Number(status)===0&&unchanged==="true"&&comparisons.every(item=>item.accepted===true)&&phases.every(item=>item.exitCode===0);
+  await Bun.write(root+"/summary.json",JSON.stringify({schema:1,experimental:!production,variant,baseline:variant==="baseline",complete,accepted,productionDependencyChanged:unchanged!=="true",tolerance:{channel:0,pixels:0},comparisons,phases,...(production?{mode:"production",usesAdoptedDependency:true,temporaryFyneReplacement:false,scope:{renderer:"Fyne software",viewport:{width:160,height:80},scales:[1,2],sourceImageSize:{width:16,height:16},renderImageSize:{width:32,height:32},imageCount:3,background:"opaque white"},provenance:"production-provenance-final.json"}:{})},null,2)+"\n");
+  if(!accepted)process.exitCode=1;
+' "$task_evidence" "$task_variant" "$task_status" "$task_modules_unchanged" || task_status=1
 exit "$task_status"

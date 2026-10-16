@@ -1,10 +1,66 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Image enlargement experiment
+# Image enlargement verification
 
-This hosted experiment compares the current Fyne painter with isolated
-enlargement candidates. It does not change the production Fyne dependency,
-publish a fork tag or establish general browser/native pixel parity.
+The production gate tests the converter's published Fyne dependency against the
+original browser source, its inverse Astro output and native scene reconstruction.
+Historical variants retain the isolated experiments that led to the bounded
+software sampler. Each result applies to the recorded corpus and renderer.
+
+## Test the published dependency
+
+From a clean remote checkout, run:
+
+```sh
+bash ci/image-enlargement.sh production
+```
+
+Ordinary conformance CI also requires this gate. It selects the versioned public
+replacement in `native/go.mod`: `github.com/thinkddr/fyne/v2@v2.8.1-sytue.18`.
+The desktop demo pins the same release in its own module. Host applications must
+declare their own replacement, as described in the [README](../README.md#use-widgets-themes-and-fonts).
+
+Production mode uses `GOWORK=off` and `GOFLAGS=-mod=readonly`. It resolves the
+actual native painter without patching its source or substituting another module
+file. `ci/image-production-pin.json` binds the public release checksums, draw
+routing, sampler helper and Fyne/Skia license notices. The gate computes Go's
+`dirhash.Hash1` checksum of the selected extracted module tree and requires its
+published `h1:` value; a raw ZIP checksum is a different calculation.
+
+Evidence under `artifacts/image-enlargement/production` includes the initial and
+final module graphs, painter package paths, source hashes and notices, module
+verification logs, generated code, original resources, screenshots and diffs.
+Production module files must match their committed versions before the gate and
+remain unchanged throughout it. All six complete-frame comparisons below must
+pass with zero channel tolerance and zero changed pixels. Other image profiles,
+typography and GPU output require their own evidence.
+
+## Published release evidence
+
+[Run 38904638634](https://github.com/thinkddr/astro-fyne/actions/runs/38904638634)
+tested converter commit `630a55c6c1d6b9904f3717f5bddef15d48ba1615` with the
+published `v2.8.1-sytue.18` replacement. All six production comparisons passed
+with zero changed pixels and zero channel tolerance. All five production
+integrity phases passed, and the initial and final selected module identities,
+source files, notices and converter lockfiles matched. The actual extracted
+Fyne tree contained 2,174 files and matched its public Go module checksum:
+
+```text
+h1:k780PnLSsuzwqvrl6ehDzq0UXThixmAD+kHH1uxvoWQ=
+```
+
+The public fork release is
+[`29716602d05a12a7ee8a0453f4de1c1f089f7293`](https://github.com/thinkddr/fyne/commit/29716602d05a12a7ee8a0453f4de1c1f089f7293).
+It retains the bounded sampler introduced in `.17` and fixes a cache expiry
+race reproduced by a new concurrent regression test. The fork's fresh main and
+tag platform, static analysis, mobile, web and complete race workflows passed
+before the converter adopted `.18`. The `.17` release and its earlier failure
+evidence remain unchanged.
+
+The separate [selected-package run](https://github.com/thinkddr/astro-fyne/actions/runs/38904646003)
+also passed both complete dependency graphs and the historical bounded variant.
+Those isolated checks complement the production gate; production mode uses
+the converter's public dependency directly.
 
 ## Corpus
 
@@ -63,7 +119,7 @@ Evidence lives under `artifacts/image-enlargement/<variant>`, including each
 Artifacts upload even when strict comparisons fail. A baseline mismatch remains
 a failed job; it is not converted into an expected-success result.
 
-The variants use isolated temporary Fyne source and a separate Go module file:
+The historical variants use isolated temporary Fyne source and a separate Go module file:
 
 - `baseline` retains the published `.16` software painter.
 - `bilinear` changes Smooth image enlargement to the Go bilinear kernel while
@@ -148,7 +204,7 @@ reconstruction, each at DPR 1 and 2. Candidate unit tests, native race tests and
 source/resource/provenance checks also passed.
 
 This validates the retained software-renderer profile, including odd RGB and
-alpha. The production dependency remains unchanged; the result applies to the
+alpha. At that checkpoint, the production dependency remained unchanged; the result applies to the
 isolated patched renderer. The candidate still uses the broader bilinear fallback
 outside its bounded helper, so this result does not validate that fallback or
 universal conversion. The original failing variants remain available.
@@ -213,6 +269,6 @@ images were produced.
 Review any future changed fixture individually against its real source, physical
 size and sampling route. An unexpected change outside the new route is a
 regression to diagnose, not a reason to refresh a whole directory. These results
-validate the retained software-renderer corpus and selected packages. They do
-not publish a fork tag, change the production dependency or establish broader
-pixel parity.
+validate the retained experimental software-renderer corpus and selected packages.
+The separate production gate verifies the published release; these earlier
+results do not establish broader pixel parity.

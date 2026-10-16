@@ -13,7 +13,7 @@ errors. Universal 1:1 conversion is the project goal, not a capability of this r
 
 [Compatibility](COMPATIBILITY.md) · [Native integration](docs/native-runtime.md) ·
 [Reverse conversion](docs/reverse-conversion.md) · [Visual verification](docs/visual-verification.md) ·
-[Image enlargement experiment](docs/image-enlargement.md)
+[Image enlargement verification](docs/image-enlargement.md)
 
 The source compiler lowers supported logic into Go with native state and widgets.
 Nullable property/index chains such as `profile?.details.name ?? "Guest"` retain
@@ -125,12 +125,13 @@ and refuses to overwrite files it does not own.
 ## Use widgets, themes and fonts
 
 The runtime and desktop demo pin the public [Sytue Fyne fork](https://github.com/thinkddr/fyne)
-at `v2.8.1-sytue.16`, including its pixel-position rounding and Entry scroll fixes.
+at `v2.8.1-sytue.18`, including its pixel-position rounding, Entry scroll fixes,
+bounded software image sampler and synchronized cache expiry.
 Imports remain `fyne.io/fyne/v2`. Go replacements do not propagate to a host module;
 apply the same replacement in your application's `go.mod`:
 
 ```sh
-go mod edit -replace=fyne.io/fyne/v2=github.com/thinkddr/fyne/v2@v2.8.1-sytue.16
+go mod edit -replace=fyne.io/fyne/v2=github.com/thinkddr/fyne/v2@v2.8.1-sytue.18
 go mod tidy
 ```
 
@@ -250,9 +251,10 @@ for a single measured entry, `--measurements PATH`. Reverse output is checked wi
 | Still unsupported    | Arbitrary JS/Go, full CSS cascade, grid, wrapping/intrinsic layout, animations and browser APIs      |
 
 CI compares browser and native captures and retains the generated code, traces, scene files
-and pixel diffs. The current corpus includes **38 exact visual comparisons** with zero RGBA
-differences, plus **12 exact native scene reconstruction frames**, control behavior and
-geometry checks. **All 22 responsive typography frames
+and pixel diffs. The current suite requires **44 exact full-frame visual comparisons**
+with zero RGBA differences, including six comparisons of the published image sampler.
+It also checks native scene reconstruction, control behavior and geometry.
+**All 22 responsive typography frames
 still differ at zero tolerance.** Passing a profile certifies that profile only.
 
 A separate [typography comparison](docs/visual-verification.md#isolate-native-text-differences)

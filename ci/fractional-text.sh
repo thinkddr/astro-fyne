@@ -108,7 +108,9 @@ task_modfile="$task_temporary/native.mod"
 cp go.mod "$task_modfile"
 cp go.sum "$task_temporary/native.sum"
 GOMAXPROCS=2 go build -p=1 -o "$task_temporary/compare" ./visual/cmd/astro-fyne-compare
-ASTRO_FYNE_TYPOGRAPHY_ARTIFACTS="$task_evidence/original-native" ASTRO_FYNE_TEXT_VARIANT=fork-v2.8.1-sytue.16 ASTRO_FYNE_TEXT_ORIGIN=nearest \
+task_production_variant="$(go list -m -f '{{if .Replace}}fork-{{.Replace.Version}}{{else}}upstream-{{.Version}}{{end}}' fyne.io/fyne/v2)"
+go list -m -json all > "$task_evidence/original-native-modules.jsonl"
+ASTRO_FYNE_TYPOGRAPHY_ARTIFACTS="$task_evidence/original-native" ASTRO_FYNE_TEXT_VARIANT="$task_production_variant" ASTRO_FYNE_TEXT_ORIGIN=nearest \
   GOMAXPROCS=2 go test -count=1 -p=1 -run '^TestTypographyProbeSoftwareCanvasEvidence$' ./generated
 go mod edit -modfile="$task_modfile" -replace="github.com/go-text/typesetting=$task_checkout"
 ASTRO_FYNE_TYPOGRAPHY_ARTIFACTS="$task_evidence/candidate-native" ASTRO_FYNE_TEXT_VARIANT=fork-fractional-candidate ASTRO_FYNE_TEXT_ORIGIN=nearest \

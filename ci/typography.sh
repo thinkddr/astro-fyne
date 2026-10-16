@@ -31,7 +31,7 @@ for task_variant in upstream-v2.8.1 fork-v2.8.1-sytue.16; do
     task_origin=nearest
     go mod edit -modfile="$task_modfile" -replace=fyne.io/fyne/v2=github.com/thinkddr/fyne/v2@v2.8.1-sytue.16
   fi
-  go mod download -json "$task_module" > "$task_directory/fyne-module.json"
+  go mod download -modfile="$task_modfile" -json "$task_module" > "$task_directory/fyne-module.json"
   task_module_directory="$(bun -e 'const m=await Bun.file(process.argv[1]).json(); if(m.Error || !m.Dir || !m.Sum || !m.GoModSum) throw new Error("Incomplete public Fyne module download"); console.log(m.Dir);' "$task_directory/fyne-module.json")"
   ASTRO_FYNE_TYPOGRAPHY_ARTIFACTS="$task_directory" ASTRO_FYNE_TEXT_VARIANT="$task_variant" ASTRO_FYNE_TEXT_ORIGIN="$task_origin" \
     GOMAXPROCS=2 go test -mod=mod -modfile="$task_modfile" -count=1 -p=1 -run '^TestTypographyProbeSoftwareCanvasEvidence$' ./generated
