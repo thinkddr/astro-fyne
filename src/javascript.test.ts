@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { compile } from "./parser.ts";
 import { bundleJavascript, validateJavascriptArchive } from "./javascript.ts";
 import { generateJavascript } from "./javascript-cli.ts";
@@ -254,6 +255,105 @@ test("external generated stylesheets are bound to source digests and generated a
         direction: "native",
       }),
     ).rejects.toThrow("already declares");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 60000);
+
+test("CSS source bytes survive imported and explicit stylesheets without rewriting output paths", async () => {
+  const root = await mkdtemp(join(tmpdir(), "afy-css-sources-"));
+  try {
+    const source = join(root, "View.tsx"),
+      css =
+        '\ufeff/* café 🙂 */\r\n@import "./shared.css";\r\n.text { color: red; }\r\n',
+      shared = '/* keep comments */\n.text { --Accent: "UPPER"; }\n';
+    await writeFile(
+      source,
+      'import "./style.css";export default function View(){return <p class="text">Hello</p>}',
+    );
+    await writeFile(join(root, "style.css"), css);
+    await writeFile(join(root, "shared.css"), shared);
+    const archive = await bundleJavascript(
+      source,
+      "default",
+      {},
+      [],
+      [join(root, "shared.css")],
+    );
+    expect(archive.stylesheets?.map(({ path, text }) => [path, text])).toEqual([
+      ["shared.css", shared],
+      ["style.css", css],
+    ]);
+    for (const sheet of archive.stylesheets!)
+      expect(sheet.hash).toBe(
+        createHash("sha256").update(sheet.text).digest("hex"),
+      );
+    const program = join(root, "program.json");
+    await writeFile(program, JSON.stringify(archive));
+    for (const direction of ["native", "web"] as const) {
+      const out = join(root, direction),
+        options = { program, out, name: "Styled", direction };
+      await generateJavascript(options);
+      await generateJavascript({ ...options, check: true });
+      const manifest = JSON.parse(
+        await readFile(join(out, "Styled.css-sources.json"), "utf8"),
+      );
+      expect(manifest.stylesheets).toHaveLength(2);
+      for (const [index, item] of manifest.stylesheets.entries()) {
+        expect(item.path).toBe(archive.stylesheets![index]!.path);
+        expect(item.file).toMatch(
+          /^Styled\.css-sources\/\d{4}-[a-f0-9]{64}\.css$/,
+        );
+        expect(await readFile(join(out, item.file))).toEqual(
+          Buffer.from(archive.stylesheets![index]!.text),
+        );
+      }
+      const retained = join(out, manifest.stylesheets[0].file);
+      await writeFile(retained, "/* handwritten edit */\n");
+      await expect(generateJavascript(options)).rejects.toThrow("not owned");
+      expect(await readFile(retained, "utf8")).toBe("/* handwritten edit */\n");
+    }
+    for (const stylesheets of [
+      [{ ...archive.stylesheets![0], text: shared + " " }],
+      [{ ...archive.stylesheets![0], path: "missing.css" }],
+      [archive.stylesheets![0], archive.stylesheets![0]],
+      [{ ...archive.stylesheets![0], text: "\ud800" }],
+    ])
+      await expect(
+        validateJavascriptArchive({ ...archive, stylesheets }),
+      ).rejects.toThrow();
+    const duplicateSources = {
+      ...archive,
+      sources: [
+        ...archive.sources,
+        archive.sources.find((item) => item.path === "shared.css")!,
+      ],
+    };
+    await expect(validateJavascriptArchive(duplicateSources)).rejects.toThrow(
+      "duplicate",
+    );
+    const parentPath = {
+      ...archive,
+      sources: [
+        ...archive.sources,
+        { path: "../../outside.css", hash: archive.stylesheets![0]!.hash },
+      ],
+      stylesheets: [{ ...archive.stylesheets![0]!, path: "../../outside.css" }],
+    };
+    await writeFile(program, JSON.stringify(parentPath));
+    await generateJavascript({
+      program,
+      out: join(root, "safe"),
+      name: "Safe",
+      direction: "web",
+    });
+    const manifest = JSON.parse(
+      await readFile(join(root, "safe/Safe.css-sources.json"), "utf8"),
+    );
+    expect(manifest.stylesheets[0].path).toBe("../../outside.css");
+    expect(manifest.stylesheets[0].file).toMatch(
+      /^Safe\.css-sources\/0000-[a-f0-9]{64}\.css$/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -21,6 +21,22 @@ async function withCSS(source: string, callback: (doc: any) => void) {
     await rm(dir, { recursive: true, force: true });
   }
 }
+test("CSS source rejects invalid UTF-8 instead of retaining replacement bytes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "afy-css-utf8-"));
+  try {
+    const path = join(dir, "style.css");
+    await writeFile(path, Buffer.from([0x2f, 0x2a, 0xff, 0x2a, 0x2f]));
+    let recorded = false;
+    await expect(
+      compileJavascriptCSS(path, () => {
+        recorded = true;
+      }),
+    ).rejects.toThrow("UTF-8");
+    expect(recorded).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 test("CSS layers, specificity, ordered shorthands and inline priorities cascade", async () => {
   await withCSS(
     `@layer a,b;@layer a{.box{color:red!important;padding:2px 4px}}@layer b{#item{color:blue!important;padding-left:8px}}#item{color:green!important}.box{padding-left:3px;padding:5px 6px;padding-top:9px}`,
@@ -247,6 +263,95 @@ test(":checked recognizes ASCII-case-insensitive input types without styling the
       expect(snapshot()[1].style.color).toBeUndefined();
     },
   );
+});
+test("standard CSS names fold ASCII while custom-property names remain exact", async () => {
+  await withCSS(
+    `DIV:EMPTY{COLOR:#112233;BACKGROUND-COLOR:#ddeeff;bacKground:red;--Inset:2px;--inset:7px;--K:3px;--k:9px;padding-left:var(--Inset);padding-right:var(--inset);padding-top:var(--K);padding-bottom:var(--k)}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("DiV");
+      root.appendChild(node);
+      const style = snapshot()[0].style;
+      expect(style.color).toBe("#112233");
+      expect(style.backgroundColor).toBe("#ddeeff");
+      // Unknown names reach the native adapter boundary without becoming paint.
+      expect(style["bacKground"]).toBe("red");
+      expect(style.paddingLeft).toBe("2px");
+      expect(style.paddingRight).toBe("7px");
+      expect(style.paddingTop).toBe("3px");
+      expect(style.paddingBottom).toBe("9px");
+    },
+  );
+});
+test("HTML type selectors fold ASCII without folding Unicode, IDs, classes or attributes", async () => {
+  await withCSS(
+    `K{background-color:blue}K{color:red}#k{width:1px}.k{height:2px}[data-case=k i]{padding:3px}`,
+    ({ document, root, snapshot }) => {
+      for (const name of ["k", "K"]) {
+        const node = document.createElement(name);
+        node.id = "K";
+        node.className = "K";
+        node.setAttribute("data-case", "K");
+        root.appendChild(node);
+      }
+      const [ascii, unicode] = snapshot();
+      expect(ascii.style.backgroundColor).toBe("blue");
+      expect(ascii.style.color).toBeUndefined();
+      expect(unicode.style.color).toBe("red");
+      expect(unicode.style.backgroundColor).toBeUndefined();
+      for (const node of [ascii, unicode]) {
+        expect(node.style.width).toBeUndefined();
+        expect(node.style.height).toBeUndefined();
+        expect(node.style.paddingLeft).toBeUndefined();
+        expect(node.attrs).toMatchObject({
+          id: "K",
+          class: "K",
+          "data-case": "K",
+        });
+      }
+    },
+  );
+});
+test("uppercase supported pseudo-classes work and Unicode lookalikes require an adapter", async () => {
+  await withCSS(
+    `INPUT:CHECKED+SPAN{color:#112233}`,
+    ({ document, root, snapshot }) => {
+      const checkbox = document.createElement("input");
+      checkbox.setAttribute("type", "checkbox");
+      const label = document.createElement("span");
+      root.appendChild(checkbox);
+      root.appendChild(label);
+      expect(snapshot()[1].style.color).toBeUndefined();
+      checkbox.checked = true;
+      expect(snapshot()[1].style.color).toBe("#112233");
+    },
+  );
+  await expect(
+    withCSS(`input:checKed+span{color:red}`, () => {}),
+  ).rejects.toThrow(
+    "CSS pseudo-class :checKed requires a native state/selector adapter",
+  );
+});
+test("supported at-rule names accept ASCII uppercase without changing layer identity", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "afy-css-case-"));
+  try {
+    await writeFile(join(dir, "palette.css"), "@LAYER Tone{DIV{COLOR:red}}");
+    const path = join(dir, "style.css");
+    await writeFile(path, '@IMPORT "palette.css";@LAYER tone{DIV{COLOR:blue}}');
+    const inputs: string[] = [];
+    const packet = await compileJavascriptCSS(path, (file) =>
+      inputs.push(file),
+    );
+    const doc = createDocument();
+    doc.installCSS(packet);
+    doc.root.appendChild(doc.document.createElement("div"));
+    expect(inputs).toEqual([path, join(dir, "palette.css")]);
+    expect(
+      packet.filter((item) => item.layers).map((item) => item.layers),
+    ).toEqual([["Tone"], ["tone"]]);
+    expect(doc.snapshot()[0].style.color).toBe("blue");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 test("CSS imports retain transitive source bytes and unsupported rules are diagnosed", async () => {
   const dir = await mkdtemp(join(tmpdir(), "afy-css-import-"));

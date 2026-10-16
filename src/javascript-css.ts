@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 const cssPackage = "css-tree";
 const css = await import(cssPackage);
+const asciiLower = (value: string) =>
+  value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 
 /** Compile CSS syntax only. Cascading stays in the shared native/browser VM. */
 export async function compileJavascriptCSS(
@@ -14,9 +16,17 @@ export async function compileJavascriptCSS(
   file = resolve(file);
   if (stack.includes(file)) return []; // CSS import cycles do not re-enter a sheet.
   if (stack.length >= 32) throw new Error("CSS import depth exceeds 32");
-  const text = await readFile(file, "utf8");
-  if (Buffer.byteLength(text) > 16 * 1024 * 1024)
+  const bytes = await readFile(file);
+  if (bytes.length > 16 * 1024 * 1024)
     throw new Error("CSS source exceeds 16MiB");
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+      bytes,
+    );
+  } catch {
+    throw new Error(`CSS source requires UTF-8: ${file}`);
+  }
   record(file, text);
   let ast;
   try {
@@ -80,9 +90,7 @@ export async function compileJavascriptCSS(
             ]!++;
         } else if (node.type === "AttributeSelector") {
           const flags = node.flags
-            ? css.ident
-                .decode(node.flags)
-                .replace(/[A-Z]/g, (c: string) => c.toLowerCase())
+            ? asciiLower(css.ident.decode(node.flags))
             : null;
           if (
             !node.name ||
@@ -103,7 +111,7 @@ export async function compileJavascriptCSS(
           ]);
           score[1]!++;
         } else if (node.type === "PseudoClassSelector") {
-          const name = node.name.toLowerCase();
+          const name = asciiLower(node.name);
           if (["is", "where", "not"].includes(name)) {
             const nested = selectors(node.children?.[0]);
             tests.push([name, nested]);
@@ -146,7 +154,7 @@ export async function compileJavascriptCSS(
             throw new Error("CSS nesting requires a native selector adapter");
           const name = item.property.startsWith("--")
             ? item.property
-            : item.property.toLowerCase();
+            : asciiLower(item.property);
           if (!name.startsWith("--") && !css.generate(item.value).trim())
             throw new Error(
               "Empty CSS declarations require an invalid-value adapter",
@@ -168,10 +176,7 @@ export async function compileJavascriptCSS(
           declarations,
           layer,
         });
-      } else if (
-        node.type === "Atrule" &&
-        node.name.toLowerCase() === "layer"
-      ) {
+      } else if (node.type === "Atrule" && asciiLower(node.name) === "layer") {
         if (layer) throw new Error("Nested CSS layers require an adapter");
         const names = node.prelude
           ? node.prelude.children?.[0]?.children?.map((n: any) => n.name)
@@ -185,10 +190,7 @@ export async function compileJavascriptCSS(
           result.push({ layers: [name] });
           await rules(node.block.children, name);
         } else result.push({ layers: names });
-      } else if (
-        node.type === "Atrule" &&
-        node.name.toLowerCase() === "import"
-      ) {
+      } else if (node.type === "Atrule" && asciiLower(node.name) === "import") {
         if (!importsAllowed || layer)
           throw new Error("CSS @import must precede style rules");
         const prelude = node.prelude?.children;

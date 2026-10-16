@@ -4,6 +4,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   applyArtifacts,
   generatedJSON,
@@ -33,7 +34,8 @@ const header =
 const literal = (value: unknown) =>
   JSON.stringify(value)
     .replaceAll("\u2028", "\\u2028")
-    .replaceAll("\u2029", "\\u2029");
+    .replaceAll("\u2029", "\\u2029")
+    .replaceAll("\ufeff", "\\ufeff");
 
 export async function generateJavascript(options: Options) {
   if (
@@ -79,6 +81,35 @@ export async function generateJavascript(options: Options) {
       content,
       isOwned: generatedText(marker),
     });
+  if (archive.stylesheets?.length) {
+    const sheets = archive.stylesheets.map((sheet, index) => {
+      const file = `${options.name}.css-sources/${String(index).padStart(4, "0")}-${sheet.hash}.css`;
+      artifacts.push({
+        path: join(output, file),
+        root: output,
+        content: sheet.text,
+        isOwned: (saved) =>
+          createHash("sha256").update(saved).digest("hex") === sheet.hash,
+      });
+      return { path: sheet.path, hash: sheet.hash, file };
+    });
+    artifacts.push({
+      path: join(output, `${options.name}.css-sources.json`),
+      root: output,
+      content:
+        JSON.stringify(
+          {
+            schema: 1,
+            generator: "astro-fyne",
+            kind: "css-source-archive",
+            stylesheets: sheets,
+          },
+          null,
+          2,
+        ) + "\n",
+      isOwned: generatedJSON,
+    });
+  }
   if (options.direction === "native") {
     const code = `${header}package ${options.packageName ?? "generated"}
 import("encoding/json";"errors";webui "github.com/thinkddr/astro-fyne/native";jsruntime "github.com/thinkddr/astro-fyne/native/javascript")
@@ -173,6 +204,13 @@ export default ${options.name};\n`,
           name: options.name,
           codeHash: archive.codeHash,
           sources: archive.sources,
+          ...(archive.stylesheets?.length
+            ? {
+                stylesheetSources: archive.stylesheets.map(
+                  ({ path, hash }) => ({ path, hash }),
+                ),
+              }
+            : {}),
           actions: archive.actions,
           runtime: "goja-pure-go",
           nativeWidgets: true,

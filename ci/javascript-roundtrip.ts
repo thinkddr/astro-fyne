@@ -232,13 +232,34 @@ const initial = await bundleJavascript(
   astro ? [] : ["observe"],
 );
 await writeFile(join(evidence, "initial.json"), JSON.stringify(initial));
+for (const sheet of initial.stylesheets ?? [])
+  assert.equal(
+    await readFile(
+      resolve(
+        root,
+        astro ? "example/src/pages" : "example/src/components",
+        sheet.path,
+      ),
+      "utf8",
+    ),
+    sheet.text,
+    `Bundled CSS bytes changed: ${sheet.path}`,
+  );
 const rejectionCSSImport = `import ${JSON.stringify(join(root, "example/src/components/javascript-css.css"))};`;
+const rejectionASCIIPath = join(evidence, "reject-css-ascii.css");
+await writeFile(rejectionASCIIPath, "p{bacKground:red}\n");
 for (const [name, source, event, contains] of [
   [
     "css",
     `export default function Page(){return <p style={{position:"absolute"}}>No adapter</p>}`,
     "",
     "CSS property position",
+  ],
+  [
+    "css-ascii-property",
+    `import ${JSON.stringify(rejectionASCIIPath)};export default function Page(){return <p>No Unicode property alias</p>}`,
+    "",
+    "CSS property bacKground",
   ],
   [
     "css-token-width",
@@ -489,7 +510,12 @@ function assertCSSCaseTimeline(
         paddingLeft: state.mode ? "7px" : "4px",
       },
       "css-case-misapplied": { color: "#345678" },
-      "css-case-ascii": { color: "#456789" },
+      "css-case-ascii": {
+        color: "#456789",
+        backgroundColor: "#dce7f2",
+        // Frames retain token whitespace; snapshots separately check used pixels.
+        paddingLeft: " 5px",
+      },
     };
     for (const frame of nodes)
       for (const [property, expected] of Object.entries(
@@ -1932,6 +1958,24 @@ function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
 }
 if (!astro) {
   assert.equal(
+    nativeResult.cssUsedStyleChecked,
+    true,
+    "Native CSS used style checks did not run",
+  );
+  assert.deepEqual(
+    nativeResult.cssUsedStyleObservations,
+    [
+      "initial",
+      ...scenario.prefix.map((step) => step.id),
+      ...scenario.suffix.map((step) => step.id),
+    ].map((label) => ({
+      label,
+      paddingLeft: 5,
+      background: "#dce7f2",
+    })),
+    "Native actual used CSS differs before or after an action",
+  );
+  assert.equal(
     nativeResult.cssCaseIdentityChecked,
     true,
     "Native CSS case pointer checks did not run",
@@ -2064,6 +2108,11 @@ await writeFile(
   JSON.stringify(nativeResult.archive),
 );
 await validateJavascriptArchive(nativeResult.archive);
+assert.deepEqual(
+  nativeResult.archive.stylesheets ?? [],
+  initial.stylesheets ?? [],
+  "Native export changed original stylesheet sources",
+);
 await generateJavascript({
   program: join(evidence, "native-program.json"),
   out: web,
@@ -2136,6 +2185,7 @@ const normalize = (calls: unknown[][]) =>
 let exported: JavascriptArchive;
 const inputReflections: unknown[] = [];
 const cssCaseObservations: unknown[] = [];
+const cssIdentifierObservations: { stage: string; actual: unknown }[] = [];
 try {
   const page = await browser.newPage();
   page.on("pageerror", (error) => errors.push(error.message));
@@ -2206,7 +2256,13 @@ try {
                     paddingBottom: style.paddingBottom,
                     paddingLeft: style.paddingLeft,
                   }
-                : { color: style.color },
+                : element.id === "css-case-ascii"
+                  ? {
+                      color: style.color,
+                      backgroundColor: style.backgroundColor,
+                      paddingLeft: style.paddingLeft,
+                    }
+                  : { color: style.color },
           };
         }),
       );
@@ -2255,7 +2311,11 @@ try {
           raw: null,
           default: null,
           live: null,
-          style: { color: "rgb(69, 103, 137)" },
+          style: {
+            color: "rgb(69, 103, 137)",
+            backgroundColor: "rgb(220, 231, 242)",
+            paddingLeft: "5px",
+          },
         },
       ],
       `CSS attribute matching/raw state differs: ${label}`,
@@ -2276,6 +2336,66 @@ try {
       { i: true, I: true, s: false, S: false },
       "Pinned Chromium attribute flag support changed",
     );
+  const assertBrowserCSSIdentifiers = async (stage: string) => {
+    if (astro) return;
+    const actual = await page.evaluate(() => {
+      const element = document.createElement("k");
+      element.id = "K";
+      element.className = "K";
+      element.setAttribute("data-case", "K");
+      element.style.setProperty("bacKground", "red");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = true;
+      return {
+        property: {
+          asciiSupported: CSS.supports("BACKGROUND-COLOR", "#dce7f2"),
+          unicodeSupported: CSS.supports("bacKground", "red"),
+          unknownValue: element.style.getPropertyValue("bacKground"),
+          backgroundColor: element.style.backgroundColor,
+          declarationCount: element.style.length,
+        },
+        pseudo: {
+          asciiChecked: checkbox.matches(":CHECKED"),
+          unicodeSupported: CSS.supports("selector(:checKed)"),
+        },
+        type: { ascii: element.matches("K"), unicode: element.matches("K") },
+        identity: {
+          id: element.id,
+          class: element.className,
+          data: element.getAttribute("data-case"),
+          asciiID: element.matches("#k"),
+          asciiClass: element.matches(".k"),
+          insensitiveData: element.matches("[data-case=k i]"),
+        },
+      };
+    });
+    cssIdentifierObservations.push({ stage, actual });
+    assert.deepEqual(
+      actual,
+      {
+        property: {
+          asciiSupported: true,
+          unicodeSupported: false,
+          unknownValue: "",
+          backgroundColor: "",
+          declarationCount: 0,
+        },
+        pseudo: { asciiChecked: true, unicodeSupported: false },
+        type: { ascii: true, unicode: false },
+        identity: {
+          id: "K",
+          class: "K",
+          data: "K",
+          asciiID: false,
+          asciiClass: false,
+          insensitiveData: false,
+        },
+      },
+      `Pinned Chromium CSS identifier matching changed: ${stage}`,
+    );
+  };
+  await assertBrowserCSSIdentifiers("restored");
   const captureCharacterHandles = () =>
     Promise.all(
       characterIDs.map((id) =>
@@ -2884,6 +3004,11 @@ try {
     JSON.stringify(exported),
   );
   await validateJavascriptArchive(exported);
+  assert.deepEqual(
+    exported.stylesheets ?? [],
+    initial.stylesheets ?? [],
+    "Browser export changed original stylesheet sources",
+  );
   assert.ok(exported.frame, "Browser archive is missing its current frame");
   await page.evaluate(() => window.afyJavascript.clear());
   const follow: JavascriptFrame[][] = [exported.frame];
@@ -3020,6 +3145,7 @@ try {
     await assertBrowserTextContent("original browser initial");
     await assertBrowserInputReflection("original browser initial");
     await assertBrowserCSSCase("original browser initial");
+    await assertBrowserCSSIdentifiers("original");
     for (const step of scenario.prefix) await perform(step);
     await page.evaluate(() => window.afyJavascript.clear());
     const originalValues: Record<string, string>[] = [];
@@ -3272,6 +3398,12 @@ try {
       ) + "\n",
     );
   }
+  if (!astro)
+    assert.deepEqual(
+      cssIdentifierObservations.map(({ stage }) => stage),
+      ["restored", "original"],
+      "Missing original/restored CSS identifier observations",
+    );
   assert.deepEqual(errors, [], "Browser runtime errors");
 } finally {
   if (!astro)
@@ -3285,6 +3417,15 @@ try {
       join(evidence, "browser-css-attributes.json"),
       JSON.stringify(
         { schema: 1, observations: cssCaseObservations },
+        null,
+        2,
+      ) + "\n",
+    );
+  if (!astro)
+    await writeFile(
+      join(evidence, "browser-css-identifiers.json"),
+      JSON.stringify(
+        { schema: 1, observations: cssIdentifierObservations },
         null,
         2,
       ) + "\n",
@@ -3311,10 +3452,83 @@ const restored = JSON.parse(
     join(root, "native"),
   ),
 );
+assert.deepEqual(
+  restored.archive.stylesheets ?? [],
+  initial.stylesheets ?? [],
+  "Restored native export changed original stylesheet sources",
+);
+const cssFiles: { stage: string; path: string; file: string; hash: string }[] =
+  [];
+for (const [stage, output, name] of [
+  ["native", native, "JavascriptProbe"],
+  ["web", web, "JavascriptBrowser"],
+  ["restored-native", native, "RestoredJavascriptProbe"],
+] as const) {
+  if (!initial.stylesheets?.length) continue;
+  const manifest = JSON.parse(
+    await readFile(join(output, `${name}.css-sources.json`), "utf8"),
+  );
+  assert.equal(manifest.stylesheets.length, initial.stylesheets.length);
+  for (const [index, item] of manifest.stylesheets.entries()) {
+    const sheet:
+      NonNullable<JavascriptArchive["stylesheets"]>[number] | undefined =
+      initial.stylesheets[index];
+    assert.ok(sheet, `Missing retained stylesheet ${index}`);
+    assert.deepEqual(
+      { path: item.path, hash: item.hash },
+      { path: sheet.path, hash: sheet.hash },
+    );
+    assert.match(
+      item.file,
+      new RegExp(`^${name}\\.css-sources/\\d{4}-[a-f0-9]{64}\\.css$`),
+    );
+    assert.deepEqual(
+      await readFile(join(output, item.file)),
+      Buffer.from(sheet.text),
+    );
+    const file = `css-sources/${stage}/${item.file}`;
+    await mkdir(join(evidence, "css-sources", stage, `${name}.css-sources`), {
+      recursive: true,
+    });
+    await copyFile(join(output, item.file), join(evidence, file));
+    cssFiles.push({ stage, path: item.path, file, hash: item.hash });
+  }
+}
+await writeFile(
+  join(evidence, "css-source-retention.json"),
+  JSON.stringify(
+    {
+      schema: 1,
+      passed: true,
+      stylesheets:
+        initial.stylesheets?.map(({ path, hash }) => ({ path, hash })) ?? [],
+      nativeExport: true,
+      browserExport: true,
+      restoredNativeExport: true,
+      files: cssFiles,
+    },
+    null,
+    2,
+  ) + "\n",
+);
 const webResult = JSON.parse(
   await readFile(join(evidence, "browser.json"), "utf8"),
 );
 if (!astro) {
+  assert.equal(
+    restored.cssUsedStyleChecked,
+    true,
+    "Restored native CSS used style checks did not run",
+  );
+  assert.deepEqual(
+    restored.cssUsedStyleObservations,
+    ["initial", ...scenario.follow.map((step) => step.id)].map((label) => ({
+      label,
+      paddingLeft: 5,
+      background: "#dce7f2",
+    })),
+    "Restored native actual used CSS differs before or after an action",
+  );
   assert.equal(
     restored.cssCaseIdentityChecked,
     true,
@@ -3432,6 +3646,7 @@ await writeFile(
       platformDiagnostics: scenario.rejects.length,
       nativeFrames: nativeResult.frames.length + restored.frames.length,
       externalEffectsReplayed: 0,
+      stylesheetSourcesPreserved: initial.stylesheets?.length ?? 0,
       ...(!astro
         ? {
             cssAttributes: {
@@ -3440,6 +3655,11 @@ await writeFile(
               nativeObjectIdentityChecked: true,
               browserElementIdentityChecked: true,
               observations: cssCaseObservations.length,
+              identifierObservations: cssIdentifierObservations.length,
+              nativeUsedStyleChecked: true,
+              nativeUsedStyleObservations:
+                nativeResult.cssUsedStyleObservations.length +
+                restored.cssUsedStyleObservations.length,
               explicitSensitiveFlag:
                 "spec-unit-only; pinned Chromium flag disabled",
             },

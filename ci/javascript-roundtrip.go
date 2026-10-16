@@ -109,6 +109,36 @@ func main() {
 			cssCaseObjects[id] = object
 		}
 	}
+	cssUsedStyleObservations := []map[string]any{}
+	checkCSSUsedStyle := func(label string) {
+		if cssCaseObjects["css-case-ascii"] == nil {
+			return
+		}
+		snapshot, err := view.Snapshot()
+		if err != nil {
+			panic(fmt.Errorf("CSS used style snapshot %s: %w", label, err))
+		}
+		matches := 0
+		var visit func([]webui.SnapshotNode)
+		visit = func(nodes []webui.SnapshotNode) {
+			for _, node := range nodes {
+				if node.Node.ID == "css-case-ascii" {
+					matches++
+					style := node.Node.Style
+					if node.Object != cssCaseObjects["css-case-ascii"] || style.PaddingLeft != 5 || style.Background != "#dce7f2" {
+						panic(fmt.Errorf("CSS used style differs at %s: padding %v, background %q", label, style.PaddingLeft, style.Background))
+					}
+					cssUsedStyleObservations = append(cssUsedStyleObservations, map[string]any{"label": label, "paddingLeft": style.PaddingLeft, "background": style.Background})
+				}
+				visit(node.Children)
+			}
+		}
+		visit(snapshot.Roots)
+		if matches != 1 {
+			panic(fmt.Errorf("CSS used style node count at %s: %d", label, matches))
+		}
+	}
+	checkCSSUsedStyle("initial")
 	perform := func(step step) {
 		object := view.Object(step.ID)
 		if object == nil {
@@ -164,6 +194,7 @@ func main() {
 				panic("CSS attribute mutation replaced native object " + id + " after " + step.ID)
 			}
 		}
+		checkCSSUsedStyle(step.ID)
 	}
 	if os.Args[2] == "export" {
 		for _, step := range scenario.Prefix {
@@ -188,7 +219,7 @@ func main() {
 		}
 		frames = append(frames, snapshot.Frame)
 	}
-	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil, "hierarchyIdentityChecked": hierarchy != nil, "ancestorIdentityChecked": ancestor != nil, "removalIdentityChecked": removal != nil, "characterDataIdentityChecked": len(characterObjects) == len(characterIDs), "textContentIdentityChecked": len(textContentObjects) == len(textContentIDs), "cssCaseIdentityChecked": len(cssCaseObjects) == len(cssCaseIDs)})
+	data, err := json.Marshal(map[string]any{"archive": archive, "frames": frames, "calls": calls, "insertionIdentityChecked": insertion != nil, "hierarchyIdentityChecked": hierarchy != nil, "ancestorIdentityChecked": ancestor != nil, "removalIdentityChecked": removal != nil, "characterDataIdentityChecked": len(characterObjects) == len(characterIDs), "textContentIdentityChecked": len(textContentObjects) == len(textContentIDs), "cssCaseIdentityChecked": len(cssCaseObjects) == len(cssCaseIDs), "cssUsedStyleChecked": len(cssUsedStyleObservations) > 0, "cssUsedStyleObservations": cssUsedStyleObservations})
 	if err != nil {
 		panic(err)
 	}
