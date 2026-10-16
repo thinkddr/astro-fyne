@@ -71,7 +71,9 @@ int atf_paint_snapshot(atf_engine* engine, const atf_glyph* glyphs, size_t count
                        uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb);
 // Paint a clipped physical region while keeping the original logical origin.
 // The destination's physical top-left is an exact integer offset in [-4096,4096].
-// Translation precedes scale; the native baseline addition remains unchanged.
+// Skia selects and rounds masks globally before integer destination displacement.
+// Nonzero-offset path/drawable/rejected-mask bitmap fallback fails without caller writes.
+// Empty lines remain no-op surfaces; zero offsets retain the full-surface path.
 int atf_paint_snapshot_region(atf_engine* engine, const atf_glyph* glyphs, size_t count,
                               float font_css, float line_height_css, const atf_policy* policy,
                               uint8_t* rgba, size_t length, uint32_t width, uint32_t height,

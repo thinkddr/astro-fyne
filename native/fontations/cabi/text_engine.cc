@@ -11,12 +11,19 @@
 #include "include/core/SkFontArguments.h"
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkStrikeRef.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkSurfaceProps.h"
 #include "include/ports/SkTypeface_fontations.h"
+#include "src/core/SkDraw.h"
+#include "src/core/SkGlyphRunPainter.h"
+#include "src/core/SkMipmap.h"
+#include "src/core/SkRasterClip.h"
+#include "src/core/SkStrikeSpec.h"
+#include "src/text/GlyphRun.h"
 #include "opentype-sanitiser.h"
 #include "ots-memory-stream.h"
 #include <hb.h>
@@ -162,6 +169,50 @@ hb_bool_t extents(hb_font_t*, void* data, hb_codepoint_t glyph,
     return true;
   } catch (...) { run.invalid_metric = true; return false; }
 }
+
+class RegionMaskPainter final : public skcpu::BitmapDevicePainter {
+public:
+  RegionMaskPainter(const SkPixmap& destination, const SkRasterClip& clip,
+                    const SkMatrix& matrix, const SkSurfaceProps& props,
+                    int32_t x, int32_t y, size_t count)
+    : positions(count), offset_x(x), offset_y(y) {
+    draw.fDst = destination;
+    draw.fCTM = &matrix;
+    draw.fRC = &clip;
+    draw.fProps = &props;
+  }
+
+  void paintMasks(SkZip<const SkGlyph*, SkPoint> accepted,
+                  const SkPaint& paint) const override {
+    const auto source = accepted.get<1>();
+    if (unsupported || source.size() > positions.size()) {
+      unsupported = true;
+      return;
+    }
+    // Skia has already selected the mask and floored its global placement.
+    // Visible integer coordinates remain exact within the bounded region API.
+    for (size_t i = 0; i < source.size(); ++i) {
+      positions[i] = SkPoint::Make(source[i].x() - static_cast<float>(offset_x),
+                                   source[i].y() - static_cast<float>(offset_y));
+    }
+    draw.paintMasks(SkMakeZip(accepted.get<0>(),
+      SkSpan<SkPoint>{positions.data(), source.size()}), paint);
+  }
+
+  void drawBitmap(const SkBitmap&, const SkMatrix&, const SkRect*,
+                  const SkSamplingOptions&, const SkPaint&, sk_sp<SkMipmap>) const override {
+    // Do not throw through the independently compiled Skia call frames.
+    unsupported = true;
+  }
+
+  bool failed() const { return unsupported; }
+
+private:
+  skcpu::Draw draw;
+  mutable std::vector<SkPoint> positions;
+  int32_t offset_x, offset_y;
+  mutable bool unsupported = false;
+};
 }
 
 extern "C" {
@@ -295,14 +346,33 @@ static int paint_at_offset(const atf_run* run, uint8_t* rgba, size_t length,
     require(surface != nullptr, "Could not allocate native N32 destination");
     auto* canvas = surface->getCanvas();
     require(canvas->writePixels(info, rgba, row_bytes, 0, 0), "Could not convert RGBA input to N32");
-    if (destination_x_px != 0 || destination_y_px != 0) {
-      canvas->translate(-static_cast<float>(destination_x_px), -static_cast<float>(destination_y_px));
-    }
     canvas->scale(static_cast<float>(scale), static_cast<float>(scale));
     SkPaint paint; paint.setColor(0xff000000u | foreground_rgb);
-    canvas->drawGlyphs({run->ids.data(), run->ids.size()},
-      {run->positions.data(), run->positions.size()},
-      SkPoint::Make(line_x_css, line_y_css + run->metrics.baseline_css), run->font, paint);
+    if (destination_x_px == 0 && destination_y_px == 0) {
+      canvas->drawGlyphs({run->ids.data(), run->ids.size()},
+        {run->positions.data(), run->positions.size()},
+        SkPoint::Make(line_x_css, line_y_css + run->metrics.baseline_css), run->font, paint);
+    } else if (!run->ids.empty()) {
+      const SkMatrix matrix = SkMatrix::Scale(static_cast<float>(scale), static_cast<float>(scale));
+      const SkPoint origin = SkPoint::Make(line_x_css, line_y_css + run->metrics.baseline_css);
+      SkMatrix position_matrix = matrix;
+      position_matrix.preTranslate(origin.x(), origin.y());
+      require(!SkStrikeSpec::ShouldDrawAsPath(paint, run->font, position_matrix),
+              "Clipped regions do not support path or drawable glyph rendering");
+      surface->notifyContentWillChange(SkSurface::kRetain_ContentChangeMode);
+      SkPixmap pixels;
+      require(surface->peekPixels(&pixels), "Could not access native region pixels");
+      const SkRasterClip clip(SkIRect::MakeWH(static_cast<int>(width), static_cast<int>(height)));
+      RegionMaskPainter destination(pixels, clip, matrix, surface->props(),
+                                    destination_x_px, destination_y_px, run->ids.size());
+      const sktext::GlyphRun glyph_run(run->font,
+        {run->positions.data(), run->positions.size()}, {run->ids.data(), run->ids.size()}, {}, {}, {});
+      sktext::GlyphRunBuilder builder;
+      const auto list = builder.makeGlyphRunList(glyph_run, paint, origin);
+      skcpu::GlyphRunListPainter painter(surface->props(), pixels.colorType(), pixels.colorSpace());
+      painter.drawForBitmapDevice(canvas, &destination, list, paint, matrix);
+      require(!destination.failed(), "Clipped regions do not support bitmap glyph fallback");
+    }
     std::vector<uint8_t> output(length);
     require(surface->readPixels(info, output.data(), row_bytes, 0, 0),
             "Could not convert native N32 output to RGBA");

@@ -80,19 +80,28 @@ does not certify Fyne widgets, editors, inverse conversion or GPU rendering.
 ### Clipped physical regions
 
 `atf_paint_snapshot_region` paints a contiguous region of the actual opaque
-backdrop. It keeps the original logical line origin and translates the native
-canvas by the destination's physical offset before scaling. Subtracting the
-clip from a float32 logical origin can change the later native baseline addition
-near a half-pixel boundary. This API keeps that addition unchanged. Destination
-offsets are bounded to `[-4096,4096]`; the existing size, alpha and DPR limits apply.
+backdrop. Skia selects masks and rounds their positions using the original global
+matrix and line origin. A native bitmap painter then subtracts the destination's
+integer physical offset from the rounded placements. Subtracting the clip from
+the logical origin, or translating the canvas before glyph positioning, changes
+float32 addition order near half-pixel boundaries. This path leaves Skia's
+positioning arithmetic intact. Destination offsets are bounded to `[-4096,4096]`;
+the existing size, alpha and DPR limits apply.
+
+Nonzero-offset path/drawable rendering and rejected-mask bitmap fallback report
+an error before changing caller bytes. Zero offsets retain the existing full
+surface painter, and empty lines remain no-op surfaces. Bitmap fallback rejection
+is a source guard; the current static Noto fixture does not exercise that fallback.
 
 The hosted region controls partition native full frames at odd physical cuts,
 paint each region after freeing the original run, and require exact crops and
 complete recompositions at DPR 1/2. They include signed fractional coordinates,
-values immediately around half-pixel boundaries, empty regions and atomic
-failure controls. The former origin-subtraction approach is recorded separately
-as a diagnostic and is never used to accept a region. These native transport
-controls leave the original seven-row browser comparison intact.
+values immediately around half-pixel boundaries, visible negative destination
+offsets, empty regions and atomic failure controls. A real native size-256 run at
+DPR 2 checks explicit path rejection while preserving the zero-offset painter.
+The former origin-subtraction approach is recorded separately as a diagnostic
+and is never used to accept a region. These native transport controls leave the
+original seven-row browser comparison intact.
 
 ## Native N32 surface
 

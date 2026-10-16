@@ -248,6 +248,36 @@ def main():
                 "rebasedOriginCSS": {"x": legacy_x, "y": legacy_y},
                 **differences(legacy, expected), "png": image(name + "/legacy-rebased.png", box[2], box[3], legacy)}
             save()
+        report["stage"] = "negative-destination-offsets"
+        report["negativeRegions"] = []
+        for record, _, original in references:
+            if record["id"] != "positive-quarter":
+                continue
+            width, height, scale = record["width"], record["height"], record["scale"]
+            x, y = record["originCSS"]["x"], record["originCSS"]["y"]
+            for dx, dy in [(-3, 0), (0, -5), (-3, -5)]:
+                rw, rh = width - dx, height - dy
+                initial = bytes(channel for py in range(dy, height) for px in range(dx, width)
+                                for channel in colors[(px + 3 * py) % len(colors)])
+                expected = bytearray(initial)
+                copy_back(expected, rw, (-dx, -dy, width, height), original)
+                memory = bytearray(prefix + initial + suffix)
+                pixels = (C.c_uint8 * len(initial)).from_buffer(memory, 16)
+                checked(library.atf_paint_snapshot_region(engine, glyphs, len(glyphs), size, line_height,
+                                                         C.byref(policy), pixels, len(initial), rw, rh,
+                                                         scale, x, y, foreground, dx, dy))
+                actual = bytes(pixels)
+                item = {"scale": scale, "originCSS": {"x": x, "y": y},
+                        "destinationOffsetPhysical": [dx, dy], **differences(actual, expected),
+                        "visibleGlyphPixels": differences(actual, initial)["changedPixels"],
+                        "guardsUnchanged": memory[:16] == prefix and memory[-16:] == suffix,
+                        "surface": surface_metadata(library, rw, rh, policy),
+                        "png": image(f"scale-{scale}/negative-{dx}-{dy}.png", rw, rh, actual)}
+                report["negativeRegions"].append(item)
+                save()
+                require(item["changedPixels"] == 0 and item["guardsUnchanged"]
+                        and item["visibleGlyphPixels"] == record["visibleGlyphPixels"],
+                        "Negative destination offset changed the original native glyph placement")
         report["stage"] = "empty-and-invalid-controls"
         raw = bytes(channel for color in colors for channel in color)
         for scale in [1, 2]:
@@ -290,6 +320,38 @@ def main():
             require(bytes(observed) == bytes(last), "Invalid region changed last-success metadata: " + label)
             report["checks"].append({"kind": "invalid-region", "case": label,
                                      "bytesUnchanged": True, "lastMetadataUnchanged": True, "error": error})
+        large_run = checked(library.atf_shape(engine, text, len(encoded), 256, 1024, C.byref(policy)))
+        try:
+            large_metrics = Metrics()
+            checked(library.atf_run_metrics(large_run, C.byref(large_metrics)))
+            require(large_metrics.glyph_count > 0, "Large native path control is empty")
+            large_glyphs = (Glyph * large_metrics.glyph_count)()
+            checked(library.atf_copy_glyphs(large_run, large_glyphs, large_metrics.glyph_count))
+            original_memory = bytearray(prefix + raw + suffix)
+            original_pixels = (C.c_uint8 * len(raw)).from_buffer(original_memory, 16)
+            checked(library.atf_paint(large_run, original_pixels, len(raw), 3, 2, 2, 0, 0, foreground))
+            require(original_memory[:16] == prefix and original_memory[-16:] == suffix,
+                    "Original large native path changed guards")
+        finally:
+            library.atf_free_run(large_run)
+        checked(library.atf_last_surface_metadata(C.byref(last), C.sizeof(last)))
+        memory = bytearray(prefix + raw + suffix)
+        before = bytes(memory)
+        pixels = (C.c_uint8 * len(raw)).from_buffer(memory, 16)
+        result = library.atf_paint_snapshot_region(engine, large_glyphs, len(large_glyphs), 256, 1024,
+                                                  C.byref(policy), pixels, len(raw), 3, 2, 2,
+                                                  0, 0, foreground, 13, 17)
+        error = library.atf_error().decode("utf-8", "replace")
+        require(result == 0 and error == "Clipped regions do not support path or drawable glyph rendering"
+                and bytes(memory) == before,
+                "Unsupported native path region must fail before changing destination/guards")
+        observed = SurfaceMetadata()
+        checked(library.atf_last_surface_metadata(C.byref(observed), C.sizeof(observed)))
+        require(bytes(observed) == bytes(last), "Unsupported path region changed last-success metadata")
+        report["checks"].append({"kind": "unsupported-path-region", "fontSize": 256, "lineHeight": 1024,
+                                 "scale": 2, "originalFullSurfaceAccepted": True,
+                                 "originalRunFreedBeforeRegion": True, "bytesUnchanged": True,
+                                 "lastMetadataUnchanged": True, "error": error})
         report.update(stage="complete", accepted=True)
         save()
     except Exception as error:

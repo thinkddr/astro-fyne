@@ -40,6 +40,9 @@ The initial native profile is bounded:
   unsupported and reports an error.
 - Physical scales 1/2, opaque RGBA8 backdrops, clipped axes at most 4,096 pixels
   and physical destination offsets in `[-4096,4096]`.
+- Nonzero destination offsets use native glyph masks. Path/drawable rendering
+  and rejected-mask bitmap fallback report an error before caller pixel changes.
+  The zero-offset full-surface painter retains its existing behavior.
 
 Single-line editors use the existing native editing engine. Multiline editing,
 contextual caret mapping, generated-widget visual parity, reverse-conversion
