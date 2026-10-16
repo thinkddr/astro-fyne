@@ -532,6 +532,8 @@ test("custom aliases and inherited values cannot hide token fabrication", async 
       child.className = "child";
       parent.appendChild(child);
       root.appendChild(parent);
+      expect(snapshot()[0].children[0].style.width).toBe("1 0px");
+      child.style.width = "var(--number)0px";
       expect(snapshot).toThrow("CSS token adjacency");
     },
   );
