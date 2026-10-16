@@ -3,9 +3,9 @@
 # Hosted native Fontations experiment
 
 This diagnostic builds a native Fontations, HarfBuzz, Skia and OTS pipeline and
-compares it with the original Astro typography page. The initial source revision
-has no successful build or pixel evidence. Existing fonts, fixtures, browser
-settings and reference pixels are unchanged.
+compares it with the original Astro typography page. The first complete hosted
+render has matching total advances and baselines but still differs in pixels.
+Existing fonts, fixtures, browser settings and reference pixels are unchanged.
 
 The workflow is `.github/workflows/native-fontations-text.yml`. It runs on pushes
 to the isolated `codex/native-fontations-text` branch and supports manual dispatch
@@ -214,11 +214,28 @@ compiled Fontations/CXX and the C ABI source, then failed at final linking on
 PartitionAlloc dependencies. These failures and actual dependency locks remain
 retained; no rendering was reached by those runs.
 
-The standalone allocator profile needs a clean hosted rebuild and successful
-link. Remaining unproven boundaries include complete notice collection, loading
-the real ABI, shaping/painting every source row and both strict frame comparisons
-within the hosted resource budget. Compilation alone never establishes pixel or
-widget parity.
+[Run 38912083896](https://github.com/thinkddr/astro-fyne/actions/runs/38912083896)
+completed that clean build, linked and loaded the real ABI, collected notices
+and painted all seven source rows at both DPRs. All seven total advances and
+baselines matched the observed DOM and Canvas metrics. The complete-frame
+comparisons still failed: 3,924 changed pixels at DPR 1 and 8,860 at DPR 2,
+with maximum channel differences of 125 and 144. The browser PNGs were
+byte-identical to the prior observed oracle. Equal total advances and baselines
+do not establish equal glyph positions, outlines, masks or compositing.
+
+The next diagnostic observes the hosted system's actual empty Fontconfig query
+with `observe-fontconfig.py`. It follows the pinned Chromium substitution
+sequence, retains loaded configuration bytes and the bound shared-library hash,
+and verifies those inputs stayed unchanged during the query. Twelve exact
+Chromium source files are retained with Git-blob and SHA-256 pins. The observer
+does not select a family through `FcFontMatch` or apply its results to the
+native policy. Its separate process cannot reveal the browser's linked library,
+startup configuration, LinuxUi defaults, cached device scale, renderer
+preferences or effective SkFont/scaler/surface. Those remain unobserved.
+
+Remaining boundaries include strict pixel equality, per-glyph browser internals,
+actual Fyne integration and editing behavior. Compilation and this diagnostic
+never establish widget parity.
 
 Before treating browser policy as reproduced, complete
 the instrumentation or explicitly retain the independent-policy qualification.

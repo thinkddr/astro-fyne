@@ -46,6 +46,8 @@ jobs:
           mkdir -p "$task_evidence"
           bun install --frozen-lockfile --ignore-scripts
           bunx --no-install playwright install --with-deps chromium
+          python3 ci/text-engine-probe/observe-fontconfig.py --out "$task_evidence/fontconfig" \
+            --sources "$RUNNER_TEMP/native-text/sources.json"
           bun run build:web
           bunx --no-install astro preview --ignore-lock --root example --host 127.0.0.1 --port 4321 > "$task_evidence/preview.log" 2>&1 &
           task_preview=$!
@@ -76,6 +78,7 @@ jobs:
             ${{ runner.temp }}/native-text/assembly/Cargo.lock
             ${{ runner.temp }}/native-text/assembly/third_party/rust
             ${{ runner.temp }}/native-text/chromium-Cargo.lock
+            ${{ runner.temp }}/native-text/font-policy-source
             ${{ runner.temp }}/native-text/notices
             ci/text-engine-probe
             typography-probe.json

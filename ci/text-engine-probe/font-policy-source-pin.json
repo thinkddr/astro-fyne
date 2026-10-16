@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "chromiumCommit": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+  "files": {
+    "ui/gfx/font_render_params_linux.cc": {
+      "gitBlob": "84d1d860614fb48bf4f47a90a74affd047fdce8c",
+      "sha256": "748e78c8a79fc3275c45fe7576c29d722176dc1fa62b120dd865f2d1f245129d"
+    },
+    "ui/gfx/linux/fontconfig_util.cc": {
+      "gitBlob": "cb926c9b2930d0693b1827316a4ae0472fa2cc12",
+      "sha256": "8d644bb34cf5a24228b1bd4a854c7e231162861c58e9fc1a36fdc89ae93c2792"
+    },
+    "ui/gfx/font_render_params.h": {
+      "gitBlob": "95b638a16dd87595932d26b9fb6dabe1573d2413",
+      "sha256": "402851edc0dfc96e1f27f34a8b320df16ff1d00ebca486ed2c846904243f4223"
+    },
+    "ui/gfx/font_render_params.cc": {
+      "gitBlob": "7d376cc222ce8e4221a4e06f3ac6c9e800636b37",
+      "sha256": "0aba8bca07458b4aa0f8d504f2c434f0838c5310c14cdcb5788131432fd7b7e3"
+    },
+    "content/public/browser/renderer_preferences_util.cc": {
+      "gitBlob": "dee0a71935eec0e28b75d7ff3f1b796fb6f5f2b3",
+      "sha256": "50fba96f171573480296db0bfb67a5a209840cedaf56f997ad3ea699814c8292"
+    },
+    "headless/lib/browser/headless_web_contents_impl.cc": {
+      "gitBlob": "6074ce3d7ee3a085e1e630f6b2a9ea719accc0ca",
+      "sha256": "b525617e5926b9ef5acbfe0b0565d5a6c88aac7e60a803bf60d2d59b68a204d3"
+    },
+    "headless/public/headless_browser.h": {
+      "gitBlob": "8ed67f1607fd4febba6252ad7b800a3b83c19c5f",
+      "sha256": "f73d0a8252817b0e107e0375a85f007ca87049bc14fd2e14b1df5b6401b5c00e"
+    },
+    "third_party/blink/renderer/platform/fonts/web_font_render_style.cc": {
+      "gitBlob": "2aa5e675665cc0742e3925fb60eed6b5e3b0d2f2",
+      "sha256": "e33fefd03429d5a8bda033a3b9ad559ee51cfa1084e42aadfbd11015ea784bf5"
+    },
+    "third_party/blink/renderer/platform/fonts/font_platform_data.cc": {
+      "gitBlob": "42482f849307b4a80623a956fa32b68642ad0b76",
+      "sha256": "1d233b31404da025e98b89be1adfa9666f8682024c0e2ae9076a6482f79e1057"
+    },
+    "third_party/blink/renderer/core/exported/web_view_impl.cc": {
+      "gitBlob": "0426141ab1a28819de6c36466f7b6161281811d2",
+      "sha256": "251f73e0c15b65b3754fb80457541ac097380d2a1011594d4efd4ad773f7b275"
+    },
+    "skia/ext/legacy_display_globals.cc": {
+      "gitBlob": "2cae07d71ae345aaeacd462a205a4fb559cd4323",
+      "sha256": "c71ec73e1767012888b19f8f7a642f26b02ff41e58407d128aaabab5ebf72a37"
+    },
+    "skia/ext/legacy_display_globals.h": {
+      "gitBlob": "5be86d55961dc2fd873e478f34b7694f8fabcd00",
+      "sha256": "f01711ca4d7c57919c84647e0c7614ae4de1b14b4d3e0fcb1a88eda27552b1a3"
+    }
+  }
+}

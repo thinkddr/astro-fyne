@@ -50,6 +50,20 @@ def main():
         if actual != revision:
             raise RuntimeError("Resolved source differs from exact pin")
         source_records[name] = {"url": url, "revision": actual}
+    policy_pins = json.loads((prototype / "font-policy-source-pin.json").read_text())
+    if policy_pins.get("schema") != 1 or policy_pins.get("chromiumCommit") != CHROMIUM:
+        raise RuntimeError("Font policy source pin differs from the selected Chromium commit")
+    for name, identity in policy_pins["files"].items():
+        path = pathlib.PurePosixPath(name)
+        if path.is_absolute() or ".." in path.parts:
+            raise RuntimeError("Invalid font policy source path")
+        data = fetch(f"https://raw.githubusercontent.com/chromium/chromium/{CHROMIUM}/{path}")
+        blob = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+        if blob != identity["gitBlob"] or hashlib.sha256(data).hexdigest() != identity["sha256"]:
+            raise RuntimeError("Pinned font policy source differs: " + name)
+        destination = work / "font-policy-source" / path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
     # Preserve exact relative paths expected by Skia's generated CXX header.
     rust_path = pathlib.Path("src/ports/fontations/src")
     (assembly / rust_path).mkdir(parents=True)
@@ -111,7 +125,7 @@ def main():
         packages = [p for p in actual["packages"] if p["name"] == name]
         if len(packages) != 1 or packages[0]["version"] != version:
             raise RuntimeError("Wrong or ambiguous selected crate: " + name)
-    (work / "sources.json").write_text(json.dumps({"schema": 1, "diagnosticOnly": True, "compiled": False, "chromiumCommit": CHROMIUM, "sources": source_records, "vendoredPrimaryCrates": vendor_manifest, "chromiumCxxHeaders": chromium_cxx_headers, "cargoLockHash": hashlib.sha256((assembly / "Cargo.lock").read_bytes()).hexdigest()}, indent=2) + "\n")
+    (work / "sources.json").write_text(json.dumps({"schema": 1, "diagnosticOnly": True, "compiled": False, "chromiumCommit": CHROMIUM, "sources": source_records, "vendoredPrimaryCrates": vendor_manifest, "chromiumCxxHeaders": chromium_cxx_headers, "chromiumFontPolicySources": policy_pins, "cargoLockHash": hashlib.sha256((assembly / "Cargo.lock").read_bytes()).hexdigest()}, indent=2) + "\n")
     notices = work / "notices"
     notices.mkdir()
     for source in [work / "skia" / "LICENSE", work / "harfbuzz" / "COPYING", work / "ots" / "LICENSE"]:
