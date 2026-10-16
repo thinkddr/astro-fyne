@@ -8,6 +8,19 @@ export function JavascriptCSS() {
   return (
     <section class="css-theme" data-mode={mode ? "alt" : "base"}>
       <p id="css-count">{count}</p>
+      <p id="css-cycle-self">Self cycle</p>
+      <p id="css-cycle-mutual">Mutual cycle</p>
+      <p id="css-cycle-fallback">Fallback dependency</p>
+      <p id="css-cycle-comment">Comment without dependencies</p>
+      <p id="css-cycle-function">Function name boundary</p>
+      <section class="css-cycle-parent">
+        <p id="css-cycle-inherited">Inherited computed value</p>
+      </section>
+      <section class="css-keyword-parent">
+        <p id="css-keyword-inherit">Explicit inheritance</p>
+        <p id="css-keyword-unset">Unset inherited value</p>
+        <p id="css-keyword-initial">Initial invalid value</p>
+      </section>
       <button
         id="css-increment"
         class={mode ? "css-button alt" : "css-button"}

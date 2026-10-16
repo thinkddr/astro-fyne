@@ -4,6 +4,7 @@
 import { createContext } from "preact";
 import { JavascriptCheckboxes } from "./JavascriptCheckboxes";
 import { JavascriptCSS } from "./JavascriptCSS";
+import { JavascriptEvents } from "./JavascriptEvents";
 import {
   useCallback,
   useContext,
@@ -110,6 +111,7 @@ export function JavascriptConformance({
     >
       <JavascriptCheckboxes observe={observe} />
       <JavascriptCSS />
+      <JavascriptEvents observe={observe} />
       <p id="js-count">{count}</p>
       <p id="js-standard">
         {String(

@@ -131,56 +131,185 @@ export function createCSSCascade() {
       if (matches(selector, p, index - 1)) return true;
     return false;
   }
-  function variable(value, variables, seen = []) {
+  const cssSpace = (value) => /[\t\n\f\r ]/.test(value ?? "");
+  const nameCharacter = (value) =>
+    !!value && (/[a-z0-9_-]/i.test(value) || value.charCodeAt(0) >= 0x80);
+  const asciiLower = (value) => value.replace(/[A-Z]/g, (c) => c.toLowerCase());
+  function commentEnd(value, at) {
+    const end = value.indexOf("*/", at + 2);
+    if (end < 0) throw new Error("Invalid CSS comment");
+    return end + 2;
+  }
+  function ignoredEnd(value, at) {
+    while (at < value.length) {
+      if (cssSpace(value[at])) at++;
+      else if (value.slice(at, at + 2) === "/*") at = commentEnd(value, at);
+      else break;
+    }
+    return at;
+  }
+  function escape(value, at) {
+    let end = at + 1,
+      hex = "";
+    if (end === value.length || /[\n\r\f]/.test(value[end]))
+      throw new Error("Invalid CSS identifier escape");
+    while (hex.length < 6 && /[\da-f]/i.test(value[end] ?? ""))
+      hex += value[end++];
+    if (hex) {
+      if (value[end] === "\r" && value[end + 1] === "\n") end += 2;
+      else if (cssSpace(value[end])) end++;
+      const code = parseInt(hex, 16);
+      return {
+        end,
+        text: String.fromCodePoint(
+          !code || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)
+            ? 0xfffd
+            : code,
+        ),
+      };
+    }
+    const code = value.codePointAt(end);
+    return {
+      end: end + (code > 0xffff ? 2 : 1),
+      text: String.fromCodePoint(code),
+    };
+  }
+  function nameAt(value, at) {
+    let end = at,
+      name = "",
+      escaped = false;
+    while (end < value.length) {
+      if (nameCharacter(value[end])) name += value[end++];
+      else if (value[end] === "\\") {
+        const part = escape(value, end);
+        name += part.text;
+        end = part.end;
+        escaped = true;
+      } else break;
+    }
+    return end > at ? { end, name, escaped } : null;
+  }
+  function identifier(value) {
+    if (typeof value !== "string") return null;
+    const token = nameAt(value, ignoredEnd(value, 0));
+    return token && ignoredEnd(value, token.end) === value.length
+      ? token
+      : null;
+  }
+  function keyword(value) {
+    const token = identifier(value);
+    if (!token) return null;
+    const name = asciiLower(token.name);
+    return ["inherit", "unset", "initial", "revert", "revert-layer"].includes(
+      name,
+    )
+      ? name
+      : null;
+  }
+  function stringEnd(value, at) {
+    const quote = value[at++];
+    while (at < value.length) {
+      if (value[at] === quote) return at + 1;
+      if (value[at] === "\\") {
+        if (value[at + 1] === "\r" && value[at + 2] === "\n") at += 3;
+        else if (/[\n\r\f]/.test(value[at + 1] ?? "")) at += 2;
+        else at = escape(value, at).end;
+      } else {
+        if (/[\n\r\f]/.test(value[at])) throw new Error("Invalid CSS string");
+        at++;
+      }
+    }
+    throw new Error("Invalid CSS string");
+  }
+  function nextVariable(value, start) {
+    for (let at = start; at < value.length;) {
+      if (value.slice(at, at + 2) === "/*") {
+        at = commentEnd(value, at);
+        continue;
+      }
+      if (value[at] === '"' || value[at] === "'") {
+        at = stringEnd(value, at);
+        continue;
+      }
+      if (value[at] === "#" || value[at] === "@") {
+        at = nameAt(value, at + 1)?.end ?? at + 1;
+        continue;
+      }
+      const token = nameAt(value, at);
+      if (!token) {
+        at++;
+        continue;
+      }
+      const open = token.end;
+      if (value[open] !== "(" || asciiLower(token.name) !== "var") {
+        at = open;
+        continue;
+      }
+      if (token.escaped)
+        throw new Error(
+          "Escaped CSS variable functions require a native token adapter",
+        );
+      let end = open + 1,
+        comma = -1;
+      const closing = [")"];
+      while (end < value.length && closing.length) {
+        if (value.slice(end, end + 2) === "/*") {
+          end = commentEnd(value, end);
+          continue;
+        }
+        if (value[end] === '"' || value[end] === "'") {
+          end = stringEnd(value, end);
+          continue;
+        }
+        if (value[end] === "\\") {
+          end = escape(value, end).end;
+          continue;
+        }
+        const character = value[end];
+        if (character === "(" || character === "[" || character === "{")
+          closing.push(character === "(" ? ")" : character === "[" ? "]" : "}");
+        else if (character === ")" || character === "]" || character === "}") {
+          if (closing.pop() !== character)
+            throw new Error("Invalid CSS variable function");
+        } else if (character === "," && closing.length === 1 && comma < 0)
+          comma = end;
+        end++;
+      }
+      if (closing.length) throw new Error("Invalid CSS variable function");
+      const argument = identifier(
+        value.slice(open + 1, comma < 0 ? end - 1 : comma),
+      );
+      if (
+        !argument ||
+        argument.escaped ||
+        !argument.name.startsWith("--") ||
+        argument.name === "--"
+      )
+        throw new Error(
+          "CSS var first argument requires an unescaped custom-property name; other syntax needs a native token adapter",
+        );
+      return {
+        at,
+        end,
+        name: argument.name,
+        fallback:
+          comma < 0 ? undefined : value.slice(comma + 1, end - 1).trim(),
+      };
+    }
+    return null;
+  }
+  function variable(value, lookup) {
     if (typeof value !== "string") return value;
     let output = "",
       start = 0;
     while (true) {
-      let at = -1,
-        quoted = null;
-      for (let i = start; i < value.length; i++) {
-        if (value[i] === "\\") {
-          i++;
-          continue;
-        }
-        if (quoted) {
-          if (value[i] === quoted) quoted = null;
-        } else if (value[i] === '"' || value[i] === "'") quoted = value[i];
-        else if (value.slice(i, i + 4) === "var(") {
-          at = i;
-          break;
-        }
-      }
-      if (at < 0) return output + value.slice(start);
+      const reference = nextVariable(value, start);
+      if (!reference) return output + value.slice(start);
+      const { at, end, name, fallback } = reference;
       output += value.slice(start, at);
-      let end = at + 4,
-        depth = 1,
-        comma = -1;
-      for (; end < value.length && depth; end++) {
-        if (value[end] === "\\") {
-          end++;
-          continue;
-        }
-        if (quoted) {
-          if (value[end] === quoted) quoted = null;
-        } else if (value[end] === '"' || value[end] === "'")
-          quoted = value[end];
-        else if (value[end] === "(") depth++;
-        else if (value[end] === ")") depth--;
-        else if (value[end] === "," && depth === 1 && comma < 0) comma = end;
-      }
-      if (depth) throw new Error("Invalid CSS variable function");
-      const name = value.slice(at + 4, comma < 0 ? end - 1 : comma).trim();
-      let replacement =
-        seen.includes(name) || seen.length > 32
-          ? undefined
-          : variable(variables[name], variables, [...seen, name]);
-      if (replacement === undefined && comma >= 0)
-        replacement = variable(
-          value.slice(comma + 1, end - 1).trim(),
-          variables,
-          seen,
-        );
+      let replacement = lookup(name);
+      if (replacement === undefined && fallback !== undefined)
+        replacement = variable(fallback, lookup);
       if (replacement === undefined) return undefined;
       output += replacement;
       start = end;
@@ -253,12 +382,56 @@ export function createCSSCascade() {
           0,
         ]);
     }
-    const variables = { ...parent.variables };
-    for (const [name, item] of Object.entries(winners))
-      if (name.startsWith("--")) variables[name] = item.value;
-    const computedVariables = {};
-    for (const name of Object.keys(variables))
-      computedVariables[name] = variable(variables[name], variables, [name]);
+    const variables = {},
+      computedVariables = { ...parent.variables };
+    for (const [name, item] of Object.entries(winners)) {
+      if (!name.startsWith("--")) continue;
+      if (name.includes("\\"))
+        throw new Error(
+          "Escaped CSS custom-property names require a native token adapter",
+        );
+      const direct = keyword(item.value);
+      delete computedVariables[name];
+      if (direct === "inherit" || direct === "unset")
+        computedVariables[name] = parent.variables[name];
+      else if (direct === "initial") computedVariables[name] = undefined;
+      else if (direct === "revert" || direct === "revert-layer")
+        throw new Error(
+          `CSS custom property ${direct} requires a native cascade-origin adapter`,
+        );
+      else variables[name] = item.value;
+    }
+    const active = [],
+      cyclic = new Set();
+    function resolveVariable(name) {
+      if (Object.hasOwn(computedVariables, name))
+        return computedVariables[name];
+      const repeat = active.indexOf(name);
+      if (repeat >= 0) {
+        for (const member of active.slice(repeat)) cyclic.add(member);
+        return undefined;
+      }
+      if (!Object.hasOwn(variables, name)) return undefined;
+      if (active.length >= 32)
+        throw new Error(
+          "CSS variable resolution exceeds the supported depth of 32",
+        );
+      active.push(name);
+      let resolved;
+      try {
+        resolved = variable(variables[name], resolveVariable);
+      } finally {
+        active.pop();
+      }
+      if (cyclic.has(name)) resolved = undefined;
+      else if (keyword(resolved))
+        throw new Error(
+          "CSS-wide keywords produced by custom-property substitution require a native property-replacement adapter",
+        );
+      computedVariables[name] = resolved;
+      return resolved;
+    }
+    for (const name of Object.keys(variables)) resolveVariable(name);
     const values = {};
     for (const [name, value] of Object.entries(parent.values))
       if (
@@ -270,7 +443,7 @@ export function createCSSCascade() {
     const expanded = Object.create(null);
     for (const [name, item] of Object.entries(winners)) {
       if (name.startsWith("--")) continue;
-      const value = variable(item.value, computedVariables);
+      const value = variable(item.value, (name) => computedVariables[name]);
       if (value === undefined)
         throw new Error(
           `CSS variable in ${name} needs a valid value or fallback`,
