@@ -480,11 +480,16 @@ func flexFrames(children []*element, parent Style, content fyne.Size, origin fyn
 		if free >= 0 && len(children) > 0 {
 			extraGap = free / float64(len(children))
 			offset = extraGap / 2
+		} else if reverse {
+			// Chromium's supported LTR profile falls back to physical start.
+			offset = free
 		}
 	case "space-evenly":
 		if free >= 0 {
 			extraGap = free / float64(len(children)+1)
 			offset = extraGap
+		} else if reverse {
+			offset = free
 		}
 	}
 	frames := make([]flexFrame, len(children))

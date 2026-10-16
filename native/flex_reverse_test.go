@@ -137,27 +137,33 @@ func TestReverseFlexEmptySingleAndOverflowRemainFinite(t *testing.T) {
 	}
 }
 
-
 func TestReverseFlexNegativeFreeSpaceAndDistributedFallback(t *testing.T) {
- for _,direction:=range []string{"row-reverse","column-reverse"} {
-  for _,alignment:=range []struct{value string;first,second float32}{
-   {"flex-start",30,-30},{"flex-end",60,0},{"center",45,-15},{"start",60,0},{"end",30,-30},
-   {"space-between",30,-30},{"space-around",30,-30},{"space-evenly",30,-30},
-  } {
-   t.Run(direction+"/"+alignment.value,func(t *testing.T){
-    a,b:=flexTestItem("a",40),flexTestItem("b",50)
-    a.Style.Flex.Shrink,b.Style.Flex.Shrink=FlexValue(0),FlexValue(0)
-    root:=flexTestRoot(70,a,b)
-    root.Style.Direction,root.Style.Gap,root.Style.Flex.JustifyContent=direction,10,alignment.value
-    v:=NewView(func()[]Node{return []Node{root}})
-    v.Resize(fyne.NewSize(70,70))
-    if err:=v.Error();err!=nil{t.Fatal(err)}
-    if direction=="row-reverse" {
-     flexTestFrame(t,v,"a",alignment.first,0,40,70);flexTestFrame(t,v,"b",alignment.second,0,50,70)
-    } else {
-     flexTestFrame(t,v,"a",0,alignment.first,70,40);flexTestFrame(t,v,"b",0,alignment.second,70,50)
-    }
-   })
-  }
- }
+	for _, direction := range []string{"row-reverse", "column-reverse"} {
+		for _, alignment := range []struct {
+			value         string
+			first, second float32
+		}{
+			{"flex-start", 30, -30}, {"flex-end", 60, 0}, {"center", 45, -15}, {"start", 60, 0}, {"end", 30, -30},
+			{"space-between", 30, -30}, {"space-around", 60, 0}, {"space-evenly", 60, 0},
+		} {
+			t.Run(direction+"/"+alignment.value, func(t *testing.T) {
+				a, b := flexTestItem("a", 40), flexTestItem("b", 50)
+				a.Style.Flex.Shrink, b.Style.Flex.Shrink = FlexValue(0), FlexValue(0)
+				root := flexTestRoot(70, a, b)
+				root.Style.Direction, root.Style.Gap, root.Style.Flex.JustifyContent = direction, 10, alignment.value
+				v := NewView(func() []Node { return []Node{root} })
+				v.Resize(fyne.NewSize(70, 70))
+				if err := v.Error(); err != nil {
+					t.Fatal(err)
+				}
+				if direction == "row-reverse" {
+					flexTestFrame(t, v, "a", alignment.first, 0, 40, 70)
+					flexTestFrame(t, v, "b", alignment.second, 0, 50, 70)
+				} else {
+					flexTestFrame(t, v, "a", 0, alignment.first, 70, 40)
+					flexTestFrame(t, v, "b", 0, alignment.second, 70, 50)
+				}
+			})
+		}
+	}
 }

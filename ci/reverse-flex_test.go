@@ -82,11 +82,18 @@ func TestReverseFlexSourceAndReconstructedSceneUseRealObjects(t *testing.T) {
 	if scenario.Schema != 1 || len(scenario.Cases) != 6 || len(scenario.IDs) < 50 || len(scenario.Buttons) != 3 {
 		t.Fatal("missing explicit reverse-flex scenario")
 	}
-	expectedCases := []reverseCase{{"01-224",224,2400,1},{"02-368",368,2400,1},{"03-512",512,2400,1},{"04-368",368,2400,1},{"05-224",224,2400,1},{"06-224-scale2",224,2400,2}}
- if !reflect.DeepEqual(scenario.Cases,expectedCases) || !reflect.DeepEqual(scenario.Buttons,[]string{"action-a","action-b","action-c"}) || !reflect.DeepEqual(scenario.ExpectedPointerActions,[]string{"action-c","action-b","action-a"}) || !reflect.DeepEqual(scenario.ExpectedFocusOrder,[]string{"action-a","action-b","action-c"}) {t.Fatal("reverse-flex cases or fixed action outcomes differ")}
- seenCases:=map[string]bool{}
- for _,item:=range scenario.Cases {if seenCases[item.Name] {t.Fatal("duplicate reverse-flex case")};seenCases[item.Name]=true}
- scenarioHash := reverseHash(data)
+	expectedCases := []reverseCase{{"01-224", 224, 2400, 1}, {"02-368", 368, 2400, 1}, {"03-512", 512, 2400, 1}, {"04-368", 368, 2400, 1}, {"05-224", 224, 2400, 1}, {"06-224-scale2", 224, 2400, 2}}
+	if !reflect.DeepEqual(scenario.Cases, expectedCases) || !reflect.DeepEqual(scenario.Buttons, []string{"action-a", "action-b", "action-c"}) || !reflect.DeepEqual(scenario.ExpectedPointerActions, []string{"action-c", "action-b", "action-a"}) || !reflect.DeepEqual(scenario.ExpectedFocusOrder, []string{"action-a", "action-b", "action-c"}) {
+		t.Fatal("reverse-flex cases or fixed action outcomes differ")
+	}
+	seenCases := map[string]bool{}
+	for _, item := range scenario.Cases {
+		if seenCases[item.Name] {
+			t.Fatal("duplicate reverse-flex case")
+		}
+		seenCases[item.Name] = true
+	}
+	scenarioHash := reverseHash(data)
 	sourceHash := os.Getenv("ASTRO_FYNE_REVERSE_FLEX_SOURCE_HASH")
 	if len(sourceHash) != 64 || sourceHash != reverseProbeSourceHash {
 		t.Fatal("source widget and scenario analysis differ")

@@ -18,13 +18,19 @@ The native Go API distinguishes logical `start`/`end` from flex-relative
 `flex-start`/`flex-end`. The compiler and portable scenes retain their existing
 six justify choices: the flex pair, center, between, around and evenly.
 
+For overflowing `space-around` and `space-evenly` groups, the native engine
+matches the observed LTR, horizontal, no-wrap Chromium profile: the group falls
+back to physical start. This also follows the pinned Chromium 153
+[physical-offset implementation](https://github.com/chromium/chromium/blob/153.0.8010.12/third_party/blink/renderer/core/layout/flex/flex_layout_algorithm.cc#L1648).
+It does not establish behavior for unsupported writing modes.
+
 `reverse.Export` with `PreserveLayout: true` retains these declarations in schema 2. Astro and reconstructed native widgets resize from that same document without
 new measurements. A default schema-1 export freezes the actual current positions.
 
 The `reverse-flex conformance` workflow runs `bash ci/reverse-flex.sh` remotely.
 Its one original source fixture covers both directions, all six justify choices,
 weighted growth/shrinkage, partial growth, decoration floors, asymmetric padding,
-uniform borders and nested reverse layouts. One widget and one schema-2 document
+uniform borders, negative free space and nested reverse layouts. One widget and one schema-2 document
 resize through five widths/returns and a DPR-2 frame. The gate requires 18 exact
 full-frame comparisons: original Chromium/native, native/inverse Astro, and
 native/reconstructed native for each of six frames. Geometry's existing 1/64 CSS
