@@ -309,7 +309,7 @@ func TestResponsiveFlexRejectsUnsupportedDeclarationsWithoutMutatingLastFrame(t 
 			root.Children[0].Style.Flex.WidthSet = true
 			root.Children[0].Style.Flex.WidthPercent = FlexValue(100)
 		}},
-		{"reverse direction", func(root *Node) { root.Style.Direction = "row-reverse" }},
+		{"unknown direction", func(root *Node) { root.Style.Direction = "diagonal" }},
 		{"baseline alignment", func(root *Node) { root.Style.Flex.AlignItems = "baseline" }},
 		{"content box", func(root *Node) { root.Style.Flex.BoxSizing = "content-box" }},
 		{"indefinite root height", func(root *Node) { root.Style.Flex.HeightSet = false }},

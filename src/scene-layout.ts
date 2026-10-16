@@ -102,7 +102,9 @@ export function validateResponsiveScene(document: SceneDocument): void {
       );
     if (
       !["", "block", "flex"].includes(s.display) ||
-      !["", "row", "column"].includes(s.direction)
+      !["", "row", "column", "row-reverse", "column-reverse"].includes(
+        s.direction,
+      )
     )
       fail(path, "unsupported responsive display or direction");
     if (
@@ -159,7 +161,7 @@ export function validateResponsiveScene(document: SceneDocument): void {
     } else {
       if (f.basis === undefined || f.minWidth !== 0 || f.minHeight !== 0)
         fail(path, "each item requires a pixel basis and explicit zero minima");
-      const row = parent.direction !== "column";
+      const row = !["column", "column-reverse"].includes(parent.direction);
       if (row ? f.widthPercent !== undefined : f.heightPercent !== undefined)
         fail(
           path,

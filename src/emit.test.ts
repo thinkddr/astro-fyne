@@ -742,7 +742,7 @@ test("responsive flex rejects unsupported units, intrinsic sizing and formatting
     "paddingLeft:'1rem'",
     "borderWidth:'1rem'",
     "flexWrap:'nowrap'",
-    "flexDirection:'row-reverse'",
+    "flexDirection:'diagonal'",
     "flex:1",
     "order:1",
     "justifyContent:'start'",
@@ -915,4 +915,23 @@ test("HTML forms require native submission behavior rather than a silent contain
     `export function Page({save}) { return <section><button type="button" onClick={()=>save()}>Save</button></section>; }`,
   );
   expect(emitGo(supported, options)).toContain('actions["save"]()');
+});
+
+test("responsive reverse directions retain declarations and source action order", async () => {
+  for (const direction of ["row-reverse", "column-reverse"]) {
+    const source =
+      await program(`export function Page({observe}) { return <div id="root" style={{display:'flex',flexDirection:'${direction}',width:'100%',height:100,boxSizing:'border-box'}}>
+      <div id="first" style={{flexBasis:20,minWidth:0,minHeight:0,boxSizing:'border-box'}}/>
+      <div id="second" style={{flexBasis:30,minWidth:0,minHeight:0,boxSizing:'border-box'}}/>
+    </div>; }`);
+    const go = emitGo(source, options);
+    expect(go).toContain(`Direction: "${direction}"`);
+    expect(go.indexOf('ID: "first"')).toBeLessThan(go.indexOf('ID: "second"'));
+  }
+  const legacy = await program(
+    `export function Page(){return <div id="legacy" style={{flexDirection:'row-reverse'}}/>;}`,
+  );
+  expect(() => emitGo(legacy, options)).toThrow(
+    "supported responsive reverse direction",
+  );
 });

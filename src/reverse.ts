@@ -246,7 +246,7 @@ function style(value: unknown, path: string): SceneStyle {
   if (result.fontWeight > 1000 || !Number.isInteger(result.fontWeight))
     fail(`${path}.fontWeight`, "expected integer 0..1000");
   const enums: Record<string, string[]> = {
-    direction: ["", "row", "column"],
+    direction: ["", "row", "column", "row-reverse", "column-reverse"],
     fontStyle: ["", "normal", "italic"],
     textAlign: ["", "left", "start", "center", "right", "end"],
     whiteSpace: ["", "normal", "nowrap"],

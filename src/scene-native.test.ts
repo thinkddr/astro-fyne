@@ -321,3 +321,35 @@ test("native scene CLI rejects incomplete or mixed inputs without creating outpu
     emitNativeScene(scene(), { name: "Scene", packageName: "var" }),
   ).toThrow("keyword");
 });
+
+test("reverse responsive scene directions survive both generators and keep column cross sizes", async () => {
+  for (const direction of ["row-reverse", "column-reverse"]) {
+    const document = responsive();
+    document.roots[0]!.style.direction = direction;
+    document.roots[0]!.sourceStyle!.direction = direction;
+    const child = document.roots[0]!.children[0]!;
+    if (direction === "column-reverse") {
+      child.sourceStyle!.flex.widthPercent = 100;
+      child.sourceStyle!.flex.widthSet = true;
+    }
+    const native = emitNativeScene(document, nativeOptions);
+    expect(native.code).toContain(`Direction:"${direction}"`);
+    const web = emitWebScene(document, { name: "Reverse" });
+    expect(web.preact).toContain(direction);
+    const entry = join(directory, `Reverse-${direction}.tsx`);
+    await writeFile(entry, web.preact);
+    const compiled = await compile(entry);
+    expect(
+      emitGo(compiled, { name: "Recompiled", packageName: "generated" }),
+    ).toContain(`Direction: "${direction}"`);
+    if (direction === "column-reverse") {
+      delete child.sourceStyle!.flex.widthPercent;
+      delete child.sourceStyle!.flex.widthSet;
+      child.sourceStyle!.flex.heightPercent = 100;
+      child.sourceStyle!.flex.heightSet = true;
+      expect(() => emitWebScene(document, { name: "Invalid" })).toThrow(
+        "cross axis",
+      );
+    }
+  }
+});
