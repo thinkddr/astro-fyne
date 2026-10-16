@@ -8,6 +8,7 @@ import {
   useLayoutEffect,
   useImperativeHandle,
 } from "preact/hooks";
+import { ManagedJavascriptDOM } from "./javascript-managed-dom.ts";
 import type {
   JavascriptActions,
   JavascriptAPI,
@@ -24,8 +25,6 @@ export interface JavascriptProps {
   ref?: Ref<JavascriptHandle>;
 }
 const emptyActions: JavascriptActions = {};
-const asciiLower = (value: string) =>
-  value.replace(/[A-Z]/g, (character) => character.toLowerCase());
 
 /** Render the same Preact program's native DOM representation in an Astro island. */
 export function createJavascriptComponent(
@@ -41,7 +40,8 @@ export function createJavascriptComponent(
       mounted: boolean;
       dirty: boolean;
       error?: unknown;
-      refs: Map<string, HTMLElement>;
+      dom?: ManagedJavascriptDOM;
+      generation: number;
     }>();
     if (!context.current) {
       const actions = input.actions ?? emptyActions;
@@ -68,7 +68,7 @@ export function createJavascriptComponent(
         actions,
         mounted: false,
         dirty: false,
-        refs: new Map(),
+        generation: 0,
       };
     }
     const ctx = context.current;
@@ -77,13 +77,25 @@ export function createJavascriptComponent(
         "JavaScript action bindings must stay stable; remount to replace them",
       );
     const [frames, setFrames] = useState(() => ctx.api.snapshot());
+    const wrapper = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
-      ctx.dirty = false;
-      ctx.mounted = true;
+      const generation = ctx.generation;
+      try {
+        if (!wrapper.current) throw new Error("Missing JavaScript DOM wrapper");
+        ctx.dom ??= new ManagedJavascriptDOM(wrapper.current, dispatch);
+        ctx.dom.commit(frames);
+        ctx.dirty = ctx.generation !== generation;
+        ctx.mounted = true;
+      } catch (error) {
+        ctx.error = error;
+        ctx.mounted = false;
+        throw error;
+      }
     });
     useLayoutEffect(
       () => () => {
         ctx.mounted = false;
+        ctx.dom?.dispose();
         ctx.api.dispose();
       },
       [],
@@ -102,7 +114,9 @@ export function createJavascriptComponent(
           );
         const check = (frames: JavascriptFrame[]) => {
           for (const frame of frames) {
-            const element = ctx.refs.get(frame.uid);
+            const element = ctx.dom?.element(frame.uid);
+            if (frame.tag !== "#text" && !element)
+              throw new Error("Missing committed JavaScript DOM element");
             if (
               element instanceof HTMLInputElement &&
               element.type === "checkbox" &&
@@ -125,14 +139,15 @@ export function createJavascriptComponent(
       },
     }));
     const dispatch = (
-      frame: JavascriptFrame,
+      uid: string,
       type: "click" | "input" | "change",
       value?: string,
     ) => {
       ctx.dirty = true;
+      ctx.generation++;
       try {
         const prevented = ctx.api.dispatch({
-          node: frame.uid,
+          node: uid,
           type,
           ...(value === undefined ? {} : { value }),
         });
@@ -144,70 +159,7 @@ export function createJavascriptComponent(
         throw error;
       }
     };
-    const render = (frame: JavascriptFrame): any => {
-      if (frame.tag === "#text") return frame.text;
-      const props: Record<string, any> = {
-        ...frame.attrs,
-        style: frame.style,
-        key: frame.uid,
-        "data-afy-js": frame.uid,
-        ref: (element: HTMLElement | null) => {
-          if (element) {
-            if (element instanceof HTMLInputElement) {
-              const value = frame.attrs?.value;
-              if (value === undefined) element.removeAttribute("value");
-              else if (element.getAttribute("value") !== value)
-                element.setAttribute("value", value);
-              if (element.value !== frame.value)
-                element.value = frame.value ?? "";
-            }
-            ctx.refs.set(frame.uid, element);
-          } else ctx.refs.delete(frame.uid);
-        },
-      };
-      if (frame.tag === "button" || frame.tag === "a")
-        props.onClick = (event: Event) => {
-          event.preventDefault();
-          dispatch(frame, "click");
-        };
-      if (frame.tag === "input" || frame.tag === "textarea") {
-        props.value = frame.value;
-        props.disabled = frame.disabled;
-        if (
-          frame.tag === "input" &&
-          asciiLower(frame.attrs?.type ?? "text") === "checkbox"
-        ) {
-          props.checked = frame.checked;
-          props.onClick = (event: Event) => {
-            if (dispatch(frame, "click") === true) event.preventDefault();
-          };
-        } else {
-          props.onInput = (event: Event) =>
-            dispatch(
-              frame,
-              "input",
-              (event.currentTarget as HTMLInputElement).value,
-            );
-          props.onChange = (event: Event) =>
-            dispatch(
-              frame,
-              "change",
-              (event.currentTarget as HTMLInputElement).value,
-            );
-        }
-      } else if (frame.tag === "label" && frame.attrs?.for) {
-        props.onClick = (event: Event) => {
-          event.preventDefault();
-          dispatch(frame, "click");
-        };
-      } else if (frame.tag === "button") props.disabled = frame.disabled;
-      return h(frame.tag, props, ...(frame.children ?? []).map(render));
-    };
-    return h(
-      "div",
-      { "data-afy-javascript": archive.codeHash },
-      ...frames.map(render),
-    );
+    return h("div", { "data-afy-javascript": archive.codeHash, ref: wrapper });
   }
   return class JavascriptProgramComponent
     extends Component<JavascriptProps>
