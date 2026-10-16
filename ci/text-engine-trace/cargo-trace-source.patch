@@ -1,0 +1,18 @@
+--- a/build.rs
++++ b/build.rs
+@@ -8,0 +9,3 @@
++    println!("cargo:rerun-if-env-changed=ATF_SCALER_TRACE_SOURCE");
++    let trace_source = std::env::var_os("ATF_SCALER_TRACE_SOURCE")
++        .map(std::path::PathBuf::from);
+@@ -14,0 +18,4 @@
++    if let Some(source) = &trace_source {
++        assert!(source.is_absolute() && source.is_file());
++        build.define("ATF_DIAGNOSTIC_SCALER_TRACE", None);
++    }
+@@ -20 +27,5 @@
+-        let source = root.join(source);
++        let source = if source == "src/ports/SkTypeface_fontations.cpp" {
++            trace_source.clone().unwrap_or_else(|| root.join(source))
++        } else {
++            root.join(source)
++        };

@@ -1,0 +1,68 @@
+--- a/src/ports/SkTypeface_fontations.cpp
++++ b/src/ports/SkTypeface_fontations.cpp
+@@ -25,0 +26 @@
++#include <cstdio>
+@@ -29,0 +31,21 @@
++
++#if defined(ATF_DIAGNOSTIC_SCALER_TRACE)
++// Passive diagnostics only: no changes to scaler requests, branches or pixels.
++void atf_trace_record(const char* stage, const void* identity,
++                      const SkScalerContextRec& rec) {
++    const SkString record = rec.dump();
++    std::fprintf(stderr, "ATF_SCALER stage=%s identity=%p hinting=%u\n%s",
++                 stage, identity, static_cast<unsigned>(rec.getHinting()), record.c_str());
++    std::fflush(stderr);
++}
++#define ATF_TRACE_RECORD(stage, identity, rec) atf_trace_record(stage, identity, rec)
++#define ATF_TRACE_BRANCH(branch) \
++    do { \
++        std::fprintf(stderr, "ATF_SCALER stage=hint-branch identity=%p branch=%s\n", \
++                     static_cast<const void*>(this), branch); \
++        std::fflush(stderr); \
++    } while (false)
++#else
++#define ATF_TRACE_RECORD(stage, identity, rec) ((void)0)
++#define ATF_TRACE_BRANCH(branch) ((void)0)
++#endif
+@@ -310,0 +333 @@
++    ATF_TRACE_RECORD("filter-before", this, *rec);
+@@ -330,0 +354 @@
++    ATF_TRACE_RECORD("filter-after", this, *rec);
+@@ -393,0 +418 @@
++            ATF_TRACE_BRANCH("hinting-reliant-mono");
+@@ -399,0 +425 @@
++                    ATF_TRACE_BRANCH("bw-unhinted");
+@@ -402,0 +429 @@
++                    ATF_TRACE_BRANCH("bw-mono");
+@@ -409,0 +437 @@
++                        ATF_TRACE_BRANCH("unhinted");
+@@ -413,0 +442 @@
++                        ATF_TRACE_BRANCH("slight");
+@@ -431,0 +461 @@
++                        ATF_TRACE_BRANCH("normal");
+@@ -443,0 +474 @@
++                        ATF_TRACE_BRANCH("full-lcd");
+@@ -458,0 +490,11 @@
++#if defined(ATF_DIAGNOSTIC_SCALER_TRACE)
++        ATF_TRACE_RECORD("context-ready", this, fRec);
++        std::fprintf(stderr,
++                     "ATF_SCALER stage=context-details identity=%p scaleX=%a scaleY=%a "
++                     "linearMetrics=%u autoHintControl=%u preBlendApplicable=%u\n",
++                     static_cast<const void*>(this), static_cast<double>(fScale.x()),
++                     static_cast<double>(fScale.y()), static_cast<unsigned>(fDoLinearMetrics),
++                     static_cast<unsigned>(autoHintingControl),
++                     static_cast<unsigned>(fPreBlend.isApplicable()));
++        std::fflush(stderr);
++#endif
+@@ -802,0 +845,11 @@
++#if defined(ATF_DIAGNOSTIC_SCALER_TRACE)
++        std::fprintf(stderr,
++                     "ATF_SCALER stage=generate-image identity=%p glyph=%u mask=%u "
++                     "sourceFormat=%u width=%d height=%d rowBytes=%zu subXFixed=%d subYFixed=%d\n",
++                     static_cast<const void*>(this), static_cast<unsigned>(glyph.getGlyphID()),
++                     static_cast<unsigned>(glyph.maskFormat()),
++                     static_cast<unsigned>(glyph.extraBits()), glyph.width(), glyph.height(),
++                     glyph.rowBytes(), static_cast<int>(glyph.getSubXFixed()),
++                     static_cast<int>(glyph.getSubYFixed()));
++        std::fflush(stderr);
++#endif

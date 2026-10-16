@@ -1,0 +1,184 @@
+{
+  "schema": 1,
+  "diagnosticOnly": true,
+  "built": false,
+  "executed": false,
+  "pixelPerfectVerified": false,
+  "browserEffectivePolicyVerified": false,
+  "baseCommit": "13a8317e59cb5ef4e4995629c787bc711cf8df8d",
+  "proposalManifestHash": "12470fc042f5cdb54ef8c4b18d839fb92017c23f11746b78e181ef9aedc20705",
+  "skiaRevision": "9d07e5bad9e3e21da2426946e589daa647218271",
+  "chromiumRevision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+  "fontationsSource": {
+    "path": "src/ports/SkTypeface_fontations.cpp",
+    "gitBlob": "e6350ec809d8a29ecf09a639e9a7ba5e78b6f227",
+    "sha256": "3291a320dbfee6f772837cc1b625782c90bc37a09fc94311db2284cce74fedca"
+  },
+  "files": {
+    "LICENSE-Skia.txt": {
+      "sha256": "5f787c1dee3c56547f09ccc2906ab5f5293c4d8dd6c8654e573216c38e908dbd",
+      "length": 1507
+    },
+    "SkTypeface_fontations.cpp.instrumented": {
+      "sha256": "c0e09ce5d4c580ed40c6068cf960a396c6aff985ba99b164e25b777c80105e40",
+      "length": 81136
+    },
+    "SkTypeface_fontations.cpp.original": {
+      "sha256": "3291a320dbfee6f772837cc1b625782c90bc37a09fc94311db2284cce74fedca",
+      "length": 78392
+    },
+    "build.rs.instrumented": {
+      "sha256": "a8fbed4f31f3c3f6da7423f656583992cba8fa2b9cfba571eb964940afaca6be",
+      "length": 1719
+    },
+    "build.rs.original": {
+      "sha256": "e2fd05c56c7033b30442d78266ae8e3e6bb83941671709d0789e0fb7b5e76bcc",
+      "length": 1216
+    },
+    "cargo-trace-source.patch": {
+      "sha256": "70af4e4a7100238489c67cf528b4d334310b86109c6012757119fcfbad3055e0",
+      "length": 676
+    },
+    "driver-stage-labels.patch": {
+      "sha256": "6c6ea9919e9eba096fd7f728c381d59515f4580b4d35ccb053332cbeecdd537b",
+      "length": 954
+    },
+    "driver.py.instrumented": {
+      "sha256": "220e6799486a9c7bf80b90c0e1450ce3e54a03a8ff10cb1dcd420dc168582cd1",
+      "length": 11274
+    },
+    "driver.py.original": {
+      "sha256": "edb27e101d31f06da90c2cf4cc5a617036b1e7b67263e88b86da3c9ccff46f27",
+      "length": 10576
+    },
+    "fontations-passive-trace.patch": {
+      "sha256": "889d42250d73fd82b7e54af47939d772bec690306961977e46755b9c67f03e49",
+      "length": 3120
+    }
+  },
+  "controlInputs": {
+    "capture/browser-provenance-validation.ts": {
+      "sha256": "e77044af6e69453f6627e21b82f7997ac263e6396c3060ebc1ea2a03be410729",
+      "length": 8297
+    },
+    "capture/browser-provenance.ts": {
+      "sha256": "94770b7150696882a8d3f154c0ef03cf90a410c2e299e273414e9971e94087d0",
+      "length": 5891
+    },
+    "capture/typography-probe.ts": {
+      "sha256": "65a1c920eeef3a189b6377e897ae358f408bb6d87a2e60beb9d1e68981f6e285",
+      "length": 7417
+    },
+    "capture/typography.ts": {
+      "sha256": "12812815efa4aee5182fd2a3b968fd861de4e5417f67d6ba71d03f76bc2e88f9",
+      "length": 23094
+    },
+    "ci/text-engine-probe/Cargo.lock": {
+      "sha256": "7b4f8f8ae78aab9edf28cadbdd6a51c34704fe9b8124ce46b1fb02790336e801",
+      "length": 8377
+    },
+    "ci/text-engine-probe/Cargo.toml": {
+      "sha256": "b3e69167a0278e274207fee206acc322ae5cc961f979a6da856e438f1602187f",
+      "length": 1073
+    },
+    "ci/text-engine-probe/README.md": {
+      "sha256": "f642afa9ed5f66f727f6f10f80feddb20e7ae4c042fc5a682fe513b0055186ad",
+      "length": 15358
+    },
+    "ci/text-engine-probe/build-remote.sh": {
+      "sha256": "1f86bc7ab6f1c4b71d03ef69c31d969d027964b09816d160fe4d6aa243a5a052",
+      "length": 4999
+    },
+    "ci/text-engine-probe/build.rs": {
+      "sha256": "e2fd05c56c7033b30442d78266ae8e3e6bb83941671709d0789e0fb7b5e76bcc",
+      "length": 1216
+    },
+    "ci/text-engine-probe/collect-notices.py": {
+      "sha256": "8314a601b768f6d2a01ec3568d89c1b970378abd1cb0cac43cc3ee2b35294c41",
+      "length": 7944
+    },
+    "ci/text-engine-probe/compare.py": {
+      "sha256": "7db4ea47ed020735e985d28c5c86203b012a40d323213af65c71f0a6fb5e5299",
+      "length": 4826
+    },
+    "ci/text-engine-probe/driver.py": {
+      "sha256": "edb27e101d31f06da90c2cf4cc5a617036b1e7b67263e88b86da3c9ccff46f27",
+      "length": 10576
+    },
+    "ci/text-engine-probe/font-policy-source-pin.json": {
+      "sha256": "ae5722683be85090f1483d9a3c73a3d2b51fcdfd9e583254f513685097841a1d",
+      "length": 2539
+    },
+    "ci/text-engine-probe/gn.args": {
+      "sha256": "4b27e6581e32542913bea0914c33343cacc544ee45dd73d879d378a0558aa57b",
+      "length": 768
+    },
+    "ci/text-engine-probe/observe-fontconfig.py": {
+      "sha256": "fa5d649b1134e91466f2c19cbeb502e4b33d84a4aafdcfebb9569e662072ee90",
+      "length": 10153
+    },
+    "ci/text-engine-probe/policy.json": {
+      "sha256": "292572e56ef616470aba68e77e63effcc9055c7ba4371751e56ccbb600d1999f",
+      "length": 593
+    },
+    "ci/text-engine-probe/probe-pin.json": {
+      "sha256": "d98eecd3582fdf352690e1c1af9417cbd3c94996d2d0d6372b852c58984ceff1",
+      "length": 416
+    },
+    "ci/text-engine-probe/resolve.py": {
+      "sha256": "f1489c7e57c14f1df4c0fa1748fd8850746e01127d5c4712bc720b1ff2c2b21b",
+      "length": 9365
+    },
+    "ci/text-engine-probe/text_engine.cc": {
+      "sha256": "2834c0a627984d33fbcdfb383ec136786552830adca4491516198ca05c9cb477",
+      "length": 13820
+    },
+    "ci/text-engine-probe/text_engine.h": {
+      "sha256": "16d96eef81990e8afde74bb6b0c004f7742b436cafdba16a20ec77ad5b0b5a28",
+      "length": 2401
+    },
+    "ci/text-engine-probe/validate-browser.ts": {
+      "sha256": "2a724fce84f65ea36daecd0d57191177b8f37850cd492dd0f7296413d5b50918",
+      "length": 1181
+    },
+    "example/public/fonts/LICENSE-NotoSans.txt": {
+      "sha256": "66cf61bbd6c7818d08d8e61b186d48f01eecf212e32395235e758511da01a232",
+      "length": 4207
+    },
+    "example/public/fonts/NotoSans-Regular.ttf": {
+      "sha256": "6b04c8dd65af6b73eb4279472ed1580b29102d6496a377340e80a40cdb3b22c9",
+      "length": 455188
+    },
+    "example/src/pages/typography-probe.astro": {
+      "sha256": "42777f331df92528b31ac3d36f4cefb07dfd923f3fab54331715ca0d9f3c8872",
+      "length": 2589
+    },
+    "native/go.mod": {
+      "sha256": "9aa6cd160249f406eec5113c05eff334dc46872d190677abdd93e4404f256ac7",
+      "length": 1657
+    },
+    "native/go.sum": {
+      "sha256": "822d7d7c858fa67b0f2ad94d88f6b5fc1d34a4e4e02dbec232e5b4bbe95971cd",
+      "length": 6751
+    },
+    "typography-probe.json": {
+      "sha256": "7c6617f06b6e180160f02514bd33f60760872942c98775a9c17a600eb62acdc8",
+      "length": 1499
+    }
+  },
+  "originalProposalPatches": {
+    "fontations-passive-trace.patch": {
+      "sha256": "f3150fd909f7306877b2b38554feec8b5479cd68813ab2c04ca2b5a91ff1b51b",
+      "length": 6921
+    },
+    "cargo-trace-source.patch": {
+      "sha256": "692971fdf0cfffbdc62e65538e8b2b3928a74a38460dfd247f54f149ef241339",
+      "length": 1637
+    },
+    "driver-stage-labels.patch": {
+      "sha256": "6c6729face133b2c8600938b13063bc41cd37c59179c550b7c478b48ba6a5389",
+      "length": 2621
+    }
+  },
+  "patchRepresentation": "Zero-context unified diffs; exact original/instrumented source hashes are unchanged. This avoids space-only context lines in distributed patch files."
+}

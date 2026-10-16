@@ -1,0 +1,13 @@
+--- a/driver.py
++++ b/driver.py
+@@ -5 +5 @@
+-import argparse, ctypes as C, hashlib, json, pathlib, struct, zlib
++import argparse, ctypes as C, hashlib, json, pathlib, struct, sys, zlib
+@@ -116,0 +117 @@
++            print("ATF_DRIVER " + json.dumps({"stage": "shape-before", "sample": sample["id"], "fontSize": sample.get("fontSize", probe["font"]["size"])}, separators=(",", ":")), file=sys.stderr, flush=True)
+@@ -117,0 +119 @@
++            print("ATF_DRIVER " + json.dumps({"stage": "shape-after", "sample": sample["id"]}, separators=(",", ":")), file=sys.stderr, flush=True)
+@@ -133,0 +136 @@
++                print("ATF_DRIVER " + json.dumps({"stage": "paint-before", "sample": sample["id"], "scale": scale}, separators=(",", ":")), file=sys.stderr, flush=True)
+@@ -134,0 +138 @@
++                print("ATF_DRIVER " + json.dumps({"stage": "paint-after", "sample": sample["id"], "scale": scale}, separators=(",", ":")), file=sys.stderr, flush=True)
