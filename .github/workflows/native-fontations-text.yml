@@ -206,6 +206,11 @@ jobs:
             ${{ runner.temp }}/native-text/font-policy-source
             ${{ runner.temp }}/native-text/notices
             ci/text-engine-probe
+            native/backend.go
+            native/controls.go
+            native/responsive_text.go
+            native/editor_line_style_test.go
+            native/editor_text_placement_test.go
             capture/controls-diagnostic-contract.ts
             capture/controls-diagnostic-source-pin.json
             capture/responsive-controls-diagnostic.ts
