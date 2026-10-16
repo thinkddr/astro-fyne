@@ -1,0 +1,100 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright 2026 Fyne contributors.
+// Distributed under the BSD 3-Clause license in LICENSE-Fyne.txt.
+
+package software
+
+import (
+	"image"
+	"image/color"
+	"testing"
+)
+
+func TestSkiaLegacyCandidateOddCenters(t *testing.T) {
+	source := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+	source.SetNRGBA(0, 0, color.NRGBA{R: 1, G: 1, B: 1, A: 255})
+	source.SetNRGBA(1, 0, color.NRGBA{R: 3, G: 3, B: 3, A: 255})
+	for _, item := range []struct {
+		factor int
+		want []uint8
+	}{
+		{2, []uint8{1, 1, 2, 3}},
+		{4, []uint8{1, 1, 1, 1, 2, 2, 3, 3}},
+	} {
+		actual, ok := skiaLegacyEnlargement(source, 2*item.factor, item.factor)
+		if !ok {
+			t.Fatalf("declined factor %d", item.factor)
+		}
+		for y := 0; y < item.factor; y++ {
+			for x, level := range item.want {
+				want := color.RGBA{R: level, G: level, B: level, A: 255}
+				if got := actual.RGBAAt(x, y); got != want {
+					t.Fatalf("factor %d pixel (%d,%d): got %v, want %v", item.factor, x, y, got, want)
+				}
+			}
+		}
+	}
+}
+
+func TestSkiaLegacyCandidateDefersRoundingUntilFourTapSum(t *testing.T) {
+	source := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	for i, level := range []uint8{1, 4, 5, 2} {
+		source.SetNRGBA(i%2, i/2, color.NRGBA{R: level, G: level, B: level, A: 255})
+	}
+	actual, ok := skiaLegacyEnlargement(source, 4, 4)
+	if !ok {
+		t.Fatal("declined the two-dimensional profile")
+	}
+	// At (1,1), the full sum is 2.375; flooring a horizontal pass first gives 1.
+	want := []uint8{1, 1, 3, 4, 2, 2, 3, 3, 4, 3, 2, 2, 5, 4, 2, 2}
+	for i, level := range want {
+		if got := actual.RGBAAt(i%4, i/4); got != (color.RGBA{R: level, G: level, B: level, A: 255}) {
+			t.Fatalf("pixel (%d,%d): got %v, want channel %d", i%4, i/4, got, level)
+		}
+	}
+}
+
+func TestSkiaLegacyCandidatePremultipliesBeforeFiltering(t *testing.T) {
+	source := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+	source.SetNRGBA(0, 0, color.NRGBA{R: 255, G: 127, B: 63, A: 0})
+	source.SetNRGBA(1, 0, color.NRGBA{R: 1, G: 3, B: 5, A: 255})
+	actual, ok := skiaLegacyEnlargement(source, 4, 2)
+	if !ok {
+		t.Fatal("declined RGBA8 source")
+	}
+	want := []color.RGBA{{}, {R: 0, G: 0, B: 1, A: 63}, {R: 0, G: 2, B: 3, A: 191}, {R: 1, G: 3, B: 5, A: 255}}
+	for x, pixel := range want {
+		if got := actual.RGBAAt(x, 0); got != pixel {
+			t.Fatalf("alpha sample %d: got %v, want %v", x, got, pixel)
+		}
+	}
+	for _, item := range []struct {
+		channel, alpha, want uint8
+	}{
+		{127, 1, 0}, {128, 1, 1}, {2, 127, 1}, {1, 128, 1},
+	} {
+		if got := skiaLegacyPremultiply8(item.channel, item.alpha); got != item.want {
+			t.Fatalf("premultiply %d/%d: got %d, want %d", item.channel, item.alpha, got, item.want)
+		}
+	}
+}
+
+func TestSkiaLegacyCandidateDeclinesUnsupportedProfiles(t *testing.T) {
+	opaque := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+	partialRGBA := image.NewRGBA(image.Rect(0, 0, 2, 1))
+	for _, item := range []struct {
+		source image.Image
+		width, height int
+	}{
+		{nil, 4, 2}, {(*image.NRGBA)(nil), 4, 2},
+		{opaque, 2, 1}, {opaque, 6, 3}, {opaque, 4, 1}, {opaque, 0, 0},
+		{opaque, 32768, 16384},
+		{partialRGBA, 4, 2},
+		{image.NewNRGBA(image.Rect(1, 0, 3, 1)), 4, 2},
+		{image.NewNRGBA64(image.Rect(0, 0, 2, 1)), 4, 2},
+	} {
+		if _, ok := skiaLegacyEnlargement(item.source, item.width, item.height); ok {
+			t.Fatalf("accepted unsupported %T at %dx%d", item.source, item.width, item.height)
+		}
+	}
+}

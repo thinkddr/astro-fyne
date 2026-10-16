@@ -1,8 +1,6 @@
 {
   "schema": 1,
   "candidateOnly": true,
-  "built": false,
-  "tested": false,
   "repository": "https://github.com/thinkddr/fyne",
   "ref": "v2.8.1-sytue.16",
   "path": "internal/painter/software/draw.go",
@@ -10,5 +8,7 @@
   "sourceSHA256": "cf3280e8a4fca973792bb60626756de426f3df648665e99400546cf38573215a",
   "candidateSHA256": "a14e3bb6b41ecdd5291a60c45131126eca6aa84d7f5c761268976390b03e6e2c",
   "patchSHA256": "f5068c6f94b94fdffc9624d16068c9090f71a4808b10e7729c213807b5fedd39",
-  "candidateGitBlob": "272d613bdb4077f79615b2d022e74a1cd13e6ba5"
+  "candidateGitBlob": "272d613bdb4077f79615b2d022e74a1cd13e6ba5",
+  "preparedWithoutLocalExecution": true,
+  "pixelParityCertified": false
 }

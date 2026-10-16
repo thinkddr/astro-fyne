@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 task_root="$(pwd)"
 task_variant="${1:-baseline}"
-case "$task_variant" in baseline|bilinear|skia-lowp) ;; *) echo 'Variant must be baseline, bilinear or skia-lowp' >&2; exit 2 ;; esac
+case "$task_variant" in baseline|bilinear|skia-lowp|skia-legacy) ;; *) echo 'Variant must be baseline, bilinear, skia-lowp or skia-legacy' >&2; exit 2 ;; esac
 task_evidence="$task_root/artifacts/image-enlargement/$task_variant"
 task_temporary="$(mktemp -d)"
 task_fork="$task_temporary/fyne"
@@ -67,7 +67,7 @@ test -n "$ASTRO_FYNE_IMAGE_ENLARGEMENT_ARTIFACTS"
 (
   cd ci/image-sampling
   sha256sum -c <<'PINS'
-7a27af6b6eb39a035ee59b7bbe268cfa4f620c8949e79fbf6d6edd1c76012d0c  source-pin.json
+fd00330ae58400a4e6d5800d8ded4c7d20f2c9bf10b20941a9961ffb4aaed8ce  source-pin.json
 f5068c6f94b94fdffc9624d16068c9090f71a4808b10e7729c213807b5fedd39  fyne-smooth-image-enlargement.patch
 36a152205bb9970a424b161ad1ee7cbe75ecebb3297f019fee245019745ff563  image_enlargement_test.go.proposed
 2945cc01783ce61c61e16c44da981c48911dbdcd36a12bdb4a08b1cf05adcf1b  skia_lowp_enlargement.go.proposed
@@ -75,6 +75,9 @@ cb76463dcb4f8eb6790def84f1c1227bfc07bfba143ba721e5691f725aa40bde  skia_lowp_enla
 713bbdcca92aac24ef0c5e7c7cf1b310bbc1da52f3269d18c2df3234e55a0ba7  fyne-skia-lowp-enlargement.patch
 af74a08a7a846262b696f5995ad84688b8e6ee24d73fd783b9a88877cf88f7ca  LICENSE-Fyne.txt
 5f787c1dee3c56547f09ccc2906ab5f5293c4d8dd6c8654e573216c38e908dbd  LICENSE-Skia.txt
+6860991446cf0a114e32f70cf6c65b9011701b8946164b3e77f7edfc7c84b74e  skia_legacy_enlargement.go.proposed
+db199a802d701312864255b01809733bb58013bc25b1025497e76b44af71daff  skia_legacy_enlargement_test.go.proposed
+c9d3dcf1043e4fc9daebaba28e4abd18c1d10db43c1b17db9f032e0b1a2972b4  fyne-skia-legacy-enlargement.patch
 PINS
 ) | tee "$task_evidence/proposal-pins.log"
 cp -R ci/image-sampling "$task_evidence/proposal"
@@ -97,6 +100,12 @@ if [[ "$task_variant" == skia-lowp ]]; then
   cp ci/image-sampling/skia_lowp_enlargement_test.go.proposed "$task_fork/internal/painter/software/skia_lowp_enlargement_test.go"
   (cd "$task_fork" && patch --batch --fuzz=0 -p1 < "$task_root/ci/image-sampling/fyne-skia-lowp-enlargement.patch")
   echo "4049e8e48c174a80c63cb42b99bd3855a0b7fa81efd776e0af361b760d319fb3  $task_draw" | sha256sum -c -
+fi
+if [[ "$task_variant" == skia-legacy ]]; then
+  cp ci/image-sampling/skia_legacy_enlargement.go.proposed "$task_fork/internal/painter/software/skia_legacy_enlargement.go"
+  cp ci/image-sampling/skia_legacy_enlargement_test.go.proposed "$task_fork/internal/painter/software/skia_legacy_enlargement_test.go"
+  (cd "$task_fork" && patch --batch --fuzz=0 -p1 < "$task_root/ci/image-sampling/fyne-skia-legacy-enlargement.patch")
+  echo "f469df07cb174f6e8718b8644e5f3c6867d299f3e3bc091352171a645ec7b165  $task_draw" | sha256sum -c -
 fi
 mkdir -p "$task_evidence/painter-before-format" "$task_evidence/painter"
 cp "$task_fork/internal/painter/software/"*.go "$task_evidence/painter-before-format/"
@@ -131,7 +140,7 @@ PY
 (cd "$task_fork" && env "GOFLAGS=-modfile=$task_temporary/probe.mod -mod=mod" go list -m golang.org/x/image) > "$task_evidence/probe-x-image-version.txt"
 grep -Fx 'golang.org/x/image v0.46.0' "$task_evidence/probe-x-image-version.txt"
 if [[ "$task_variant" != baseline ]]; then
-  (cd "$task_fork" && run_phase candidate-unit env "GOFLAGS=-modfile=$task_temporary/probe.mod -mod=mod" go test -race -count=1 -p=1 -run '^(TestPainterImageEnlargement|TestSkiaLowpCandidate)' ./internal/painter/software) || task_status=1
+  (cd "$task_fork" && run_phase candidate-unit env "GOFLAGS=-modfile=$task_temporary/probe.mod -mod=mod" go test -race -count=1 -p=1 -run '^(TestPainterImageEnlargement|TestSkiaLowpCandidate|TestSkiaLegacyCandidate)' ./internal/painter/software) || task_status=1
 fi
 
 bun install --frozen-lockfile --ignore-scripts

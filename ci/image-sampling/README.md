@@ -41,7 +41,8 @@ JPEG decoder differences and arbitrary color profiles also remain outside it.
 to `internal/painter/software/image_enlargement_test.go` in that temporary
 checkout. Its four opaque samples come from the pixel-center linear equation,
 not a captured browser image. It also exercises unchanged Pixels and Fastest.
-It has not been compiled or run.
+The first hosted run compiled these tests successfully; its strict browser
+comparisons still failed. See [the experiment evidence](../../docs/image-enlargement.md#first-hosted-result).
 
 ## Remote evidence required
 

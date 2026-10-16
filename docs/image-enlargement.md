@@ -2,7 +2,7 @@
 
 # Image enlargement experiment
 
-This hosted experiment compares the current Fyne painter with two isolated
+This hosted experiment compares the current Fyne painter with isolated
 enlargement candidates. It does not change the production Fyne dependency,
 publish a fork tag or establish general browser/native pixel parity.
 
@@ -40,6 +40,7 @@ From the repository root in the hosted Linux CI environment:
 bash ci/image-enlargement.sh baseline
 bash ci/image-enlargement.sh bilinear
 bash ci/image-enlargement.sh skia-lowp
+bash ci/image-enlargement.sh skia-legacy
 ```
 
 Use a separate clean job for each variant. The wrapper prepares the compiler,
@@ -50,7 +51,9 @@ startup or a requirement to build an unrelated application.
 In GitHub Actions, select **image-enlargement-experiment**, then **Run workflow**
 on the desired revision. Choose `all` (the default) or one named variant. The
 workflow is `.github/workflows/image-enlargement.yml`. It also runs for the dedicated
-experiment branch and matching pull-request paths. Matrix jobs run independently,
+experiment branch and matching pull-request paths, selecting the current
+`skia-legacy` candidate. A manual `all` run also retains the older candidates.
+Matrix jobs run independently,
 so one failed variant does not cancel the remaining captures.
 
 Download the `image-enlargement-<variant>-<revision>` artifact from the run.
@@ -69,7 +72,11 @@ The variants use isolated temporary Fyne source and a separate Go module file:
   RGBA8 sources, image alpha 1 and no rounded clipping. Other cases retain the
   bilinear candidate.
 
-The Skia-derived candidate is experimental. Chromium can select a different
+- `skia-legacy` tries the pinned Skia legacy Q4 linear sampler, with separate
+  floor quantization of premultiplied RGB and alpha. It uses the same bounded
+  physical factors and image types, without bypassing the existing image prepass.
+
+The Skia-derived candidates are experimental. Chromium can select a different
 CPU or GPU path, and matching kernel names does not establish identical channel
 rounding or alpha arithmetic. The job records resolved dependency/tool versions,
 source and patch identities instead of assuming the fork's declared transitive
@@ -100,3 +107,21 @@ This profile covers integer placement, opaque white composition and exact
 physical enlargement factors 2 and 4. It does not certify other scales, fractional
 origins, reduction, arbitrary backgrounds, JPEG/color profiles, rounded image
 clips, typography or universal CSS compatibility.
+
+## First hosted result
+
+[Run 38888890141](https://github.com/thinkddr/astro-fyne/actions/runs/38888890141)
+compared commit `856e00559d977a7d87f4dd0ce4071d8f85a618f0` on hosted ARM64.
+All generation, provenance, native race tests and candidate unit-test phases
+passed. All six comparisons per variant produced valid strict results.
+
+| Variant   | Different pixels, DPR 1 | Different pixels, DPR 2 | Largest channel error |
+| --------- | ----------------------: | ----------------------: | --------------------: |
+| Baseline  |                   2,797 |                  11,140 |                    52 |
+| Bilinear  |                   1,321 |                   6,333 |                     2 |
+| Skia lowp |                   1,460 |                   7,378 |                     1 |
+
+Forward and inverse comparisons had the same counts. Native scene reconstruction
+was exact at both DPRs for all three variants. Both candidates failed the
+zero-tolerance browser/native gate; neither is certified or adopted by this
+experiment. The artifacts retain every mismatch for further investigation.
