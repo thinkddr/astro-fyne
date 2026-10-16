@@ -30,6 +30,7 @@ export interface JavascriptArchive {
   code: string;
   codeHash: string;
   sources: { path: string; hash: string }[];
+  stylesheets?: { path: string; hash: string; text: string }[];
   props: Record<string, unknown>;
   actions: string[];
   events: JavascriptEvent[];

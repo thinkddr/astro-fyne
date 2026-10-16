@@ -14,9 +14,17 @@ export async function compileJavascriptCSS(
   file = resolve(file);
   if (stack.includes(file)) return []; // CSS import cycles do not re-enter a sheet.
   if (stack.length >= 32) throw new Error("CSS import depth exceeds 32");
-  const text = await readFile(file, "utf8");
-  if (Buffer.byteLength(text) > 16 * 1024 * 1024)
+  const bytes = await readFile(file);
+  if (bytes.length > 16 * 1024 * 1024)
     throw new Error("CSS source exceeds 16MiB");
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+      bytes,
+    );
+  } catch {
+    throw new Error(`CSS source requires UTF-8: ${file}`);
+  }
   record(file, text);
   let ast;
   try {

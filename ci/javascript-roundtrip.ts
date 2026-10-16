@@ -232,6 +232,19 @@ const initial = await bundleJavascript(
   astro ? [] : ["observe"],
 );
 await writeFile(join(evidence, "initial.json"), JSON.stringify(initial));
+for (const sheet of initial.stylesheets ?? [])
+  assert.equal(
+    await readFile(
+      resolve(
+        root,
+        astro ? "example/src/pages" : "example/src/components",
+        sheet.path,
+      ),
+      "utf8",
+    ),
+    sheet.text,
+    `Bundled CSS bytes changed: ${sheet.path}`,
+  );
 const rejectionCSSImport = `import ${JSON.stringify(join(root, "example/src/components/javascript-css.css"))};`;
 for (const [name, source, event, contains] of [
   [
@@ -2064,6 +2077,11 @@ await writeFile(
   JSON.stringify(nativeResult.archive),
 );
 await validateJavascriptArchive(nativeResult.archive);
+assert.deepEqual(
+  nativeResult.archive.stylesheets ?? [],
+  initial.stylesheets ?? [],
+  "Native export changed original stylesheet sources",
+);
 await generateJavascript({
   program: join(evidence, "native-program.json"),
   out: web,
@@ -2884,6 +2902,11 @@ try {
     JSON.stringify(exported),
   );
   await validateJavascriptArchive(exported);
+  assert.deepEqual(
+    exported.stylesheets ?? [],
+    initial.stylesheets ?? [],
+    "Browser export changed original stylesheet sources",
+  );
   assert.ok(exported.frame, "Browser archive is missing its current frame");
   await page.evaluate(() => window.afyJavascript.clear());
   const follow: JavascriptFrame[][] = [exported.frame];
@@ -3311,6 +3334,62 @@ const restored = JSON.parse(
     join(root, "native"),
   ),
 );
+assert.deepEqual(
+  restored.archive.stylesheets ?? [],
+  initial.stylesheets ?? [],
+  "Restored native export changed original stylesheet sources",
+);
+const cssFiles: { stage: string; path: string; file: string; hash: string }[] =
+  [];
+for (const [stage, output, name] of [
+  ["native", native, "JavascriptProbe"],
+  ["web", web, "JavascriptBrowser"],
+  ["restored-native", native, "RestoredJavascriptProbe"],
+] as const) {
+  if (!initial.stylesheets?.length) continue;
+  const manifest = JSON.parse(
+    await readFile(join(output, `${name}.css-sources.json`), "utf8"),
+  );
+  assert.equal(manifest.stylesheets.length, initial.stylesheets.length);
+  for (const [index, item] of manifest.stylesheets.entries()) {
+    const sheet = initial.stylesheets[index]!;
+    assert.deepEqual(
+      { path: item.path, hash: item.hash },
+      { path: sheet.path, hash: sheet.hash },
+    );
+    assert.match(
+      item.file,
+      new RegExp(`^${name}\\.css-sources/\\d{4}-[a-f0-9]{64}\\.css$`),
+    );
+    assert.deepEqual(
+      await readFile(join(output, item.file)),
+      Buffer.from(sheet.text),
+    );
+    const file = `css-sources/${stage}/${item.file}`;
+    await mkdir(join(evidence, "css-sources", stage, `${name}.css-sources`), {
+      recursive: true,
+    });
+    await copyFile(join(output, item.file), join(evidence, file));
+    cssFiles.push({ stage, path: item.path, file, hash: item.hash });
+  }
+}
+await writeFile(
+  join(evidence, "css-source-retention.json"),
+  JSON.stringify(
+    {
+      schema: 1,
+      passed: true,
+      stylesheets:
+        initial.stylesheets?.map(({ path, hash }) => ({ path, hash })) ?? [],
+      nativeExport: true,
+      browserExport: true,
+      restoredNativeExport: true,
+      files: cssFiles,
+    },
+    null,
+    2,
+  ) + "\n",
+);
 const webResult = JSON.parse(
   await readFile(join(evidence, "browser.json"), "utf8"),
 );
@@ -3432,6 +3511,7 @@ await writeFile(
       platformDiagnostics: scenario.rejects.length,
       nativeFrames: nativeResult.frames.length + restored.frames.length,
       externalEffectsReplayed: 0,
+      stylesheetSourcesPreserved: initial.stylesheets?.length ?? 0,
       ...(!astro
         ? {
             cssAttributes: {

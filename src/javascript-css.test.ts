@@ -21,6 +21,22 @@ async function withCSS(source: string, callback: (doc: any) => void) {
     await rm(dir, { recursive: true, force: true });
   }
 }
+test("CSS source rejects invalid UTF-8 instead of retaining replacement bytes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "afy-css-utf8-"));
+  try {
+    const path = join(dir, "style.css");
+    await writeFile(path, Buffer.from([0x2f, 0x2a, 0xff, 0x2a, 0x2f]));
+    let recorded = false;
+    await expect(
+      compileJavascriptCSS(path, () => {
+        recorded = true;
+      }),
+    ).rejects.toThrow("UTF-8");
+    expect(recorded).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 test("CSS layers, specificity, ordered shorthands and inline priorities cascade", async () => {
   await withCSS(
     `@layer a,b;@layer a{.box{color:red!important;padding:2px 4px}}@layer b{#item{color:blue!important;padding-left:8px}}#item{color:green!important}.box{padding-left:3px;padding:5px 6px;padding-top:9px}`,

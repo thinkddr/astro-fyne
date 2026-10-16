@@ -13,6 +13,7 @@ import (
 	"math/rand/v2"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"fyne.io/fyne/v2"
 	"github.com/dop251/goja"
@@ -22,6 +23,11 @@ import (
 type Source struct {
 	Path string `json:"path"`
 	Hash string `json:"hash"`
+}
+type Stylesheet struct {
+	Path string `json:"path"`
+	Hash string `json:"hash"`
+	Text string `json:"text"`
 }
 type Event struct {
 	Node  string  `json:"node"`
@@ -62,6 +68,8 @@ type Archive struct {
 	Journal  []JournalEntry  `json:"journal"`
 	// Raw frame JSON retains empty strings/arrays and field order for replay validation.
 	Frame json.RawMessage `json:"frame,omitempty"`
+
+	Stylesheets []Stylesheet `json:"stylesheets,omitempty"`
 }
 
 func Validate(archive Archive) error {
@@ -89,6 +97,25 @@ func Validate(archive Archive) error {
 		}
 		if source.Hash != strings.ToLower(source.Hash) {
 			return errors.New("javascript: source digest requires lowercase hexadecimal")
+		}
+	}
+	if len(archive.Stylesheets) > 10000 {
+		return errors.New("javascript: stylesheet sources exceed 10000")
+	}
+	if len(archive.Stylesheets) > 0 {
+		counts := map[string]int{}
+		hashes := map[string]string{}
+		for _, source := range archive.Sources {
+			counts[source.Path]++
+			hashes[source.Path] = source.Hash
+		}
+		seen := map[string]bool{}
+		for _, sheet := range archive.Stylesheets {
+			digest := sha256.Sum256([]byte(sheet.Text))
+			if sheet.Path == "" || !utf8.ValidString(sheet.Path) || !utf8.ValidString(sheet.Text) || len(sheet.Text) > 16*1024*1024 || seen[sheet.Path] || counts[sheet.Path] != 1 || hashes[sheet.Path] != sheet.Hash || hex.EncodeToString(digest[:]) != sheet.Hash {
+				return errors.New("javascript: stylesheet source digest mismatch or duplicate path")
+			}
+			seen[sheet.Path] = true
 		}
 	}
 	var props map[string]json.RawMessage

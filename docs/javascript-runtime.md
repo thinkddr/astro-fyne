@@ -31,8 +31,10 @@ bun run check --javascript \
 Use `--export` for a named export; the default is `default`. `--props <json-file>`
 provides initial data. `--package <identifier>` defaults to `generated`.
 `--stylesheet <local.css>` adds a prebuilt stylesheet (for example, Tailwind output)
-before source-module CSS imports. It is part of the source digests and program hash;
-restoring a saved archive cannot replace it with a different stylesheet.
+before source-module CSS imports. The compiled rules are part of the program hash;
+source digests bind the original contents. New archives retain the exact UTF-8 CSS
+and both output directions emit a `.css-sources.json` manifest and matching source
+files. Restoring an archive cannot replace its compiled stylesheet behavior.
 `--actions` is a comma-separated list of callback props, bound by the native host:
 
 ```go

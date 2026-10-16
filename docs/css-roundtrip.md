@@ -9,12 +9,12 @@ universal pixel parity remain unfinished.
 
 The current routes preserve different information:
 
-| Route                                           | CSS handling                                                                                                                                                           | Current boundary                                                                                                                   |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Declarative Astro/Preact → Fyne                 | Lowers supported literal styles and responsive flex properties into native layout and painting.                                                                        | General imported or Astro styles require a captured browser profile. A fixed profile does not implement a live cascade.            |
-| JavaScript source → Fyne                        | Compiles supported local stylesheets into the native JavaScript DOM/cascade adapter. DOM and component state changes reevaluate selectors, variables and declarations. | Media queries, general layout, pointer/focus selectors, nesting, fonts and CSS URL resources need further adapters.                |
-| Generated JavaScript Fyne → Astro/Preact → Fyne | Retains the compiled stylesheet behavior in the saved program archive and continues it with the component state and event history.                                     | This preserves the supported program; it does not reconstruct the original stylesheet text, comments or source formatting.         |
-| Exported Fyne scene → Astro/Preact              | Emits CSS, native theme tokens and supported node styles. Responsive scenes retain their source layout values.                                                         | A resolved native scene cannot infer the original selectors, breakpoints or variable bindings without retained source information. |
+| Route                                           | CSS handling                                                                                                                                                           | Current boundary                                                                                                                               |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Declarative Astro/Preact → Fyne                 | Lowers supported literal styles and responsive flex properties into native layout and painting.                                                                        | General imported or Astro styles require a captured browser profile. A fixed profile does not implement a live cascade.                        |
+| JavaScript source → Fyne                        | Compiles supported local stylesheets into the native JavaScript DOM/cascade adapter. DOM and component state changes reevaluate selectors, variables and declarations. | Media queries, general layout, pointer/focus selectors, nesting, fonts and CSS URL resources need further adapters.                            |
+| Generated JavaScript Fyne → Astro/Preact → Fyne | Retains compiled stylesheet behavior, original local CSS sources, component state and event history in the saved program archive.                                      | Older archives contain only compiled behavior. Retained source files do not add unsupported CSS or automatically replace the compiled program. |
+| Exported Fyne scene → Astro/Preact              | Emits CSS, native theme tokens and supported node styles. Responsive scenes retain their source layout values.                                                         | A resolved native scene cannot infer the original selectors, breakpoints or variable bindings without retained source information.             |
 
 The JavaScript cascade currently supports type, class, ID and attribute selectors;
 descendant, child and sibling combinators; `:is()`, `:where()` and `:not()`;
@@ -36,6 +36,20 @@ Use a local stylesheet with the existing CLI:
 bun run to-fyne --javascript --source src/App.tsx \
   --stylesheet src/app.css --out native/generated --name App
 ```
+
+New JavaScript programs retain the exact UTF-8 contents of local stylesheets,
+including recursive imports, comments, letter case, line endings and a UTF-8
+byte order mark. Both CLI directions write `App.css-sources.json`, which maps
+the original paths to files in `App.css-sources/`. Source paths are metadata;
+they never select an output location. The file names contain the content hash,
+and regeneration preserves handwritten edits by refusing to overwrite them.
+
+The retained CSS is a source copy. The generated widget and web wrapper continue
+to execute the compiled stylesheet adapter; they do not import the copy a second
+time. To change stylesheet behavior, edit the stylesheet in the original project
+and regenerate the JavaScript program. Legacy archives without CSS source data
+still restore their compiled behavior, but cannot recover missing original text.
+Invalid UTF-8 input produces a diagnostic instead of changing source bytes.
 
 For the inverse direction, export the native program with `ExportJavascript()`
 and pass its JSON archive to `to-web --javascript --program`. To export a

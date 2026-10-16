@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { javascriptHostJSON } from "./javascript-data.ts";
+import { javascriptHostJSON, validJavascriptText } from "./javascript-data.ts";
 import { astroJavascript } from "./javascript-astro.ts";
 import { compileJavascriptCSS } from "./javascript-css.ts";
 
@@ -39,15 +39,24 @@ export async function bundleJavascript(
     );
   const sources = new Map<string, string>(),
     root = dirname(source);
+  const cssSources = new Map<
+    string,
+    { path: string; hash: string; text: string }
+  >();
+  const recordCSS = (file: string, text: string) => {
+    const path = relative(root, file).replaceAll("\\", "/"),
+      digest = hash(text),
+      previous = cssSources.get(path);
+    if (previous && previous.hash !== digest)
+      throw new Error(`CSS source changed while bundling: ${path}`);
+    sources.set(path, digest);
+    cssSources.set(path, { path, hash: digest, text });
+  };
   const externalStyles = [];
   for (const file of stylesheets) {
     if (extname(file) !== ".css")
       throw new Error("Stylesheet input must be a local CSS file");
-    externalStyles.push(
-      ...(await compileJavascriptCSS(file, (path, text) =>
-        sources.set(relative(root, path).replaceAll("\\", "/"), hash(text)),
-      )),
-    );
+    externalStyles.push(...(await compileJavascriptCSS(file, recordCSS)));
   }
   const scripts = new Map<string, { contents: string; directory: string }>();
   async function build(
@@ -137,15 +146,7 @@ export async function bundleJavascript(
                   throw new Error(
                     "CSS modules require a native class-export adapter",
                   );
-                const rules = await compileJavascriptCSS(
-                  args.path,
-                  (file, text) => {
-                    sources.set(
-                      relative(root, file).replaceAll("\\", "/"),
-                      hash(text),
-                    );
-                  },
-                );
+                const rules = await compileJavascriptCSS(args.path, recordCSS);
                 return {
                   contents: `globalThis._afyCssInstall(${JSON.stringify(rules)});`,
                   loader: "js" as const,
@@ -227,6 +228,13 @@ export async function bundleJavascript(
     sources: [...sources]
       .map(([path, hash]) => ({ path, hash }))
       .sort((a, b) => a.path.localeCompare(b.path)),
+    ...(cssSources.size
+      ? {
+          stylesheets: [...cssSources.values()].sort((a, b) =>
+            a.path.localeCompare(b.path),
+          ),
+        }
+      : {}),
     props,
     actions,
     events: [],
@@ -270,7 +278,7 @@ export async function validateJavascriptArchive(
       "events",
       "journal",
     ],
-    ["frame"],
+    ["frame", "stylesheets"],
   );
   if (
     value.schema !== 1 ||
@@ -310,6 +318,37 @@ export async function validateJavascriptArchive(
   )
     throw new Error("Invalid JavaScript sources");
   for (const source of value.sources) fields(source, ["path", "hash"]);
+  if (value.stylesheets !== undefined) {
+    if (!Array.isArray(value.stylesheets) || value.stylesheets.length > 10000)
+      throw new Error("Invalid JavaScript stylesheet sources");
+    const sourcePaths = new Map<string, { count: number; hash: string }>();
+    for (const source of value.sources)
+      sourcePaths.set(source.path, {
+        count: (sourcePaths.get(source.path)?.count ?? 0) + 1,
+        hash: source.hash,
+      });
+    const seen = new Set<string>();
+    for (const sheet of value.stylesheets) {
+      if (!record(sheet))
+        throw new Error("Invalid JavaScript stylesheet source");
+      fields(sheet, ["path", "hash", "text"]);
+      if (
+        typeof sheet.path !== "string" ||
+        !sheet.path ||
+        seen.has(sheet.path) ||
+        typeof sheet.text !== "string" ||
+        Buffer.byteLength(sheet.text) > 16 * 1024 * 1024 ||
+        sheet.hash !== hash(validJavascriptText(sheet.text)) ||
+        sourcePaths.get(sheet.path)?.count !== 1 ||
+        sourcePaths.get(sheet.path)?.hash !== sheet.hash
+      )
+        throw new Error(
+          "JavaScript stylesheet source digest mismatch or duplicate path",
+        );
+      validJavascriptText(sheet.path);
+      seen.add(sheet.path);
+    }
+  }
   if (
     !Array.isArray(value.events) ||
     value.events.length > 10000 ||
