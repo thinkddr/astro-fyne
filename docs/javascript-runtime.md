@@ -135,6 +135,11 @@ still need event-loop/platform adapters. This is not a complete browser environm
 The DOM adapter currently covers supported containers, plain text, buttons, links,
 unstyled checkboxes, text inputs and textareas. Click capture/bubbling, controlled/uncontrolled input/change
 events, direct event properties and programmatic clicks travel through the virtual DOM.
+Listener identity includes event type, callback and capture flag. Boolean/options capture,
+`once`, `passive`, callable `handleEvent` objects and listener removal during dispatch retain
+their DOM behavior. Assigning a direct handler to `null` removes its listener slot; assigning
+it again appends a new slot. A direct handler returning `false` cancels a cancelable event;
+ordinary listener returns are ignored. Abort signals still need a native adapter.
 Checkboxes preserve `checked`/`defaultChecked`, dirty local state, the default `on`
 value, click preactivation and cancellation, input/change ordering, disabled behavior,
 Space activation and associated plain-text labels. Native refreshes retain the control
@@ -156,7 +161,10 @@ include element/class/ID/attributes, descendant/child/sibling combinators, `:is`
 `:not`, `:root`, checked/disabled/enabled and simple child/empty states. Flat named layers,
 specificity, source order, `!important`, inline priorities, inheritance, variables/fallbacks
 and ordered padding/background declarations are retained through dynamic class changes
-and continuation. CSS syntax is parsed at build time with pinned MIT-licensed CSS Tree;
+and continuation. Custom-property dependency cycles, including references inside unused
+fallbacks, invalidate each cycle member before a consuming fallback is selected. Inherited
+custom properties retain their already computed values. CSS syntax is parsed at build time
+with pinned MIT-licensed CSS Tree;
 the runtime does not require it, Bun or a browser. Native properties still use the supported
 prototype sizing/paint contract. Control typography needs explicit declarations or `inherit`
 when matching browser control defaults matters.
@@ -183,10 +191,13 @@ Its conformance source uses private class fields, reducers, spreading, array met
 closures, module mutations, refs, context, hooks/effect cleanup, capture/bubbling,
 controlled/uncontrolled editors, direct event properties, programmatic clicks and keyed
 remounts. Its checkbox scenario also exercises preactivation, cancellation, disabled and
-controlled/local state, labels, programmatic activation and Space. It compares 61 browser
-frames (25 from the unmodified original component) and 36 generated-Go frames, and proves
-that restoration repeats zero host effects. The CSS scenario additionally compares native
-cascade values against Chromium's original computed styles in an isolated shadow tree.
+controlled/local state, labels, programmatic activation and Space. Its listener scenario also
+checks options, duplicate registration, one-shot callbacks,
+passive cancellation, object receivers, removal during dispatch and direct handler ordering.
+It compares 76 browser frames (31 from the unmodified original component) and 45 generated-Go
+frames, and proves that restoration repeats zero host effects. The CSS scenario additionally compares native
+cascade values against Chromium's original computed styles in an isolated shadow tree,
+including self/mutual cycles, fallback-only dependencies, live cycle removal and inherited values.
 Remote CI also checks two actual
 Astro hydration/event frames, bounded VM execution and preservation of valid native
 objects after source errors. Seven bundled-source scenarios verify native diagnostics for

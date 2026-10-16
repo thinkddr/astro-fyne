@@ -84,6 +84,14 @@ const scenario = astro
         ),
         { id: "js-check-controlled", key: "Space" },
         ...tap("js-programmatic"),
+        ...tap(
+          "js-events-options",
+          "js-events-options",
+          "js-events-mutation",
+          "js-events-mutation",
+          "js-events-property",
+          "js-events-property",
+        ),
         ...tap("css-increment", "css-mode", "css-increment", "css-disabled"),
         ...tap("js-reorder", "js-a-increment"),
       ],
@@ -99,6 +107,9 @@ const scenario = astro
           "js-check-label",
           "css-mode",
           "css-increment",
+          "js-events-options",
+          "js-events-mutation",
+          "js-events-property",
         ),
       ],
       rejects: [] as { path: string; event: string; contains: string }[],
@@ -239,7 +250,41 @@ const frameValues = (frames: JavascriptFrame[]) => {
   walk(frames);
   return values;
 };
+function assertListenerCalls(calls: unknown[][], phase: "suffix" | "follow") {
+  const capture = ["listener-capture", 2, true],
+    passive = ["listener-passive", false],
+    object = ["listener-object", true, true],
+    mutate = ["listener-mutate"],
+    late = ["listener-late"],
+    regular = ["listener-regular"],
+    property = ["listener-property"];
+  const expected =
+    phase === "suffix"
+      ? [
+          capture,
+          ["listener-once"],
+          passive,
+          object,
+          capture,
+          passive,
+          object,
+          mutate,
+          mutate,
+          late,
+          regular,
+          property,
+          regular,
+          property,
+        ]
+      : [capture, passive, object, mutate, late, regular, property];
+  assert.deepEqual(
+    calls.filter((args) => String(args[0]).startsWith("listener-")),
+    expected,
+    `DOM listener lifecycle differs during ${phase}`,
+  );
+}
 if (!astro) {
+  assertListenerCalls(nativeResult.calls, "suffix");
   assert.equal(
     frameValues(nativeResult.frames[0])["js-standard"],
     "true",
@@ -407,6 +452,7 @@ try {
     "Browser and generated Go frames differ",
   );
   const calls = await page.evaluate(() => window.afyJavascript.calls());
+  if (!astro) assertListenerCalls(calls, "suffix");
   assert.deepEqual(
     normalize(calls),
     normalize(nativeResult.calls),
@@ -521,6 +567,10 @@ try {
       originalStyles.push(compared);
       originalValues.push(values as Record<string, string>);
     }
+    assertListenerCalls(
+      await page.evaluate(() => window.afyJavascript.calls()),
+      "suffix",
+    );
     assert.deepEqual(
       normalize(await page.evaluate(() => window.afyJavascript.calls())),
       normalize(nativeResult.calls),
@@ -562,6 +612,10 @@ const restored = JSON.parse(
 const webResult = JSON.parse(
   await readFile(join(evidence, "browser.json"), "utf8"),
 );
+if (!astro) {
+  assertListenerCalls(restored.calls, "follow");
+  assertListenerCalls(webResult.followCalls, "follow");
+}
 assert.deepEqual(
   restored.frames,
   webResult.follow,

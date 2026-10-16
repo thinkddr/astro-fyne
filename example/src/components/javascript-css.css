@@ -31,3 +31,32 @@
 .css-theme p {
   white-space: nowrap;
 }
+
+#css-cycle-self {
+  --cycle-ink: var(--cycle-ink, #112233);
+  color: var(--cycle-ink, #cc3300);
+}
+.css-theme[data-mode="alt"] #css-cycle-self {
+  --cycle-ink: #007744;
+}
+#css-cycle-mutual {
+  --cycle-one: var(--cycle-two, #112233);
+  --cycle-two: var(--cycle-one, #223344);
+  --cycle-safe: var(--cycle-one, #123456);
+  color: var(--cycle-safe);
+  background-color: var(--cycle-two, #cc3300);
+}
+#css-cycle-fallback {
+  --cycle-ready: #112233;
+  --cycle-one: var(--cycle-ready, var(--cycle-two));
+  --cycle-two: var(--cycle-one);
+  color: var(--cycle-one, #cc3300);
+}
+.css-cycle-parent {
+  --inherited-one: var(--inherited-two);
+  --inherited-two: #112233;
+}
+#css-cycle-inherited {
+  --inherited-two: var(--inherited-one);
+  color: var(--inherited-two);
+}

@@ -7,6 +7,28 @@ import { createCSSCascade } from "./javascript-css-runtime.js";
 export function createDocument() {
   let next = 0;
   const css = createCSSCascade();
+  function captureOption(options) {
+    return options !== null &&
+      (typeof options === "object" || typeof options === "function")
+      ? !!options.capture
+      : !!options;
+  }
+  function addListener(node, type, callback, capture, once, passive) {
+    const listeners = (node.listeners[type + capture] ||= []);
+    const existing = listeners.find(
+      (listener) => listener.callback === callback,
+    );
+    if (existing) return existing;
+    const listener = { callback, capture, once, passive, removed: false };
+    listeners.push(listener);
+    return listener;
+  }
+  function removeListener(node, type, listener) {
+    listener.removed = true;
+    const listeners = node.listeners[type + listener.capture];
+    const index = listeners.indexOf(listener);
+    if (index >= 0) listeners.splice(index, 1);
+  }
   class Element {
     constructor(name, text) {
       this.uid = String(++next);
@@ -45,21 +67,34 @@ export function createDocument() {
       this._checked = false;
       this._checkedDirty = false;
       this.disabled = false;
-      this.listeners = {};
-      this._propertyHandlers = {};
+      this.listeners = Object.create(null);
+      this._propertyHandlers = Object.create(null);
+      this._propertyListeners = Object.create(null);
       for (const type of ["click", "input", "change"]) {
-        let installed = false;
         Object.defineProperty(this, "on" + type, {
           get: () => this._propertyHandlers[type] ?? null,
           set: (value) => {
             if (value !== null && typeof value !== "function")
               throw new Error("DOM event properties require functions or null");
             this._propertyHandlers[type] = value;
-            if (!installed && value) {
-              installed = true;
-              this.addEventListener(
+            const listener = this._propertyListeners[type];
+            if (listener && value === null) {
+              removeListener(this, type, listener);
+              delete this._propertyListeners[type];
+            } else if (!listener && value) {
+              this._propertyListeners[type] = addListener(
+                this,
                 type,
-                (event) => this._propertyHandlers[type]?.call(this, event),
+                function (event) {
+                  const handler = event.currentTarget._propertyHandlers[type];
+                  const result = handler
+                    ? Reflect.apply(handler, this, [event])
+                    : undefined;
+                  if (result === false) event.preventDefault();
+                  return result;
+                },
+                false,
+                false,
                 false,
               );
             }
@@ -228,16 +263,39 @@ export function createDocument() {
     getAttribute(name) {
       return Object.hasOwn(this.attrs, name) ? this.attrs[name] : null;
     }
-    addEventListener(type, handler, capture) {
+    addEventListener(type, handler, options) {
       if (!["click", "input", "change"].includes(type))
         throw new Error(`Event ${type} requires a native event adapter`);
-      (this.listeners[type + !!capture] ||= []).push(handler);
+      if (
+        handler !== null &&
+        handler !== undefined &&
+        typeof handler !== "function" &&
+        typeof handler !== "object"
+      )
+        throw new TypeError("DOM event listeners require functions or objects");
+      const capture = captureOption(options);
+      let once = false,
+        passive = false;
+      if (
+        options !== null &&
+        (typeof options === "object" || typeof options === "function")
+      ) {
+        once = !!options.once;
+        passive = !!options.passive;
+        if (options.signal != null)
+          throw new Error(
+            "AbortSignal listeners require a native abort adapter",
+          );
+      }
+      if (handler == null) return;
+      addListener(this, type, handler, capture, once, passive);
     }
-    removeEventListener(type, handler, capture) {
-      const key = type + !!capture;
-      this.listeners[key] = (this.listeners[key] || []).filter(
-        (value) => value !== handler,
+    removeEventListener(type, handler, options) {
+      const key = type + captureOption(options);
+      const listener = (this.listeners[key] || []).find(
+        (value) => value.callback === handler,
       );
+      if (listener) removeListener(this, type, listener);
     }
     focus() {
       throw new Error("Programmatic focus requires a native focus adapter");
@@ -330,16 +388,49 @@ export function createDocument() {
     const path = [];
     for (let node = target; node; node = node.parentNode) path.push(node);
     let stopped = false,
-      immediate = false;
+      immediate = false,
+      passive = false,
+      canceled = false,
+      currentTarget = null,
+      eventPhase = 0;
+    const cancelable = event.type === "click";
     const payload = new Proxy(
       {
-        type: event.type,
-        target,
-        currentTarget: null,
-        bubbles: true,
-        defaultPrevented: false,
+        get type() {
+          return event.type;
+        },
+        get target() {
+          return target;
+        },
+        get currentTarget() {
+          return currentTarget;
+        },
+        get eventPhase() {
+          return eventPhase;
+        },
+        get bubbles() {
+          return true;
+        },
+        get cancelable() {
+          return cancelable;
+        },
+        get defaultPrevented() {
+          return canceled;
+        },
+        get cancelBubble() {
+          return stopped;
+        },
+        set cancelBubble(value) {
+          if (value) stopped = true;
+        },
+        get returnValue() {
+          return !canceled;
+        },
+        set returnValue(value) {
+          if (!value && cancelable && !passive) canceled = true;
+        },
         preventDefault() {
-          this.defaultPrevented = true;
+          if (cancelable && !passive) canceled = true;
         },
         stopPropagation() {
           stopped = true;
@@ -363,26 +454,52 @@ export function createDocument() {
       },
     );
     function invoke(node, capture) {
-      payload.currentTarget = node;
-      for (const handler of [...(node.listeners[event.type + capture] || [])]) {
-        const result = handler.call(node, payload);
-        if (result instanceof Promise)
-          throw new Error(
-            "Async event handlers require an explicit event-loop adapter",
+      currentTarget = node;
+      eventPhase = node === target ? 2 : capture ? 1 : 3;
+      for (const listener of [
+        ...(node.listeners[event.type + capture] || []),
+      ]) {
+        if (listener.removed) continue;
+        if (listener.once) removeListener(node, event.type, listener);
+        passive = listener.passive;
+        try {
+          const callback = listener.callback;
+          const handler =
+            typeof callback === "function" ? callback : callback.handleEvent;
+          if (typeof handler !== "function")
+            throw new Error(
+              "DOM listener objects require a callable handleEvent",
+            );
+          const result = Reflect.apply(
+            handler,
+            typeof callback === "function" ? node : callback,
+            [payload],
           );
+          if (result instanceof Promise)
+            throw new Error(
+              "Async event handlers require an explicit event-loop adapter",
+            );
+        } finally {
+          passive = false;
+        }
         if (immediate) break;
       }
     }
-    for (const node of [...path].reverse()) {
-      invoke(node, true);
-      if (stopped) break;
-    }
-    if (!stopped)
-      for (const node of path) {
-        invoke(node, false);
+    try {
+      for (const node of [...path].reverse()) {
+        invoke(node, true);
         if (stopped) break;
       }
-    payload.currentTarget = null;
+      if (!stopped)
+        for (const node of path) {
+          invoke(node, false);
+          if (stopped) break;
+        }
+    } finally {
+      currentTarget = null;
+      eventPhase = 0;
+      stopped = immediate = passive = false;
+    }
     if (checkboxClick) {
       if (payload.defaultPrevented) target._checked = wasChecked;
       else {
