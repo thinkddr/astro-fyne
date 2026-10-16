@@ -4,7 +4,13 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 task_root="$(pwd)"
 task_variant="${1:-baseline}"
-case "$task_variant" in baseline|bilinear|skia-lowp|skia-legacy) ;; *) echo 'Variant must be baseline, bilinear, skia-lowp or skia-legacy' >&2; exit 2 ;; esac
+case "$task_variant" in baseline|bilinear|skia-lowp|skia-legacy|native-legacy) ;; *) echo 'Variant must be baseline, bilinear, skia-lowp, skia-legacy or native-legacy' >&2; exit 2 ;; esac
+task_regressions_only="${ASTRO_FYNE_IMAGE_REGRESSIONS_ONLY:-0}"
+case "$task_regressions_only" in 0|1) ;; *) echo 'ASTRO_FYNE_IMAGE_REGRESSIONS_ONLY must be 0 or 1' >&2; exit 2 ;; esac
+if [[ "$task_regressions_only" == 1 && "$task_variant" != native-legacy ]]; then
+  echo 'Selected fork regressions require the native-legacy variant' >&2
+  exit 2
+fi
 task_evidence="$task_root/artifacts/image-enlargement/$task_variant"
 task_temporary="$(mktemp -d)"
 task_fork="$task_temporary/fyne"
@@ -78,6 +84,10 @@ af74a08a7a846262b696f5995ad84688b8e6ee24d73fd783b9a88877cf88f7ca  LICENSE-Fyne.t
 6860991446cf0a114e32f70cf6c65b9011701b8946164b3e77f7edfc7c84b74e  skia_legacy_enlargement.go.proposed
 db199a802d701312864255b01809733bb58013bc25b1025497e76b44af71daff  skia_legacy_enlargement_test.go.proposed
 c9d3dcf1043e4fc9daebaba28e4abd18c1d10db43c1b17db9f032e0b1a2972b4  fyne-skia-legacy-enlargement.patch
+a74239220af41ae504a2bf8df9410ebedb76fa9142baf85b5f577c165cc6105a  native-legacy-pin.json
+0cc261326dbe2fe88f62f6ba045eb1a296ddd508665288e6dd39c1f453259324  fyne-native-legacy-enlargement.patch
+24e1a76bef499f8f30dddbb7e872969c6af84e255593b535d83edb29273bc83f  skia_legacy_scope_test.go.proposed
+383c67ae30e0a0f9cb6abc1a07dd9e5a101a4957997b381a47cfc7fb0238536b  skia_legacy_image_test.go.proposed
 PINS
 ) | tee "$task_evidence/proposal-pins.log"
 cp -R ci/image-sampling "$task_evidence/proposal"
@@ -90,7 +100,7 @@ cp ci/image-sampling/LICENSE-Fyne.txt ci/image-sampling/LICENSE-Skia.txt "$task_
 task_draw="$task_fork/internal/painter/software/draw.go"
 echo "cf3280e8a4fca973792bb60626756de426f3df648665e99400546cf38573215a  $task_draw" | sha256sum -c -
 cp "$task_draw" "$task_evidence/original-draw.go.txt"
-if [[ "$task_variant" != baseline ]]; then
+if [[ "$task_variant" != baseline && "$task_variant" != native-legacy ]]; then
   (cd "$task_fork" && patch --batch --fuzz=0 -p1 < "$task_root/ci/image-sampling/fyne-smooth-image-enlargement.patch")
   echo "a14e3bb6b41ecdd5291a60c45131126eca6aa84d7f5c761268976390b03e6e2c  $task_draw" | sha256sum -c -
   cp ci/image-sampling/image_enlargement_test.go.proposed "$task_fork/internal/painter/software/image_enlargement_test.go"
@@ -107,9 +117,26 @@ if [[ "$task_variant" == skia-legacy ]]; then
   (cd "$task_fork" && patch --batch --fuzz=0 -p1 < "$task_root/ci/image-sampling/fyne-skia-legacy-enlargement.patch")
   echo "f469df07cb174f6e8718b8644e5f3c6867d299f3e3bc091352171a645ec7b165  $task_draw" | sha256sum -c -
 fi
+if [[ "$task_variant" == native-legacy ]]; then
+  (cd "$task_fork" && patch --batch --fuzz=0 -p1 < "$task_root/ci/image-sampling/fyne-native-legacy-enlargement.patch")
+  echo "c03707cd8e9d66c95cd7d35ad5ee594bac6dd774c34b6444325241402465a6ed  $task_draw" | sha256sum -c -
+  for task_source in skia_legacy_enlargement skia_legacy_enlargement_test skia_legacy_scope_test skia_legacy_image_test; do
+    cp "ci/image-sampling/$task_source.go.proposed" "$task_fork/internal/painter/software/$task_source.go"
+  done
+fi
 mkdir -p "$task_evidence/painter-before-format" "$task_evidence/painter"
 cp "$task_fork/internal/painter/software/"*.go "$task_evidence/painter-before-format/"
 if [[ "$task_variant" != baseline ]]; then gofmt -w "$task_fork/internal/painter/software/"*.go; fi
+if [[ "$task_variant" == native-legacy ]]; then
+  (
+    cd "$task_fork/internal/painter/software"
+    sha256sum -c <<'FORMATTED_PINS'
+c03707cd8e9d66c95cd7d35ad5ee594bac6dd774c34b6444325241402465a6ed  draw.go
+6860991446cf0a114e32f70cf6c65b9011701b8946164b3e77f7edfc7c84b74e  skia_legacy_enlargement.go
+14907d1f4a8374b9493ce906d4b99a689adde1d3fc93fb697706770644c57ae7  skia_legacy_enlargement_test.go
+FORMATTED_PINS
+  ) | tee "$task_evidence/native-legacy-formatted-pins.log"
+fi
 cp "$task_fork/internal/painter/software/"*.go "$task_evidence/painter/"
 sha256sum "$task_evidence/painter-before-format/"*.go > "$task_evidence/painter-before-format.sha256"
 sha256sum "$task_evidence/painter/"*.go > "$task_evidence/painter-formatted.sha256"
@@ -139,8 +166,53 @@ subprocess.run(['go', 'mod', 'edit', '-modfile=' + sys.argv[1], '-go=1.27.2', *f
 PY
 (cd "$task_fork" && env "GOFLAGS=-modfile=$task_temporary/probe.mod -mod=mod" go list -m golang.org/x/image) > "$task_evidence/probe-x-image-version.txt"
 grep -Fx 'golang.org/x/image v0.46.0' "$task_evidence/probe-x-image-version.txt"
-if [[ "$task_variant" != baseline ]]; then
-  (cd "$task_fork" && run_phase candidate-unit env "GOFLAGS=-modfile=$task_temporary/probe.mod -mod=mod" go test -race -count=1 -p=1 -run '^(TestPainterImageEnlargement|TestSkiaLowpCandidate|TestSkiaLegacyCandidate)' ./internal/painter/software) || task_status=1
+if [[ "$task_variant" != baseline && "$task_regressions_only" != 1 ]]; then
+  (cd "$task_fork" && run_phase candidate-unit env "GOFLAGS=-modfile=$task_temporary/probe.mod -mod=mod" go test -race -count=1 -p=1 -run '^(TestPainterImageEnlargement|TestSkiaLowpCandidate|TestSkiaLegacyCandidate|TestSkiaLegacyScope)' ./internal/painter/software) || task_status=1
+fi
+
+if [[ "$task_regressions_only" == 1 ]]; then
+  cp "$task_fork/go.mod" "$task_temporary/fork-own.mod"
+  cp "$task_fork/go.sum" "$task_temporary/fork-own.sum"
+  record_fork_graph() {
+    local task_graph="$1" task_flags="$2"
+    (cd "$task_fork" && env "GOFLAGS=$task_flags" go list -m -json all) > "$task_evidence/$task_graph-modules.jsonl" || return
+    (cd "$task_fork" && env "GOFLAGS=$task_flags" go list -m golang.org/x/image) > "$task_evidence/$task_graph-x-image-version.txt" || return
+    cat "$task_evidence/$task_graph-x-image-version.txt"
+  }
+  retain_failed_fixtures() {
+    python3 - "$task_fork" "$task_evidence/fork-failed-fixtures/$1" <<'PY'
+import hashlib, json, pathlib, shutil, sys
+source, destination = map(pathlib.Path, sys.argv[1:])
+destination.mkdir(parents=True, exist_ok=True)
+records = []
+for directory in sorted(source.rglob('testdata/failed')):
+    if not directory.is_dir():
+        continue
+    relative = directory.relative_to(source)
+    copied = destination / relative
+    shutil.copytree(directory, copied, dirs_exist_ok=True)
+    for file in sorted(copied.rglob('*')):
+        if file.is_file():
+            records.append({'path': file.relative_to(destination).as_posix(), 'sha256': hashlib.sha256(file.read_bytes()).hexdigest(), 'bytes': file.stat().st_size})
+    shutil.rmtree(directory)
+(destination / 'manifest.json').write_text(json.dumps(records, indent=2) + '\n')
+PY
+  }
+  for task_graph in probe fork-own; do
+    task_graph_flags="-modfile=$task_temporary/$task_graph.mod -mod=mod"
+    run_phase "$task_graph-graph" record_fork_graph "$task_graph" "$task_graph_flags" || task_status=1
+    (cd "$task_fork" && run_phase "$task_graph-regressions" env "GOFLAGS=$task_graph_flags" go test -race -count=1 -p=1 -tags ci,migrated_fynedo ./internal/painter/software ./internal/painter ./canvas) || task_status=1
+    run_phase "$task_graph-final-graph" record_fork_graph "$task_graph-final" "$task_graph_flags" || task_status=1
+    run_phase "$task_graph-fixtures" retain_failed_fixtures "$task_graph" || task_status=1
+    cp "$task_temporary/$task_graph.mod" "$task_evidence/$task_graph.mod"
+    cp "$task_temporary/$task_graph.sum" "$task_evidence/$task_graph.sum"
+  done
+  cp "$task_modfile" "$task_evidence/native.mod"
+  cp "$task_temporary/native.sum" "$task_evidence/native.sum"
+  task_modules_unchanged=true
+  if ! sha256sum -c "$task_evidence/production-modules.sha256"; then task_status=1; task_modules_unchanged=false; fi
+  bun -e 'const [root,variant,status,unchanged]=process.argv.slice(1);const phases=(await Bun.file(root+"/phases.jsonl").text()).trim().split("\n").filter(Boolean).map(JSON.parse);const required=["probe-graph","probe-regressions","probe-final-graph","probe-fixtures","fork-own-graph","fork-own-regressions","fork-own-final-graph","fork-own-fixtures"];const complete=required.every(name=>phases.filter(item=>item.name===name).length===1);const accepted=complete&&Number(status)===0&&unchanged==="true"&&phases.every(item=>item.exitCode===0);await Bun.write(root+"/regression-summary.json",JSON.stringify({schema:1,experimental:true,mode:"selected-fork-regressions",variant,complete,accepted,productionDependencyChanged:unchanged!=="true",pixelParityCertified:false,packages:["./internal/painter/software","./internal/painter","./canvas"],phases},null,2)+"\n");if(!accepted)process.exitCode=1;' "$task_evidence" "$task_variant" "$task_status" "$task_modules_unchanged" || task_status=1
+  exit "$task_status"
 fi
 
 bun install --frozen-lockfile --ignore-scripts

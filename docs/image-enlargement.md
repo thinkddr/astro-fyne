@@ -41,6 +41,7 @@ bash ci/image-enlargement.sh baseline
 bash ci/image-enlargement.sh bilinear
 bash ci/image-enlargement.sh skia-lowp
 bash ci/image-enlargement.sh skia-legacy
+bash ci/image-enlargement.sh native-legacy
 ```
 
 Use a separate clean job for each variant. The wrapper prepares the compiler,
@@ -52,7 +53,7 @@ In GitHub Actions, select **image-enlargement-experiment**, then **Run workflow*
 on the desired revision. Choose `all` (the default) or one named variant. The
 workflow is `.github/workflows/image-enlargement.yml`. It also runs for the dedicated
 experiment branch and matching pull-request paths, selecting the current
-`skia-legacy` candidate. A manual `all` run also retains the older candidates.
+`native-legacy` candidate. A manual `all` run includes all five variants.
 Matrix jobs run independently,
 so one failed variant does not cancel the remaining captures.
 
@@ -75,6 +76,17 @@ The variants use isolated temporary Fyne source and a separate Go module file:
 - `skia-legacy` tries the pinned Skia legacy Q4 linear sampler, with separate
   floor quantization of premultiplied RGB and alpha. It uses the same bounded
   physical factors and image types, without bypassing the existing image prepass.
+  Declined helper profiles retain the broader bilinear experiment.
+- `native-legacy` applies that helper directly to the original `.16` painter,
+  preserving its CatmullRom fallback whenever the helper declines. It does not
+  apply the broad bilinear patch. The call is limited to Smooth Image objects,
+  alpha 1 and radius 0; Raster, Pixels and Fastest keep their existing routes.
+
+The helper's source type, zero-origin and factor checks apply to the buffer
+returned by Fyne's existing image prepass. That prepass can normalize other
+original image types and origins to NRGBA. These checks do not promise that every
+original 16-bit, premultiplied or offset image stays on the old sampling path.
+The retained browser corpus uses the original PNG8 resources described above.
 
 The Skia-derived candidates are experimental. Chromium can select a different
 CPU or GPU path, and matching kernel names does not establish identical channel
@@ -140,3 +152,67 @@ alpha. The production dependency remains unchanged; the result applies to the
 isolated patched renderer. The candidate still uses the broader bilinear fallback
 outside its bounded helper, so this result does not validate that fallback or
 universal conversion. The original failing variants remain available.
+
+## Validated bounded variant
+
+`native-legacy` separates the successful helper from the experiment's broad
+bilinear fallback. Its direct patch input is the published `.16` source blob
+`a18ecf51a6d397236468bc2dfec58ebc4d765115`, also present in the neutral public
+fork base `2236726ac36e11116c689dc64b0890d91be8ced6`.
+`ci/image-sampling/native-legacy-pin.json` binds the patch, original and final
+source, unchanged helper inputs, licenses and new routing tests by SHA-256.
+The wrapper also verifies that remote formatting reproduces the previously
+tested helper bytes.
+
+[Run 38893097982](https://github.com/thinkddr/astro-fyne/actions/runs/38893097982)
+tested this minimal variant at `27168b4c8a21a458542904e345ee86f9fcb8b9e7`.
+All six complete-frame comparisons passed with zero changed pixels and zero
+channel tolerance. All 22 ARM64 phases passed, including helper, scope, routing
+and generated native race tests. The browser PNGs are byte-identical to the
+original failing baseline captures.
+
+Automatic runs select this variant on the dedicated enlargement branches and
+matching pull requests. Its ARM64 job retains the six strict frame comparisons
+and runs helper, declined-profile and real Image/Raster routing tests. The latter
+constructs actual Fyne objects and checks Raster samples against the original
+CatmullRom kernel. Declined-profile tests compare the renderer with the image
+opt-in enabled and disabled, without copying the implementation into an oracle.
+
+A separate `ubuntu-24.04` x86 job uses the canonical fork fixture platform and
+runs these complete packages with the race detector and `ci,migrated_fynedo`
+tags, without a test-name filter:
+
+```text
+./internal/painter/software ./internal/painter ./canvas
+```
+
+It runs once under a probe graph seeded with the converter's selected versions,
+including x/image v0.46.0, and once under the fork's own resolved graph. The probe
+starts from the fork module and can retain additional direct or test requirements;
+it does not assert that the complete graphs are identical. Actual selected
+versions are recorded before and after both runs; the fork's declared version is
+not assumed to be the final MVS selection. In a hosted x86 environment, this mode is:
+
+```sh
+ASTRO_FYNE_IMAGE_REGRESSIONS_ONLY=1 bash ci/image-enlargement.sh native-legacy
+```
+
+This mode exits before browser generation and writes `regression-summary.json`,
+not a synthetic six-comparison result. Its separate artifact includes module and
+checksum files, graph inventories, complete package logs, formatted sources and
+every failed fixture with its hash under `fork-failed-fixtures/`. Both module
+graphs run even if one fails. The x86 choice matches existing fixture provenance;
+it does not weaken the ARM64 browser/native comparisons or excuse failed tests.
+
+The same run passed all three complete packages under both dependency graphs:
+the probe resolved x/image v0.46.0 and the fork resolved v0.24.0, before and
+after testing. All eight regression phases passed. Existing image, Raster,
+Pixels, Fastest, alpha and clipping goldens remained unchanged; no failed fixture
+images were produced.
+
+Review any future changed fixture individually against its real source, physical
+size and sampling route. An unexpected change outside the new route is a
+regression to diagnose, not a reason to refresh a whole directory. These results
+validate the retained software-renderer corpus and selected packages. They do
+not publish a fork tag, change the production dependency or establish broader
+pixel parity.
