@@ -26,7 +26,8 @@ def digest(path):
 
 
 def read(path):
-    return json.loads(path.read_bytes())
+    # Go writes float32 negative zero as -0; preserve its IEEE sign.
+    return json.loads(path.read_bytes(), parse_int=lambda token: -0.0 if token == "-0" else int(token))
 
 
 def same_float(first, second):
@@ -157,6 +158,14 @@ def contract_self_test():
     """Hosted negative controls; these exercise validation without running Go."""
     with tempfile.TemporaryDirectory(prefix="fontations-contract-") as directory:
         root = pathlib.Path(directory)
+        numbers = root / "numbers.json"
+        numbers.write_text('{"negative":-0,"decimalNegative":-0.0,"positive":0,"one":1,"boolean":true}')
+        values = read(numbers)
+        require(same_float(values["negative"], values["decimalNegative"])
+                and not same_float(values["negative"], values["positive"])
+                and type(values["positive"]) is int and type(values["one"]) is int
+                and not same_float(values["boolean"], values["one"]),
+                "JSON must preserve floating negative zero without weakening integer or boolean checks")
         repository, provider = root / "repository", root / "work/evidence/fyne"
         source_names = ["native/go.mod", "native/go.sum", "native/backend.go",
                         "ci/text-engine-probe/compare-fyne.py", "ci/text-engine-probe/test-fyne-remote.sh",
