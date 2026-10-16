@@ -262,6 +262,12 @@ checks seven text rows at scales 1 and 2 against upstream Fyne and the published
 It records actual shaped glyphs, baselines and strict pixel differences to guide native
 rendering improvements. It remains an uncertified diagnostic.
 
+A separate [native Fontations renderer](ci/text-engine-probe/README.md) matches the
+unchanged seven-row Astro fixture at DPR 1 and 2 with zero changed RGBA pixels in
+the [hosted N32 run](https://github.com/thinkddr/astro-fyne/actions/runs/38922701672).
+Fyne widget and editor integration is still pending; the 22 control typography
+frames above remain uncertified.
+
 Generation reports `pixelPerfectVerified: false`; generating code or matching rectangles
 is not proof of matching pixels. Follow the [visual verification guide](docs/visual-verification.md)
 to capture a profile and compare it. Evidence is available in the
