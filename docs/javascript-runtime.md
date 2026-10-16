@@ -156,6 +156,12 @@ Self-insertion and insertion of an ancestor beneath its descendant also throw
 `HierarchyRequestError` before reference validation or detachment. This parent-chain
 check covers the current Element/Text trees; document/fragment, shadow-tree and
 other hierarchy constraints remain outside this bounded correction.
+`removeChild` [validates child membership](https://dom.spec.whatwg.org/#concept-node-pre-remove)
+before mutation. Foreign or detached children, including calls on a Text parent,
+throw an error named `NotFoundError` and leave the attached edited input unchanged.
+Valid removal returns the original node and permits reattachment with the same
+object, default and live value. This named-error correction does not add global
+`DOMException` construction, its prototype/code behavior or Web IDL argument conversion.
 Valid moves retain object identity, dirty input values and defaults. Ordinary DOM
 insertion is not a focus-preserving move; focus, selection and connection lifecycle
 semantics require their own adapters and are not certified by these checks.
@@ -234,6 +240,9 @@ reference validation, then verifies valid Element-to-Text insertion across the s
 The ancestor scenario rejects self/ancestor insertion before a foreign reference,
 then moves the same edited input between parents and within one parent. It checks
 fixed tree/default/live values and actual browser/native object identity through continuation.
+The removal scenario checks foreign, detached and Text-parent errors before mutation,
+then removes and reattaches the same edited input. Fixed exception/tree/default/live
+expectations and actual browser/native identity remain required through continuation.
 The CSS scenario additionally compares native
 cascade values against Chromium's original computed styles in an isolated shadow tree,
 including self/mutual cycles, selected/unused fallbacks, comments and function-name boundaries,

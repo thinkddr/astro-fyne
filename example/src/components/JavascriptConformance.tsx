@@ -9,6 +9,7 @@ import { JavascriptCSS } from "./JavascriptCSS";
 import { JavascriptEvents } from "./JavascriptEvents";
 import { JavascriptHierarchy } from "./JavascriptHierarchy";
 import { JavascriptInsertion } from "./JavascriptInsertion";
+import { JavascriptRemoval } from "./JavascriptRemoval";
 import {
   useCallback,
   useContext,
@@ -120,6 +121,7 @@ export function JavascriptConformance({
       <JavascriptInsertion />
       <JavascriptHierarchy />
       <JavascriptAncestors />
+      <JavascriptRemoval />
       <p id="js-count">{count}</p>
       <p id="js-standard">
         {String(

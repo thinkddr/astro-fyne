@@ -318,7 +318,11 @@ export function createDocument() {
     }
     removeChild(child) {
       const index = this.childNodes.indexOf(child);
-      if (index < 0) throw new Error("Cannot remove a detached DOM element");
+      if (index < 0) {
+        const error = new Error("The node is not a child of this parent");
+        error.name = "NotFoundError";
+        throw error;
+      }
       this.childNodes.splice(index, 1);
       child.parentNode = null;
       return child;
