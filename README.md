@@ -251,9 +251,10 @@ for a single measured entry, `--measurements PATH`. Reverse output is checked wi
 | Still unsupported    | Arbitrary JS/Go, full CSS cascade, grid, wrapping/intrinsic layout, animations and browser APIs      |
 
 CI compares browser and native captures and retains the generated code, traces, scene files
-and pixel diffs. The current corpus includes **38 exact visual comparisons** with zero RGBA
-differences, plus **12 exact native scene reconstruction frames**, control behavior and
-geometry checks. **All 22 responsive typography frames
+and pixel diffs. The current suite requires **44 exact full-frame visual comparisons**
+with zero RGBA differences, including six comparisons of the published image sampler.
+It also checks native scene reconstruction, control behavior and geometry.
+**All 22 responsive typography frames
 still differ at zero tolerance.** Passing a profile certifies that profile only.
 
 A separate [typography comparison](docs/visual-verification.md#isolate-native-text-differences)

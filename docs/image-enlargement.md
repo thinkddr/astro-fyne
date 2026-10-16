@@ -35,6 +35,33 @@ remain unchanged throughout it. All six complete-frame comparisons below must
 pass with zero channel tolerance and zero changed pixels. Other image profiles,
 typography and GPU output require their own evidence.
 
+## Published release evidence
+
+[Run 38904638634](https://github.com/thinkddr/astro-fyne/actions/runs/38904638634)
+tested converter commit `630a55c6c1d6b9904f3717f5bddef15d48ba1615` with the
+published `v2.8.1-sytue.18` replacement. All six production comparisons passed
+with zero changed pixels and zero channel tolerance. All five production
+integrity phases passed, and the initial and final selected module identities,
+source files, notices and converter lockfiles matched. The actual extracted
+Fyne tree contained 2,174 files and matched its public Go module checksum:
+
+```text
+h1:k780PnLSsuzwqvrl6ehDzq0UXThixmAD+kHH1uxvoWQ=
+```
+
+The public fork release is
+[`29716602d05a12a7ee8a0453f4de1c1f089f7293`](https://github.com/thinkddr/fyne/commit/29716602d05a12a7ee8a0453f4de1c1f089f7293).
+It retains the bounded sampler introduced in `.17` and fixes a cache expiry
+race reproduced by a new concurrent regression test. The fork's fresh main and
+tag platform, static analysis, mobile, web and complete race workflows passed
+before the converter adopted `.18`. The `.17` release and its earlier failure
+evidence remain unchanged.
+
+The separate [selected-package run](https://github.com/thinkddr/astro-fyne/actions/runs/38904646003)
+also passed both complete dependency graphs and the historical bounded variant.
+Those isolated checks complement the production gate; production mode uses
+the converter's public dependency directly.
+
 ## Corpus
 
 `ImageEnlargementConformance.tsx` is an authored, source-only Flexbox component.
