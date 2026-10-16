@@ -49,11 +49,11 @@ func TestStylesheetSourcesSurviveNativeExecutionExportAndRestore(t *testing.T) {
 
 func TestStylesheetSourceMetadataCannotContradictRetainedBytes(t *testing.T) {
 	cases := map[string]func(*Archive){
-		"changed text": func(a *Archive) { a.Stylesheets[0].Text += " " },
-		"missing source": func(a *Archive) { a.Stylesheets[0].Path = "missing.css" },
+		"changed text":         func(a *Archive) { a.Stylesheets[0].Text += " " },
+		"missing source":       func(a *Archive) { a.Stylesheets[0].Path = "missing.css" },
 		"duplicate stylesheet": func(a *Archive) { a.Stylesheets = append(a.Stylesheets, a.Stylesheets[0]) },
-		"duplicate source": func(a *Archive) { a.Sources = append(a.Sources, a.Sources[1]) },
-		"invalid UTF-8": func(a *Archive) { a.Stylesheets[0].Text = string([]byte{0xff}) },
+		"duplicate source":     func(a *Archive) { a.Sources = append(a.Sources, a.Sources[1]) },
+		"invalid UTF-8":        func(a *Archive) { a.Stylesheets[0].Text = string([]byte{0xff}) },
 	}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {

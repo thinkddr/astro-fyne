@@ -3352,7 +3352,10 @@ for (const [stage, output, name] of [
   );
   assert.equal(manifest.stylesheets.length, initial.stylesheets.length);
   for (const [index, item] of manifest.stylesheets.entries()) {
-    const sheet = initial.stylesheets[index]!;
+    const sheet:
+      NonNullable<JavascriptArchive["stylesheets"]>[number] | undefined =
+      initial.stylesheets[index];
+    assert.ok(sheet, `Missing retained stylesheet ${index}`);
     assert.deepEqual(
       { path: item.path, hash: item.hash },
       { path: sheet.path, hash: sheet.hash },
