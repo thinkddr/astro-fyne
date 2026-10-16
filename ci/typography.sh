@@ -29,6 +29,7 @@ for task_variant in upstream-v2.8.1 fork-v2.8.1-sytue.16; do
   else
     task_module='github.com/thinkddr/fyne/v2@v2.8.1-sytue.16'
     task_origin=nearest
+    go mod edit -modfile="$task_modfile" -replace=fyne.io/fyne/v2=github.com/thinkddr/fyne/v2@v2.8.1-sytue.16
   fi
   go mod download -json "$task_module" > "$task_directory/fyne-module.json"
   task_module_directory="$(bun -e 'const m=await Bun.file(process.argv[1]).json(); if(m.Error || !m.Dir || !m.Sum || !m.GoModSum) throw new Error("Incomplete public Fyne module download"); console.log(m.Dir);' "$task_directory/fyne-module.json")"
@@ -82,7 +83,22 @@ task_comparisons="$task_evidence/comparisons.jsonl"
 compare_text() {
   local task_reference="$1" task_native="$2" task_output="$3" task_status=0
   "$task_temporary/compare" --reference "$task_reference" --native "$task_native" --out "$task_output/diff.png" > "$task_output/pixels.json" || task_status=$?
-  bun -e 'const [path,status]=process.argv.slice(1); const result=await Bun.file(path).json(); const code=Number(status); if(result.tolerance?.channel!==0 || result.tolerance?.pixels!==0 || !Number.isSafeInteger(result.changedPixels) || result.changedPixels<0 || result.exact!==(result.changedPixels===0) || result.accepted!==result.exact || code!==(result.exact?0:1)) throw new Error("Invalid zero-tolerance typography comparison"); console.log(JSON.stringify({path,exitCode:code,...result}));' "$task_output/pixels.json" "$task_status" >> "$task_comparisons"
+  bun -e '
+    import {createHash} from "node:crypto";
+    import {relative,resolve,sep} from "node:path";
+    const [path,status,reference,native,evidence]=process.argv.slice(1);
+    const result=await Bun.file(path).json(), code=Number(status);
+    if(result.tolerance?.channel!==0 || result.tolerance?.pixels!==0 || !Number.isSafeInteger(result.changedPixels) || result.changedPixels<0 || result.exact!==(result.changedPixels===0) || result.accepted!==result.exact || code!==(result.exact?0:1)) throw new Error("Invalid zero-tolerance typography comparison");
+    const inputs={};
+    for(const [role,input] of [["reference",reference],["native",native]]) {
+      const name=relative(resolve(evidence),resolve(input)).split(sep).join("/");
+      if(!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(name) || name.split("/").some(part=>part==="." || part==="..")) throw new Error("Typography comparison input escaped its artifact directory");
+      inputs[role]={path:name,hash:createHash("sha256").update(new Uint8Array(await Bun.file(input).arrayBuffer())).digest("hex")};
+    }
+    const bound={...result,inputs};
+    await Bun.write(path,JSON.stringify(bound,null,2)+"\n");
+    console.log(JSON.stringify({path,exitCode:code,...bound}));
+  ' "$task_output/pixels.json" "$task_status" "$task_reference" "$task_native" "$task_evidence" >> "$task_comparisons"
 }
 for task_scale in 1 2; do
   for task_variant in upstream-v2.8.1 fork-v2.8.1-sytue.16; do

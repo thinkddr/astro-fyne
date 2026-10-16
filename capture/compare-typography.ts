@@ -251,6 +251,51 @@ export function strictTypographyPixels(value: unknown, label: string) {
   return item;
 }
 
+export interface TypographyPixelInputs {
+  reference: { path: string; hash: string };
+  native: { path: string; hash: string };
+}
+
+function pixelInput(value: unknown, label: string) {
+  const item = record(value, label);
+  requireValue(
+    Object.keys(item).length === 2 &&
+      typeof item.path === "string" &&
+      /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(item.path) &&
+      !item.path
+        .split("/")
+        .some((part: string) => part === "." || part === "..") &&
+      typeof item.hash === "string" &&
+      /^[a-f0-9]{64}$/.test(item.hash),
+    `${label} must retain a normalized artifact-relative path and PNG SHA256`,
+  );
+  return item;
+}
+
+export function boundTypographyPixels(
+  value: unknown,
+  expected: TypographyPixelInputs,
+  label: string,
+) {
+  const result = strictTypographyPixels(value, label),
+    inputs = record(result.inputs, `${label} comparison inputs`);
+  same(
+    Object.keys(inputs).sort(),
+    ["native", "reference"],
+    `${label} comparison input roles`,
+  );
+  for (const role of ["reference", "native"] as const) {
+    const actual = pixelInput(inputs[role], `${label} ${role}`),
+      current = pixelInput(expected[role], `${label} expected ${role}`);
+    same(
+      [actual.path, actual.hash],
+      [current.path, current.hash],
+      `${label} ${role} PNG binding`,
+    );
+  }
+  return result;
+}
+
 function cases(value: unknown, probe: TypographyProbe, label: string) {
   requireValue(
     Array.isArray(value) &&
@@ -768,7 +813,8 @@ export async function compareTypography(directory: string) {
     probe,
     expected,
   );
-  const frames = [];
+  const frames = [],
+    nativePNGHashes = new Map<string, string>();
   for (const scale of probe.scales) {
     const frameID = `scale-${scale}`;
     const web = identity(
@@ -817,6 +863,7 @@ export async function compareTypography(directory: string) {
         probe.viewport.width * scale,
         probe.viewport.height * scale,
       );
+      nativePNGHashes.set(`${variant}/${frameID}/native.png`, native.pngHash);
       const trace =
         variant === variants[0] ? shaping.original : shaping.changed;
       const samples = probe.samples.map((sample) => {
@@ -901,28 +948,52 @@ export async function compareTypography(directory: string) {
         variant,
         frameID,
         samples,
-        pixels: strictTypographyPixels(
+        pixels: boundTypographyPixels(
           await json(resolve(folder, "pixels.json")),
+          {
+            reference: {
+              path: `${frameID}/web.png`,
+              hash: web.screenshot.hash,
+            },
+            native: {
+              path: `${variant}/${frameID}/native.png`,
+              hash: native.pngHash,
+            },
+          },
           folder,
         ),
       });
     }
   }
   const pairPixels = await Promise.all(
-    probe.scales.map(async (scale) => ({
-      scale,
-      pixels: strictTypographyPixels(
-        await json(
-          resolve(
-            root,
-            "upstream-versus-fork",
-            `scale-${scale}`,
-            "pixels.json",
+    probe.scales.map(async (scale) => {
+      const referencePath = `${variants[0]}/scale-${scale}/native.png`,
+        nativePath = `${variants[1]}/scale-${scale}/native.png`,
+        referenceHash = nativePNGHashes.get(referencePath),
+        nativeHash = nativePNGHashes.get(nativePath);
+      requireValue(
+        referenceHash && nativeHash,
+        `A/B scale ${scale} omitted validated native PNG identities`,
+      );
+      return {
+        scale,
+        pixels: boundTypographyPixels(
+          await json(
+            resolve(
+              root,
+              "upstream-versus-fork",
+              `scale-${scale}`,
+              "pixels.json",
+            ),
           ),
+          {
+            reference: { path: referencePath, hash: referenceHash },
+            native: { path: nativePath, hash: nativeHash },
+          },
+          `A/B scale ${scale}`,
         ),
-        `A/B scale ${scale}`,
-      ),
-    })),
+      };
+    }),
   );
   const summary = {
     schema: 1,
