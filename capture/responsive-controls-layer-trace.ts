@@ -238,12 +238,12 @@ for (const pin of pins.files ?? []) {
 }
 if (
   pins.chromiumRevision !== revision ||
-  pins.files?.length !== 22 ||
-  seenPins.size !== 22
+  pins.files?.length !== 25 ||
+  seenPins.size !== 25
 )
   fail(
     "upstream-source",
-    "Expected all 22 pinned protocol/source/notice inputs",
+    "Expected all 25 pinned protocol/source/notice inputs",
   );
 await save(resolve(out, "source-manifest.json"), {
   schema: 1,
@@ -387,6 +387,7 @@ try {
         completion: unknown = null,
         bytes = 0,
         receivedEvents = 0,
+        committedFrameId: string | null = null,
         overflow = false,
         writes = Promise.resolve();
       let complete: (value: unknown) => void = () => {};
@@ -465,7 +466,6 @@ try {
         await writes;
       }
       try {
-        await session.send("LayerTree.enable");
         if (mode === "traced") {
           const available = await session.send("Tracing.getCategories");
           await save(resolve(dir, "categories.json"), available);
@@ -504,7 +504,7 @@ try {
             end: `${prefix}-end`,
           };
           try {
-            await marker(markers.begin);
+            if (state !== "initial") await marker(markers.begin);
             if (state === "initial") {
               const response = await page.goto(url);
               if (!response?.ok())
@@ -539,6 +539,26 @@ try {
                   "Actual font response differs from original source",
                 );
               await writeFile(resolve(dir, "served-font.ttf"), served[0]!);
+              await session.send("DOM.enable");
+              await save(
+                resolve(dir, "layer-observer-document.json"),
+                await session.send("DOM.getDocument"),
+              );
+              await session.send("LayerTree.enable");
+              const navigation = (await session.send("Page.getFrameTree"))
+                .frameTree.frame;
+              if (
+                navigation.url !== new URL(url).href ||
+                page.url() !== navigation.url
+              )
+                throw new Error(
+                  "Initial trace window requires the committed original URL",
+                );
+              committedFrameId = navigation.id;
+              await save(resolve(dir, "navigation-frame.json"), navigation);
+              // Loading about:blank precedes the observed state; stale URL/PID
+              // checks remain strict throughout the actual capture window.
+              await marker(markers.begin);
             } else
               await page
                 .locator(
@@ -568,6 +588,12 @@ try {
             await marker(markers.captureAfter);
             const frame = (await session.send("Page.getFrameTree")).frameTree
               .frame;
+            if (
+              frame.id !== committedFrameId ||
+              frame.url !== new URL(url).href ||
+              frame.url !== page.url()
+            )
+              throw new Error("Original trace frame changed during capture");
             const latest = layers as { layerId: string }[] | null,
               reasons = [];
             for (const layer of latest ?? [])

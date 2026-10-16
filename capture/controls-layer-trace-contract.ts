@@ -184,6 +184,8 @@ function readLayer(value: unknown) {
     lcdTextDisallowedReason: null as string | null,
     idealContentsScale: null as number | null,
     geometryContentsScale: null as number | null,
+    tilingsAvailability: null as
+      "serialized-array" | "omitted-empty-array" | null,
     tilings: [] as { scale: number[]; translation: number[] }[],
   };
   if (layer.lcd_text_disallowed_reason !== undefined) {
@@ -201,7 +203,13 @@ function readLayer(value: unknown) {
       layer.geometry_contents_scale,
       "geometry_contents_scale",
     );
-    result.tilings = array(layer.tilings, "tilings").map((value) => {
+    // Perfetto records leaf argument rows; an empty NestedValue ARRAY has no
+    // rows and is omitted when export_json reconstructs the dictionary.
+    result.tilingsAvailability =
+      layer.tilings === undefined ? "omitted-empty-array" : "serialized-array";
+    result.tilings = (
+      layer.tilings === undefined ? [] : array(layer.tilings, "tilings")
+    ).map((value) => {
       const transform = object(
         object(value, "tiling").raster_transform,
         "raster_transform",
@@ -269,6 +277,14 @@ export function decodeLayerTrace(
     tileId: unknown;
     resolution: string;
   }[] = [];
+  const snapshotFlows: {
+    timestamp: number;
+    phase: "s" | "f";
+    pid: number;
+    tid: number;
+    id: number;
+    bindingPoint: "e" | null;
+  }[] = [];
   for (const value of input) {
     const event = object(value, "trace event");
     if (
@@ -294,6 +310,28 @@ export function decodeLayerTrace(
       check(!markers.has(id), "clock marker is duplicated");
       markers.set(id, timestamp);
     } else if (name === "LayerTreeHostImpl:snapshot") {
+      // The pinned exporter also reuses this name for Perfetto flow endpoints.
+      // Those endpoints carry no active-tree snapshot and must not count as one.
+      if (event.ph === "s" || event.ph === "f") {
+        check(
+          args.snapshot === undefined,
+          "snapshot flow unexpectedly carries a snapshot payload",
+        );
+        check(
+          event.ph === "s" ? event.bp === undefined : event.bp === "e",
+          "snapshot flow binding point differs",
+        );
+        snapshotFlows.push({
+          timestamp,
+          phase: event.ph,
+          pid,
+          tid: integer(event.tid, "snapshot flow tid", 1),
+          id: integer(event.id, "snapshot flow id"),
+          bindingPoint: event.ph === "f" ? "e" : null,
+        });
+        continue;
+      }
+      check(event.ph === "I", "unsupported snapshot event phase");
       const tree = object(
         object(args.snapshot, "snapshot").active_tree,
         "active_tree",
@@ -502,6 +540,10 @@ export function decodeLayerTrace(
           task.pid === pids[0] &&
           task.timestamp >= times.begin! &&
           task.timestamp <= times.end!,
+      ),
+      snapshotFlows: snapshotFlows.filter(
+        (flow) =>
+          flow.timestamp >= times.begin! && flow.timestamp <= times.end!,
       ),
       unobserved: [
         "cached tile can_use_lcd_text",

@@ -223,6 +223,36 @@
       "revision": "da65f7e907e0caf473ddec16e15427465f503d05",
       "output": "perfetto/LICENSE",
       "url": "https://raw.githubusercontent.com/google/perfetto/da65f7e907e0caf473ddec16e15427465f503d05/LICENSE"
+    },
+    {
+      "path": "services/tracing/public/cpp/perfetto/traced_value_proto_writer.cc",
+      "gitBlob": "afd6d52d03644ff554f68ae4e8cdeba887ad9742",
+      "sha256": "e90f3b575477b83aff332e6d29956e914680a8f77fbc2d1a132e5ad2f687e5cd",
+      "bytes": 7829,
+      "repository": "chromium/chromium",
+      "revision": "971a7443b0c9b0a9b2860529b33331b76077ec62",
+      "output": "chromium/services/tracing/public/cpp/perfetto/traced_value_proto_writer.cc",
+      "url": "https://raw.githubusercontent.com/chromium/chromium/971a7443b0c9b0a9b2860529b33331b76077ec62/services/tracing/public/cpp/perfetto/traced_value_proto_writer.cc"
+    },
+    {
+      "path": "src/trace_processor/util/proto_to_args_parser.cc",
+      "gitBlob": "3264de7eb9cbf5d6976120e0682556135baed5a1",
+      "sha256": "72f1071dbcf51f746109fbdfd7ef1072a4b94e15a11e21ac92128f1d3ee9c688",
+      "bytes": 46288,
+      "repository": "google/perfetto",
+      "revision": "da65f7e907e0caf473ddec16e15427465f503d05",
+      "output": "perfetto/src/trace_processor/util/proto_to_args_parser.cc",
+      "url": "https://raw.githubusercontent.com/google/perfetto/da65f7e907e0caf473ddec16e15427465f503d05/src/trace_processor/util/proto_to_args_parser.cc"
+    },
+    {
+      "path": "src/trace_processor/export_json.cc",
+      "gitBlob": "210de3e4fa9cea6bd4aa53a2b5154ef526d4c5a7",
+      "sha256": "dc3a3b53cc2df3cd66be8b331b805d31331c2a8dbcf42e3f58d6fe8a05377667",
+      "bytes": 66822,
+      "repository": "google/perfetto",
+      "revision": "da65f7e907e0caf473ddec16e15427465f503d05",
+      "output": "perfetto/src/trace_processor/export_json.cc",
+      "url": "https://raw.githubusercontent.com/google/perfetto/da65f7e907e0caf473ddec16e15427465f503d05/src/trace_processor/export_json.cc"
     }
   ],
   "notice": "Exact official Chromium and Chromium-DEPS-pinned Perfetto source copies retain their original headers and LICENSE files. New collector/decoder code is Apache-2.0. Source describes eligibility and trace serialization, not an observed glyph mask."

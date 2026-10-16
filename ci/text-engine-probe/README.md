@@ -479,6 +479,24 @@ Source-shaped decoding reports live layer IDs, `contents_opaque`, current
 `lcd_text_disallowed_reason`, property-tree indices and raster transforms. Trace
 matrices are row-major; CDP LayerTree matrices are column-major. The optional CDP
 tree may remain unreported. Its absence does not establish absence of layers.
+Both fresh passes enable DOM, retain the current document receipt and enable
+LayerTree after navigation, hydration and font loading, before the same settling
+step. The pinned `InspectorLayerTreeAgent::Restore()` deliberately does not
+re-enable the agent after navigation because its node IDs depend on DOMAgent.
+This lifecycle correction does not change the original collectors or comparisons.
+The initial clock window starts after the expected URL has committed and its font
+has loaded. Subsequent navigation and PID changes inside capture windows still
+fail; the decoder never revives an older matching URL receipt.
+
+The pinned Perfetto exporter emits instant snapshots with phase `I`, and separate
+name-sharing flow endpoints with phases `s`/`f`. The decoder retains those endpoints
+separately; they cannot satisfy the required picture-layer observation. Its
+argument-row conversion omits empty arrays. An absent `tilings` field is therefore
+reported as `omitted-empty-array`; explicit null or malformed arrays still fail.
+The source inventory includes the Chromium proto writer and Perfetto parser and
+JSON exporter that establish this serialization contract. Raw packets retain all
+layer names, owner IDs, compositing reasons and flow events; a layer owner does
+not establish the complete set of painted text.
 
 Clock-window joins retain candidate source-frame numbers and raster tasks; they
 do not identify the exact tree used by the screenshot swap. Cached tile LCD flags,

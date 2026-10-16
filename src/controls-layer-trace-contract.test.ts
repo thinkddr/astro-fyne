@@ -64,6 +64,7 @@ function fixture() {
     );
     events.push({
       name: "LayerTreeHostImpl:snapshot",
+      ph: "I",
       pid: 99,
       tid: 100,
       ts: start + 20,
@@ -120,10 +121,121 @@ test("joins real source-shaped layer/frame/clock records without inventing a gly
   expect(layer.transformRowMajor?.[7]).toBe(52);
   expect(layer.lcdTextDisallowedReason).toBe("none");
   expect(layer.tilings[0]!.translation).toEqual([0.25, 0]);
+  expect(layer.tilingsAvailability).toBe("serialized-array");
   expect(decoded[0]!.layerIdJoin.matching).toEqual(["7"]);
   expect(decoded[0]!.rasterTasks).toHaveLength(1);
   expect(decoded[0]!.unobserved).toContain("cached tile can_use_lcd_text");
   expect(decoded[0]!.unobserved).toContain("actual glyph mask");
+});
+test("supports omitted empty tilings from the pinned argument-row serializer without accepting malformed arrays", () => {
+  const omitted = fixture();
+  delete firstLayer(omitted).tilings;
+  const layer = decode(omitted)[0]!.snapshots[0]!.layers[0]!;
+  expect(layer.tilings).toEqual([]);
+  expect(layer.tilingsAvailability).toBe("omitted-empty-array");
+  const explicit = fixture();
+  firstLayer(explicit).tilings = [];
+  expect(
+    decode(explicit)[0]!.snapshots[0]!.layers[0]!.tilingsAvailability,
+  ).toBe("serialized-array");
+  const browserRoot = fixture();
+  const rootLayer = structuredClone(firstLayer(browserRoot));
+  rootLayer.layer_id = 10;
+  rootLayer.lcd_text_disallowed_reason = "no-text";
+  rootLayer.ideal_contents_scale = 0;
+  delete rootLayer.tilings;
+  browserRoot.events.push({
+    name: "LayerTreeHostImpl:snapshot",
+    ph: "I",
+    pid: 1,
+    tid: 1,
+    ts: 2,
+    args: {
+      snapshot: {
+        active_tree: { source_frame_number: -1, layers: [rootLayer] },
+      },
+    },
+  });
+  expect(decode(browserRoot)[0]!.snapshots).toHaveLength(1);
+  for (const value of [null, {}, "", false]) {
+    const malformed = fixture();
+    firstLayer(malformed).tilings = value;
+    expect(() => decode(malformed)).toThrow("tilings must be an array");
+  }
+});
+test("retains name-sharing flow endpoints separately from instant snapshot payloads", () => {
+  const value = fixture();
+  value.events.push(
+    {
+      name: "LayerTreeHostImpl:snapshot",
+      ph: "s",
+      id: 13,
+      pid: 1,
+      tid: 1,
+      ts: 10,
+      args: {},
+    },
+    {
+      name: "LayerTreeHostImpl:snapshot",
+      ph: "f",
+      bp: "e",
+      id: 13,
+      pid: 99,
+      tid: 100,
+      ts: 20,
+      args: {},
+    },
+  );
+  const decoded = decode(value);
+  expect(decoded[0]!.snapshots).toHaveLength(1);
+  expect(decoded[0]!.snapshotFlows).toEqual([
+    { timestamp: 10, phase: "s", pid: 1, tid: 1, id: 13, bindingPoint: null },
+    { timestamp: 20, phase: "f", pid: 99, tid: 100, id: 13, bindingPoint: "e" },
+  ]);
+  const flowsOnly = structuredClone(value);
+  flowsOnly.events = flowsOnly.events.filter(
+    (event) => event.name !== "LayerTreeHostImpl:snapshot" || event.ph !== "I",
+  );
+  expect(() => decode(flowsOnly)).toThrow("no picture-layer snapshot");
+  value.events.at(-1).id = -1;
+  expect(() => decode(value)).toThrow("snapshot flow id");
+});
+test("rejects malformed or unsupported snapshot phases rather than counting them as tree evidence", () => {
+  for (const phase of [undefined, "X", "O", "s"]) {
+    const value = fixture();
+    value.events.find(
+      (event) => event.name === "LayerTreeHostImpl:snapshot",
+    ).ph = phase;
+    expect(() => decode(value)).toThrow(
+      phase === "s"
+        ? "flow unexpectedly carries"
+        : "unsupported snapshot event phase",
+    );
+  }
+  const missing = fixture();
+  missing.events.find(
+    (event) => event.name === "LayerTreeHostImpl:snapshot",
+  ).args = {};
+  expect(() => decode(missing)).toThrow("snapshot must be an object");
+});
+test("starts the initial observed window after expected navigation while rejecting an about:blank binding inside it", () => {
+  const value = fixture();
+  value.events[0].args.data.frames[0].url = "about:blank";
+  value.events.push({
+    name: "FrameCommittedInBrowser",
+    pid: 1,
+    ts: 10,
+    args: {
+      data: { frame: "FRAME", url: value.states[0]!.url, processId: 99 },
+    },
+  });
+  const begin = value.events.find(
+    (event) => event.args?.sync_id === "initial-begin",
+  );
+  begin.ts = 11;
+  expect(decode(value)[0]!.latestBeforeCapture!.timestamp).toBe(20);
+  begin.ts = 9;
+  expect(() => decode(value)).toThrow("changed frame URL");
 });
 test("a missing public LayerTree report stays unavailable instead of proving no compositor layers", () => {
   const value = fixture();
