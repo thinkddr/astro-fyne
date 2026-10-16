@@ -356,9 +356,6 @@ test("unsupported variable syntax and replacement semantics receive explicit dia
       "--ink:var(--missing,inherit);color:var(--ink,red)",
       "property-replacement adapter",
     ],
-    ["color:var(var(--name),red)", "first argument"],
-    [String.raw`color:var(--\69 nk,red)`, "first argument"],
-    [String.raw`color:v\61 r(--ink,red)`, "variable functions"],
   ])
     await withCSS(`.a{${declarations}}`, ({ document, root, snapshot }) => {
       const node = document.createElement("p");
@@ -366,6 +363,31 @@ test("unsupported variable syntax and replacement semantics receive explicit dia
       root.appendChild(node);
       expect(snapshot).toThrow(message);
     });
+});
+
+test("unsupported variable tokens fail at the parser or inline-style boundary", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "afy-css-variable-"));
+  try {
+    const file = join(dir, "style.css");
+    await writeFile(file, ".a{color:var(var(--name),red)}");
+    await expect(compileJavascriptCSS(file, () => {})).rejects.toThrow(
+      "CSS syntax requires a parser adapter",
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+  for (const [value, message] of [
+    ["var(var(--name),red)", "first argument"],
+    [String.raw`var(--\69 nk,red)`, "first argument"],
+    [String.raw`v\61 r(--ink,red)`, "variable functions"],
+  ]) {
+    const { document, root, snapshot, installCSS } = createDocument();
+    installCSS([]);
+    const node = document.createElement("p");
+    node.style.color = value;
+    root.appendChild(node);
+    expect(snapshot).toThrow(message);
+  }
 });
 
 test("ordinary Unicode custom-property names remain distinct and supported", async () => {
