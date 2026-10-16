@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "candidateOnly": true,
+  "variant": "native-legacy",
+  "repository": "https://github.com/thinkddr/fyne",
+  "neutralBaseCommit": "2236726ac36e11116c689dc64b0890d91be8ced6",
+  "moduleVersion": "v2.8.1-sytue.16",
+  "path": "internal/painter/software/draw.go",
+  "sourceGitBlob": "a18ecf51a6d397236468bc2dfec58ebc4d765115",
+  "sourceSHA256": "cf3280e8a4fca973792bb60626756de426f3df648665e99400546cf38573215a",
+  "candidateSHA256": "c03707cd8e9d66c95cd7d35ad5ee594bac6dd774c34b6444325241402465a6ed",
+  "candidateGitBlob": "fb98da4f16b3861d5c4e101c9aa86fdf948bbfa0",
+  "files": {
+    "fyne-native-legacy-enlargement.patch": "0cc261326dbe2fe88f62f6ba045eb1a296ddd508665288e6dd39c1f453259324",
+    "skia_legacy_enlargement.go.proposed": "6860991446cf0a114e32f70cf6c65b9011701b8946164b3e77f7edfc7c84b74e",
+    "skia_legacy_enlargement_test.go.proposed": "db199a802d701312864255b01809733bb58013bc25b1025497e76b44af71daff",
+    "skia_legacy_scope_test.go.proposed": "24e1a76bef499f8f30dddbb7e872969c6af84e255593b535d83edb29273bc83f",
+    "skia_legacy_image_test.go.proposed": "383c67ae30e0a0f9cb6abc1a07dd9e5a101a4957997b381a47cfc7fb0238536b",
+    "LICENSE-Fyne.txt": "af74a08a7a846262b696f5995ad84688b8e6ee24d73fd783b9a88877cf88f7ca",
+    "LICENSE-Skia.txt": "5f787c1dee3c56547f09ccc2906ab5f5293c4d8dd6c8654e573216c38e908dbd"
+  },
+  "hostedFormatted": {
+    "skia_legacy_enlargement.go": "6860991446cf0a114e32f70cf6c65b9011701b8946164b3e77f7edfc7c84b74e",
+    "skia_legacy_enlargement_test.go": "14907d1f4a8374b9493ce906d4b99a689adde1d3fc93fb697706770644c57ae7"
+  },
+  "helperEvidence": {
+    "run": "https://github.com/thinkddr/astro-fyne/actions/runs/38890512586",
+    "commit": "78c51dd119e2756769a9bcb06e37e0511b0fe946"
+  },
+  "changesPNGPrepass": false,
+  "broadBilinearFallback": false,
+  "preparedWithoutLocalGoExecution": true,
+  "minimalVariantRemotelyTested": false,
+  "pixelParityCertified": false
+}
