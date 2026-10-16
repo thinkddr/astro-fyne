@@ -115,6 +115,32 @@ struct atf_run {
 };
 
 namespace {
+SkFont configured_font(atf_engine* engine, float font_css, float line_height_css,
+                       const atf_policy* policy) {
+  require(engine && policy, "Missing font engine or policy");
+  require(std::isfinite(font_css) && font_css > 0 && font_css <= 256 &&
+          std::isfinite(line_height_css) && line_height_css > 0 && line_height_css <= 1024,
+          "Invalid CSS font size/line height");
+  validate(*policy);
+  SkFont font(engine->face, font_css);
+  font.setHinting(static_cast<SkFontHinting>(policy->hinting));
+  font.setForceAutoHinting(policy->auto_hint); font.setEmbeddedBitmaps(policy->embedded_bitmaps);
+  font.setSubpixel(policy->subpixel); font.setLinearMetrics(policy->linear_metrics);
+  font.setBaselineSnap(policy->baseline_snap);
+  font.setEdging(static_cast<SkFont::Edging>(policy->edging));
+  return font;
+}
+void set_metrics(atf_run& run, float advance_css, float line_height_css) {
+  SkFontMetrics metrics;
+  run.font.getMetrics(&metrics);
+  require(std::isfinite(advance_css) && std::isfinite(metrics.fAscent) &&
+          std::isfinite(metrics.fDescent) && std::isfinite(metrics.fLeading),
+          "Non-finite native font/run metric");
+  const float ascent = std::round(-metrics.fAscent), descent = std::round(metrics.fDescent);
+  const float baseline = std::floor((line_height_css - ascent - descent) / 2) + ascent;
+  run.metrics = {advance_css, -metrics.fAscent, metrics.fDescent, metrics.fLeading,
+                 baseline, static_cast<uint32_t>(run.glyphs.size())};
+}
 hb_position_t advance(hb_font_t*, void* data, hb_codepoint_t glyph, void*) {
   auto& run = *static_cast<atf_run*>(data);
   try {
@@ -178,20 +204,15 @@ const uint8_t* atf_effective_font(const atf_engine* engine, size_t* length) {
 atf_run* atf_shape(atf_engine* engine, const uint8_t* utf8, size_t length,
                   float font_css, float line_height_css, const atf_policy* policy) {
   try {
-    require(engine && utf8 && policy && length > 0 && length <= 4096,
+    require(engine && (utf8 || length == 0) && policy && length <= 4096,
             "Invalid shape arguments");
     require(bounded_text(utf8, length), "This probe supports ASCII plus acute/diaeresis marks only");
-    require(std::isfinite(font_css) && font_css > 0 && font_css <= 256 &&
-            std::isfinite(line_height_css) && line_height_css > 0 && line_height_css <= 1024,
-            "Invalid CSS font size/line height");
-    validate(*policy);
-    SkFont font(engine->face, font_css);
-    font.setHinting(static_cast<SkFontHinting>(policy->hinting));
-    font.setForceAutoHinting(policy->auto_hint); font.setEmbeddedBitmaps(policy->embedded_bitmaps);
-    font.setSubpixel(policy->subpixel); font.setLinearMetrics(policy->linear_metrics);
-    font.setBaselineSnap(policy->baseline_snap);
-    font.setEdging(static_cast<SkFont::Edging>(policy->edging));
+    SkFont font = configured_font(engine, font_css, line_height_css, policy);
     auto run = std::make_unique<atf_run>(font, *policy);
+    if (length == 0) {
+      set_metrics(*run, 0, line_height_css);
+      return run.release();
+    }
     using Blob = std::unique_ptr<hb_blob_t, decltype(&hb_blob_destroy)>;
     using Face = std::unique_ptr<hb_face_t, decltype(&hb_face_destroy)>;
     using Font = std::unique_ptr<hb_font_t, decltype(&hb_font_destroy)>;
@@ -237,15 +258,7 @@ atf_run* atf_shape(atf_engine* engine, const uint8_t* utf8, size_t length,
         p.x_offset, p.y_offset, run->strike.getWidth(id), x, y});
       pen_x += p.x_advance / 65536.0f; pen_y += p.y_advance / 65536.0f;
     }
-    SkFontMetrics metrics;
-    font.getMetrics(&metrics);
-    require(std::isfinite(pen_x) && std::isfinite(metrics.fAscent) &&
-            std::isfinite(metrics.fDescent) && std::isfinite(metrics.fLeading),
-            "Non-finite native font/run metric");
-    const float ascent = std::round(-metrics.fAscent), descent = std::round(metrics.fDescent);
-    // Preserve native/backend.go PlaceText's existing formula; never fit to DOM markers.
-    const float baseline = std::floor((line_height_css - ascent - descent) / 2) + ascent;
-    run->metrics = {pen_x, -metrics.fAscent, metrics.fDescent, metrics.fLeading, baseline, count};
+    set_metrics(*run, pen_x, line_height_css);
     return run.release();
   } catch (const std::exception& failure) { error = failure.what(); return nullptr; }
 }
@@ -255,7 +268,8 @@ int atf_run_metrics(const atf_run* run, atf_metrics* metrics) {
   *metrics = run->metrics; return 1;
 }
 int atf_copy_glyphs(const atf_run* run, atf_glyph* glyphs, size_t count) {
-  if (!run || !glyphs || count != run->glyphs.size()) { error = "Glyph output size mismatch"; return 0; }
+  if (!run || (!glyphs && count != 0) || count != run->glyphs.size()) { error = "Glyph output size mismatch"; return 0; }
+  if (count == 0) return 1;
   std::copy(run->glyphs.begin(), run->glyphs.end(), glyphs); return 1;
 }
 int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
@@ -313,6 +327,32 @@ int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
     last_surface = observed;
     has_surface = true;
     return 1;
+  } catch (const std::exception& failure) { error = failure.what(); return 0; }
+}
+int atf_paint_snapshot(atf_engine* engine, const atf_glyph* glyphs, size_t count,
+                       float font_css, float line_height_css, const atf_policy* policy,
+                       uint8_t* rgba, size_t length, uint32_t width, uint32_t height,
+                       uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb) {
+  try {
+    require(engine && policy && (glyphs || count == 0) && count <= 4096,
+            "Invalid glyph snapshot arguments");
+    atf_run run(configured_font(engine, font_css, line_height_css, policy), *policy);
+    const auto face_glyphs = static_cast<uint32_t>(engine->face->countGlyphs());
+    float advance_css = 0;
+    for (size_t i = 0; i < count; ++i) {
+      const auto& glyph = glyphs[i];
+      require(glyph.glyph > 0 && glyph.glyph <= 0xffff && glyph.glyph < face_glyphs &&
+              std::isfinite(glyph.nominal_advance_css) &&
+              std::isfinite(glyph.x_css) && std::isfinite(glyph.y_css),
+              "Invalid native glyph snapshot record");
+      run.glyphs.push_back(glyph);
+      run.ids.push_back(static_cast<SkGlyphID>(glyph.glyph));
+      run.positions.push_back(SkPoint::Make(glyph.x_css, glyph.y_css));
+      advance_css += glyph.x_advance_16_16 / 65536.0f;
+    }
+    set_metrics(run, advance_css, line_height_css);
+    return atf_paint(&run, rgba, length, width, height, scale,
+                     line_x_css, line_y_css, foreground_rgb);
   } catch (const std::exception& failure) { error = failure.what(); return 0; }
 }
 }
