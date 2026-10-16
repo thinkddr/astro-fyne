@@ -2,6 +2,10 @@
 // Copyright 2026 Astro Fyne contributors.
 
 import { chromium } from "playwright";
+import {
+  collectBrowserProvenance,
+  verifyBrowserProvenance,
+} from "./browser-provenance.ts";
 import { createRequire } from "node:module";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -48,7 +52,9 @@ const playwrightVersion = (
 ).version;
 const browser = await chromium.launch({ headless: true });
 try {
+  const provenance = await collectBrowserProvenance(browser);
   const environment = {
+    browserProvenanceHash: provenance.hash,
     browserVersion: browser.version(),
     playwrightVersion,
     platform: process.platform,
@@ -183,6 +189,30 @@ try {
       await context.close();
     }
   }
+  const finalProvenance = await verifyBrowserProvenance(browser, provenance);
+  await writeFile(
+    resolve(args.out, "browser-provenance.json"),
+    JSON.stringify(
+      {
+        schema: 1,
+        diagnosticOnly: true,
+        pixelPerfectVerified: false,
+        ...identity,
+        captureHash: typographyHash(
+          await readFile(fileURLToPath(import.meta.url)),
+        ),
+        provenanceHash: provenance.hash,
+        observation: provenance.observation,
+        finalProvenanceHash: finalProvenance.hash,
+        frames: cases.map((record) => ({
+          scale: record.viewport.scale,
+          screenshot: record.screenshot,
+        })),
+      },
+      null,
+      2,
+    ) + "\n",
+  );
   await writeFile(
     resolve(args.out, "browser-text.json"),
     JSON.stringify(

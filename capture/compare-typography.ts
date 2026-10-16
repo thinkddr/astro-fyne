@@ -4,6 +4,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { validateBrowserProvenance } from "./browser-provenance-validation.ts";
 import {
   readTypographyProbe,
   typographyHash,
@@ -719,6 +720,25 @@ export async function compareTypography(directory: string) {
     Array.isArray(browser.cases) && browser.cases.length === 2,
     "Browser omitted scales",
   );
+  const browserProvenance = validateBrowserProvenance(
+    await json(resolve(root, "browser-provenance.json")),
+    browser,
+    {
+      identity: expected,
+      collectorHash: typographyHash(
+        await readFile(
+          fileURLToPath(new URL("./browser-provenance.ts", import.meta.url)),
+        ),
+      ),
+      captureHash: typographyHash(
+        await readFile(
+          fileURLToPath(new URL("./typography-probe.ts", import.meta.url)),
+        ),
+      ),
+      viewport: probe.viewport,
+      scales: probe.scales,
+    },
+  );
   const traces = await Promise.all(
     variants.map(async (variant) => {
       const directory = resolve(root, variant);
@@ -1000,6 +1020,7 @@ export async function compareTypography(directory: string) {
     diagnosticOnly: true,
     pixelPerfectVerified: false,
     ...expected,
+    browserProvenance,
     tolerance: { channel: 0, pixels: 0 },
     nativeShapingIdentical: true,
     sidecarPainterPackageIdentity: traces.map((trace, index) => ({

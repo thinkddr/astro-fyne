@@ -88,7 +88,7 @@ not certify bitmap interpolation or typography at scale 2.
 
 ## Isolate native text differences
 
-On a remote machine, start the example preview above, then run:
+On a remote Linux machine with procfs, start the example preview above, then run:
 
 ```sh
 bash ci/typography.sh
@@ -102,17 +102,38 @@ opaque white background. It does not align images after rendering or apply toler
 
 Evidence is retained in `artifacts/typography`:
 
-| File                                       | Evidence                                                                                              |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `scale-*/web-text.json`                    | DOM Range rectangles, marker baselines, separate Canvas text metrics and applied settings             |
-| `<variant>/scale-*/native-text.json`       | Actual native text positions, driver measurements, font digest and physical-origin derivation         |
-| `<variant>/native-shaping.json`            | Real painter glyph IDs, clusters, signed 26.6 advances, offsets and extents for 42 text/H/space cases |
-| `<variant>/fyne-module.json`               | Public dependency version and verified module checksums                                               |
-| `<variant>/*-painter-packages.json`        | Actual compiled painter packages, file hashes and dependency identities                               |
-| `<variant>/*-modules.jsonl`                | Resolved module versions for the native capture and painter trace                                     |
-| `<variant>/scale-*/pixels.json`            | Unchanged strict browser/native pixel comparison                                                      |
-| `upstream-versus-fork/scale-*/pixels.json` | Strict comparison of the two native captures                                                          |
-| `summary.json`                             | Width and baseline deltas, shaping agreement and explicit pixel results                               |
+| File                                       | Evidence                                                                                                  |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `browser-provenance.json`                  | Actual browser executable SHA-256/ELF architecture, CDP version, process ID and full kernel/CDP arguments |
+| `scale-*/web-text.json`                    | DOM Range rectangles, marker baselines, separate Canvas text metrics and applied settings                 |
+| `<variant>/scale-*/native-text.json`       | Actual native text positions, driver measurements, font digest and physical-origin derivation             |
+| `<variant>/native-shaping.json`            | Real painter glyph IDs, clusters, signed 26.6 advances, offsets and extents for 42 text/H/space cases     |
+| `<variant>/fyne-module.json`               | Public dependency version and verified module checksums                                                   |
+| `<variant>/*-painter-packages.json`        | Actual compiled painter packages, file hashes and dependency identities                                   |
+| `<variant>/*-modules.jsonl`                | Resolved module versions for the native capture and painter trace                                         |
+| `<variant>/scale-*/pixels.json`            | Unchanged strict browser/native pixel comparison                                                          |
+| `upstream-versus-fork/scale-*/pixels.json` | Strict comparison of the two native captures                                                              |
+| `summary.json`                             | Width and baseline deltas, shaping agreement and explicit pixel results                                   |
+
+The browser observer resolves the running process through CDP and Linux procfs.
+It checks the executable, arguments and identity again after both captures and
+binds its sidecar to their screenshot hashes and source/font identity. Each frame
+records the observation hash. This identifies the launched executable rather
+than assuming that Playwright's default executable path was used.
+The kernel argument array is required. If CDP refuses its command-line method
+because automation is disabled, the sidecar records that specific refusal and
+null CDP arguments. It keeps the existing launch options; other protocol errors
+remain fatal.
+
+The sidecar leaves effective font policy explicitly unobserved: renderer preferences,
+typeface/scaler backend, mask format, gamma, contrast and pixel geometry remain null.
+Neither a version string nor launch arguments prove those internal settings. The
+existing strict pixel comparisons remain independent; this observation adds no
+pixel certification and does not reconstruct missing historical metadata.
+The retained-artifact comparator requires this sidecar, recomputes its observation
+hash, checks the current collector/capture source hashes and both frame bindings,
+then performs its existing PNG byte/hash checks. Missing or altered provenance
+fails validation even when the pixel files are present.
 
 The painter trace runs in a temporary copy of the exact downloaded Fyne module.
 A test sidecar calls its real shaping kernel; the production kernel is unchanged.
