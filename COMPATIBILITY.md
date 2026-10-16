@@ -8,6 +8,38 @@ preserving behavior and producing identical pixels for declared rendering profil
 establishes a compiler, a native runtime and measurable failure gates. Universal compatibility
 remains a development objective.
 
+An explicit [JavaScript execution mode](docs/javascript-runtime.md) now complements the
+declarative compiler. It embeds bundled component code in generated Go, runs real Preact
+inside pure-Go Goja, and renders supported native controls. Recorded input/host boundaries
+rebuild closures and module/hook state across native ↔ Astro continuation without repeating
+external effects. Its synchronous execution profile, JSON host boundary and native DOM/CSS
+adapters are separate from the declarative source contract below. General browser/SSR APIs,
+asynchronous platform work and pixel equivalence remain pending.
+
+The JavaScript mode also preserves unstyled checkbox state, native/Space/label activation,
+click cancellation, disabled behavior and input/change events across continuation. Checkbox
+styling and measured rendering profiles remain diagnosed; functional state tests do not
+certify their pixels.
+
+Local CSS side-effect imports now preserve an explicit cascade for the JavaScript mode:
+supported selectors, flat layers, specificity/order/importance, variables and declared
+inheritance are reevaluated after source state changes. Original-browser computed styles
+are compared with native frames. General CSS layout, media/state/font/resource adapters
+and pixel equivalence remain pending.
+
+[Astro entries in the JavaScript engine](docs/astro-javascript.md) now preserve synchronous
+frontmatter lifetime, default/named/forwarded slots, compatible hydrated islands and processed script
+deduplication/module state. Original Astro pages and regenerated islands are compared with
+actual generated-Go traces. Async SSR, routing, general DOM/CSS and arbitrary native Go
+callback conversion still require explicit contracts.
+
+Source-generated widgets can opt into [portable program archives](docs/program-roundtrip.md)
+with `portableProgram: true`. This preserves the supported declarative program, declared
+state and list identities across native → Preact → native continuation. Go remains compiled;
+external callbacks use named bindings. CSS source and package adapters need retained source
+or explicit web contracts before entering that archive. Scene export remains available for
+supported handwritten Fyne objects.
+
 Compatibility has three separate requirements: source syntax must compile, native interaction
 must preserve the relevant behavior, and the resulting native image must match the browser.
 A parser test alone establishes the first requirement. A generated button responding to a
@@ -25,7 +57,7 @@ original JavaScript or execute a general ECMAScript runtime.
 | Entry files         | `.astro`, `.tsx` and `.jsx`; local component imports; default or selected named exports                                                    | General package resolution, server execution and arbitrary module side effects                                                         |
 | Components          | Function components with supported props, constants and a declarative JSX return                                                           | Class components, arbitrary imperative component bodies and slots/children without a native contract                                   |
 | State               | Supported `useState` declarations; direct and declarative updater setters in event handlers                                                | Other hooks, arbitrary custom hooks and general effect lifecycles                                                                      |
-| Expressions         | Literals, supported property/index access, arrays, objects, templates, conditionals and listed operators                                   | Arbitrary function calls, spread, optional chaining and unsupported JavaScript constructs                                              |
+| Expressions         | Literals, supported ordinary/optional property and index access, arrays, objects, templates, conditionals and listed operators             | Arbitrary function calls, optional calls, spread and unsupported JavaScript constructs                                                 |
 | Branches and lists  | Supported JSX conditionals and declarative `map` callbacks; unique finite homogeneous string or number keys on a single root               | General iteration, arbitrary callback bodies, mixed or changing key types and fragment keys                                            |
 | Events              | Button/link `onClick`; input/textarea `onInput` and `onChange`; Go host callbacks declared explicitly in props and the host translator `t` | Full DOM event propagation, arbitrary event payloads, browser effects and implicit platform adapters                                   |
 | HTML nodes          | Supported container, plain text, button, link, input, textarea and local bitmap image tags                                                 | Rich text nesting, forms, specialized form controls and unsupported tags                                                               |
@@ -44,6 +76,14 @@ their comma-separated primitive projection; ordinary records use the standard
 those methods and can make conversion fail with a TypeError. Native callable overrides,
 custom prototypes, boxed values and `Symbol.toPrimitive` require explicit adapters.
 Array coercion is bounded and rejects cycles rather than recursing without limit.
+Optional property/index access preserves one continuous chain, evaluating its base
+once and skipping computed keys and subsequent accesses only at a nullish optional
+step. For example, `null?.child.value` produces `undefined`, while
+`(null?.child).value` fails. False, zero and empty strings remain ordinary values;
+reads of missing own properties on Boolean and number primitives produce `undefined`.
+Parentheses end the chain, while erased TypeScript non-null assertions do not.
+Optional calls and inherited callable properties still require an explicit native
+callable/prototype contract.
 Known inherited prototype properties cannot be read as a fabricated `undefined` value;
 reading them requires a prototype adapter. Ordinary absent data properties still yield
 `undefined`. Prototype-mutating `__proto__` literals receive a source diagnostic.
@@ -260,9 +300,13 @@ and requires the comparator to fail. A release should report which scenarios act
 in CI and which remain untested, rather than applying a general fidelity badge to generated
 code. Failed or missing comparisons leave a profile uncertified.
 
-A separate primitive scenario compares 33 text fields across four real component states
+A separate primitive scenario compares 46 text fields across four real component states
 and eight observation frames in Chromium and generated Go. Its event callbacks also
-compare object initializer evaluation order. These checks establish behavior rather than font
+compare object initializer evaluation order. Its optional access cases require skipped
+keys to remain uncalled and preserve the order of evaluated keys and single base calls.
+An optional-access updater advances nullable object state through all four states;
+compiled Go/JavaScript negative cases also check that parentheses and nonoptional
+nullish intermediates fail. These checks establish behavior rather than font
 pixel parity. The scale 2 geometry scenario captures the actual 320 × 240 logical canvas
 as 640 × 480 pixels in both renderers and checks the same zero-difference policy. It
 also verifies that a scale 1 canvas cannot validate or export a scale 2 profile. This
@@ -292,6 +336,23 @@ button callbacks and field events require an explicit client action implementati
 Native Go functions, server behavior, custom renderers, dynamic Fyne layouts and an application's
 full state machine require additional source or host contracts. A frozen export describes one
 rendered state. Export success alone does not prove behavior or pixel equality.
+
+The opt-in schema 2 export preserves validated responsive source Flexbox metadata from
+`webui.View` snapshots. Resolved reference boxes stay separate from source declarations,
+including dimension presence and explicit zero growth/shrink factors. It requires a single
+visible responsive View at the viewport origin and size, with opaque square borderless root
+coverage. Arbitrary native layout algorithms and canvas composition remain unsupported in
+this mode. Default exports keep the schema 1 frozen contract.
+
+Both scene versions can generate native Go directly through `to-fyne --scene`, including
+interactive scenes that generate a web island outside the forward parser's source subset.
+Named callbacks, bitmap bytes and declared fonts remain explicit. Schema 1 reconstruction
+uses authored fixed geometry with local editing, fixed node structure, viewport and scale;
+it does not weaken browser measurement freshness. Schema 2 reconstruction uses the responsive
+native layout engine. Native scene import rejects unsupported multiline and placeholder paint.
+Static schema 2 TSX can also pass through the existing source compiler without measurements.
+Scene round trips preserve the exported state and declared events; they do not recover
+arbitrary Go/JavaScript function bodies or the original application's state machine.
 
 Raw native entries currently require a borderless host theme; Fyne's centered asymmetric
 input chrome needs a layered paint contract. Native textarea export is rejected until shared

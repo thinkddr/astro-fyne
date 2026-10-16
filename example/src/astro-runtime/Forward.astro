@@ -1,0 +1,6 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Astro Fyne contributors.
+const present = [Astro.slots.has("header"), Astro.slots.has("default")].map(String).join("|");
+---
+<section id="astro-js-forward"><p id="astro-js-forward-presence">{present}</p><slot name="header">Missing forwarded slot</slot></section>

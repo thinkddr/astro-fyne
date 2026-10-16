@@ -14,10 +14,25 @@ errors. Universal 1:1 conversion is the project goal, not a capability of this r
 [Compatibility](COMPATIBILITY.md) · [Native integration](docs/native-runtime.md) ·
 [Reverse conversion](docs/reverse-conversion.md) · [Visual verification](docs/visual-verification.md)
 
+The source compiler lowers supported logic into Go with native state and widgets.
+Nullable property/index chains such as `profile?.details.name ?? "Guest"` retain
+JavaScript's short-circuit behavior in that generated Go. See the compatibility
+contract for the supported expressions, events and layouts.
+
+The opt-in [JavaScript engine route](docs/javascript-runtime.md) bundles component modules
+and runs real Preact in Goja, a JavaScript engine written in Go, while Fyne renders native
+controls. Generated files remain Go and embed the JavaScript program. Its recorded program
+archives continue closures, module state and events through Fyne → Astro → Fyne; CSS and
+browser APIs still require native contracts.
+
+The same route now accepts [Astro source files](docs/astro-javascript.md), including
+synchronous frontmatter, nested components/default and named slots, hydrated Preact islands and
+processed scripts. CI compares their native continuation with the original Astro page.
+
 ## Get started
 
 Install [Bun](https://bun.sh/docs/installation) and the Go version declared in
-[native/go.mod](native/go.mod). CI currently uses Bun **1.4.2** and Go **1.27.1**.
+[native/go.mod](native/go.mod). CI currently uses Bun **1.4.2** and Go **1.27.2**.
 Running a desktop window also requires the [Fyne platform dependencies](https://docs.fyne.io/started/).
 The compiler is currently installed from this repository; there is no published npm package.
 
@@ -176,9 +191,30 @@ Open `/native-page/NativePage`. The fixture exports real native objects using th
 driver, so this example does not require a desktop window.
 
 The exporter captures the current frame. It preserves supported values, styles, resources
-and named event bindings; it does not translate Go function bodies or infer responsive
-layout from a screenshot. Interactive scenes need explicit action bindings and an
+and named event bindings. Set `PreserveLayout: true` to retain validated source Flexbox
+declarations from a generated responsive View. Arbitrary Go layouts and function bodies
+need explicit host contracts. Interactive scenes need explicit action bindings and an
 `--actions-module` exporting `actions`. See the [complete reverse guide](docs/reverse-conversion.md).
+
+Rebuild the exported scene as native widgets, including interactive scenes whose generated
+web island contains hydration code:
+
+```sh
+bun run to-fyne --scene artifacts/reverse/scene.json \
+  --out native/generated --name NativeScene
+bun run check --scene artifacts/reverse/scene.json \
+  --out native/generated --name NativeScene
+```
+
+Schema 1 scenes retain fixed boxes and local input editing. Schema 2 scenes retain the
+supported Flexbox declarations and resize without additional captures. Both generate native
+resources, themes and named actions. Supply matching fonts through `--fonts faces.json` or
+a host backend; the [reverse guide](docs/reverse-conversion.md) describes these boundaries.
+
+Source-generated widgets can also preserve their declarative logic and current state. Enable
+`portableProgram: true`, export with `ExportProgram()`, and import using `to-web --program`
+or `to-fyne --program`. Native execution remains generated Go. See the
+[program roundtrip guide](docs/program-roundtrip.md) for actions, data and CSS boundaries.
 
 ## Commands
 
@@ -195,9 +231,10 @@ All conversion commands support `--help`. `bun run astro-fyne --help` lists the 
 | `bun run demo:scene`                        | Export the included native scene for reverse conversion |
 | `bun run demo:native`                       | Run the generated desktop example                       |
 
-Forward commands default to `astro-fyne.json`. Use `--config PATH`, `--entry NAME` and,
+Forward source commands default to `astro-fyne.json`. Use `--config PATH`, `--entry NAME` and,
 for a single measured entry, `--measurements PATH`. Reverse output is checked with
-`bun run to-web … --check`.
+`bun run to-web … --check`. Native scene input supports `to-fyne --scene …` and
+`check --scene …`, with `--out`, `--name`, optional `--package` and `--fonts`.
 
 ## Compatibility and visual accuracy
 
@@ -207,12 +244,14 @@ for a single measured entry, `--measurements PATH`. Reverse output is checked wi
 | Native output        | Fyne widgets, generated themes, explicit host actions, local PNG/JPEG resources and static TTF faces |
 | Responsive layout    | Explicit row/column Flexbox, boxes, one-line text, buttons, single-line inputs and bitmap leaves     |
 | Browser measurements | Fixed source/state/viewport/device-scale profiles with validated styles                              |
-| Reverse output       | Supported native scenes exported into frozen web frames, with named actions                          |
+| Reverse output       | Fixed native scenes or preserved source Flexbox, with values, resources and named actions            |
+| Program roundtrip    | Opt-in compiler IR, declared props/state and list identities restored in Preact and generated Go     |
 | Still unsupported    | Arbitrary JS/Go, full CSS cascade, grid, wrapping/intrinsic layout, animations and browser APIs      |
 
 CI compares browser and native captures and retains the generated code, traces, scene files
-and pixel diffs. The current corpus includes **27 exact visual comparisons** with zero RGBA
-differences, plus control behavior and geometry checks. **All 22 responsive typography frames
+and pixel diffs. The current corpus includes **38 exact visual comparisons** with zero RGBA
+differences, plus **12 exact native scene reconstruction frames**, control behavior and
+geometry checks. **All 22 responsive typography frames
 still differ at zero tolerance.** Passing a profile certifies that profile only.
 
 A separate [typography comparison](docs/visual-verification.md#isolate-native-text-differences)
