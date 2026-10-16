@@ -130,6 +130,10 @@ typeface/scaler backend, mask format, gamma, contrast and pixel geometry remain 
 Neither a version string nor launch arguments prove those internal settings. The
 existing strict pixel comparisons remain independent; this observation adds no
 pixel certification and does not reconstruct missing historical metadata.
+The retained-artifact comparator requires this sidecar, recomputes its observation
+hash, checks the current collector/capture source hashes and both frame bindings,
+then performs its existing PNG byte/hash checks. Missing or altered provenance
+fails validation even when the pixel files are present.
 
 The painter trace runs in a temporary copy of the exact downloaded Fyne module.
 A test sidecar calls its real shaping kernel; the production kernel is unchanged.

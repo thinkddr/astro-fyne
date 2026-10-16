@@ -255,6 +255,16 @@ test("rehashed observations still require kernel PID, ELF identity and unobserve
       Reflect.set(value.sidecar.observation.fontPolicy, "gamma", 1);
     },
     (value) => {
+      Reflect.set(value.sidecar.observation.fontPolicy, "gamma", Infinity);
+    },
+    (value) => {
+      Reflect.set(
+        value.sidecar.observation.commandLine,
+        "orderAndValuesEqual",
+        Infinity,
+      );
+    },
+    (value) => {
       Reflect.deleteProperty(
         value.sidecar.observation.fontPolicy,
         "maskFormat",
@@ -280,6 +290,13 @@ test("available CDP arguments require a truthful comparison and explicit availab
       >["sidecar"]["observation"]["commandLine"],
     ) => {
       command.cdpUnavailableReason = "enable-automation-not-set";
+    },
+    (
+      command: ReturnType<
+        typeof fixture
+      >["sidecar"]["observation"]["commandLine"],
+    ) => {
+      Reflect.set(command, "cdpUnavailableReason", Infinity);
     },
     (
       command: ReturnType<

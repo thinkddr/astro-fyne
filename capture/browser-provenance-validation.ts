@@ -2,6 +2,7 @@
 // Copyright 2026 Astro Fyne contributors.
 
 import { posix } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { provenanceHash } from "./browser-provenance.ts";
 import type { TypographyIdentity } from "./typography.ts";
 
@@ -28,10 +29,7 @@ function record(value: unknown, label: string): RecordValue {
 }
 
 function same(actual: unknown, expected: unknown, label: string) {
-  requireValue(
-    JSON.stringify(actual) === JSON.stringify(expected),
-    `${label} differs`,
-  );
+  requireValue(isDeepStrictEqual(actual, expected), `${label} differs`);
 }
 
 function text(value: unknown, label: string): asserts value is string {
