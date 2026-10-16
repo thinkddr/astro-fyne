@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "name": "headless-full-independent-remainder",
+  "diagnosticOnly": true,
+  "browserEffectivePolicyVerified": false,
+  "reason": "Full hinting request follows the pinned headless default for the observed executable with no command-line hint override; all remaining values are independently declared Skia defaults, not measured browser policy",
+  "hinting": 3,
+  "auto_hint": 0,
+  "embedded_bitmaps": 0,
+  "subpixel": 0,
+  "linear_metrics": 0,
+  "edging": 1,
+  "baseline_snap": 1,
+  "pixel_geometry": 0,
+  "contrast": "skia-public-default",
+  "gamma": "skia-public-default"
+}

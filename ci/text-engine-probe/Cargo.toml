@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "astro-fyne-fontations-experiment"
+version = "0.0.0"
+edition = "2021"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "astro_fyne_fontations_experiment"
+path = "src/ports/fontations/src/ffi.rs"
+crate-type = ["staticlib"]
+
+# The resolver supplies exact Chromium-vendored sources through path patches.
+# These versions/features are from Chromium 971a7443/skia/BUILD.gn and its
+# third_party/rust/*/BUILD.gn files, not standalone Skia's older Cargo.toml.
+[dependencies]
+font-types = { version = "=0.12.2", features = ["bytemuck", "std"] }
+read-fonts = { version = "=0.41.0", features = ["agl", "experimental_font_api", "ift", "std"] }
+skrifa = { version = "=0.44.0", features = ["autohint_shaping", "std"] }
+bytemuck = "=1.25.2"
+cxx = "=1.0.199"
+
+[build-dependencies]
+cxx-build = "=1.0.199"
+
+[profile.release]
+panic = "abort"
+
+[patch.crates-io]
+font-types = { path = "vendor/font-types-v0_12" }
+read-fonts = { path = "vendor/read-fonts-v0_41" }
+skrifa = { path = "vendor/skrifa-v0_44" }
+cxx = { path = "vendor/cxx-v1" }
