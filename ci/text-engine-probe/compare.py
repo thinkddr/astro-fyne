@@ -3,6 +3,7 @@
 # Copyright 2026 Astro Fyne contributors.
 """Strict full-frame evidence for this standalone native experiment only."""
 import argparse, hashlib, json, pathlib, subprocess
+from driver import validate_surface_contract, validate_surface_record
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -34,6 +35,17 @@ def main():
     native = json.loads((root / "native/native-text.json").read_text())
     browser_frames = frame_scales(browser["cases"], "Browser", browser=True)
     native_frames = frame_scales(native["frames"], "Native")
+    contract_path = root / "native/surface-build-contract.json"
+    contract = json.loads(contract_path.read_text())
+    current_sources = {name: digest(pathlib.Path(__file__).with_name(name))
+                       for name in ["build.rs", "text_engine.cc", "text_engine.h"]}
+    validate_surface_contract(contract, native.get("libraryHash"), current_sources)
+    if (native.get("surfaceBuildContractHash") != digest(contract_path)
+        or native.get("nativeScalerInternalsObserved") is not False
+        or contract.get("nativeScalerInternalsObserved") is not False
+        or contract.get("libraryHash") != native.get("libraryHash")
+        or native.get("driverHash") != digest(pathlib.Path(__file__).with_name("driver.py"))):
+        raise RuntimeError("Native frames lack the current candidate's surface/build identity")
     for name in ["sourceHash", "probeHash", "fixtureHash", "fontHash"]:
         if browser[name] != native[name]:
             raise RuntimeError("Native/browser original-source identity differs: " + name)
@@ -74,6 +86,14 @@ def main():
         if any(type(viewport.get(name)) is not int or viewport[name] <= 0 for name in ["width", "height"]):
             raise RuntimeError("Invalid declared CSS viewport")
         width, height = viewport["width"] * scale, viewport["height"] * scale
+        surfaces = painted.get("surfaces")
+        sample_ids = [sample["id"] for sample in native["samples"]]
+        if (len(sample_ids) != 7 or len(set(sample_ids)) != 7 or not isinstance(surfaces, list)
+            or [surface.get("sampleId") for surface in surfaces] != sample_ids):
+            raise RuntimeError("Every original row must have one actual native surface observation")
+        for surface in surfaces:
+            validate_surface_record({name: value for name, value in surface.items() if name != "sampleId"},
+                                    width, height, native["nativePolicy"])
         reference = root / "browser" / web["screenshot"]["path"]
         target = root / "native" / painted["path"]
         if digest(reference) != web["screenshot"]["hash"] or digest(target) != painted["hash"]:
@@ -101,7 +121,7 @@ def main():
         (out / "pixels.json").write_text(json.dumps(result, indent=2) + "\n")
         results.append({"scale": scale, **result})
         failed = failed or changed != 0
-    (root / "summary.json").write_text(json.dumps({"schema": 1, "diagnosticOnly": True, "pixelPerfectVerified": False, "browserEffectivePolicyVerified": False, "fontconfigBinding": config_binding, "scope": "Standalone native Fontations/Skia/HarfBuzz/OTS probe; no Fyne widget, editor, inverse or GPU claim", "frames": results}, indent=2) + "\n")
+    (root / "summary.json").write_text(json.dumps({"schema": 1, "diagnosticOnly": True, "pixelPerfectVerified": False, "browserEffectivePolicyVerified": False, "nativeScalerInternalsObserved": False, "surfaceBuildContractHash": native["surfaceBuildContractHash"], "surfaceObservations": 14, "fontconfigBinding": config_binding, "scope": "Standalone native Fontations/Skia/HarfBuzz/OTS probe; no Fyne widget, editor, inverse or GPU claim", "frames": results}, indent=2) + "\n")
     raise SystemExit(1 if failed else 0)
 
 if __name__ == "__main__":

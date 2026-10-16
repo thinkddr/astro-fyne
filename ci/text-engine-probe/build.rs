@@ -11,7 +11,8 @@ fn main() {
     let mut build = cxx_build::bridge("src/ports/fontations/src/ffi.rs");
     build.include(".").include(&root).include(root.join("out/text-probe/gen"));
     // Pinned GN Skia disables RTTI; derived classes must use the same ABI.
-    build.std("c++20").pic(true).flag("-fno-rtti").define("SK_RELEASE", None);
+    build.std("c++20").pic(true).flag("-fno-rtti")
+        .define("SK_RELEASE", None).define("SK_R32_SHIFT", "16");
     for source in [
         "src/ports/SkTypeface_fontations.cpp",
         "src/ports/SkFontScanner_fontations.cpp",

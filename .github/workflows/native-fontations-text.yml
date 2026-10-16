@@ -2,7 +2,7 @@
 name: native-fontations-text-experiment
 on:
   push:
-    branches: [codex/native-fontations-text]
+    branches: [codex/native-fontations-text, codex/native-n32-surface]
     paths:
       - ci/text-engine-probe/**
       - .github/workflows/native-fontations-text.yml
@@ -31,6 +31,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y clang llvm ninja-build cmake meson pkg-config libgtest-dev libwoff-dev zlib1g-dev
+      - name: Reject incomplete or contradictory surface build receipts
+        run: python3 ci/text-engine-probe/test_surface_build.py
       - name: Resolve pinned source and verify the committed standalone Cargo lock
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,6 +41,11 @@ jobs:
       - name: Compile the native candidate
         run: |
           bash ci/text-engine-probe/build-remote.sh --build --work "$RUNNER_TEMP/native-text"
+      - name: Check opaque RGBA transfer and failed-call atomicity
+        run: |
+          python3 ci/text-engine-probe/test_surface_transfer.py --source-root "$GITHUB_WORKSPACE" \
+            --library "$RUNNER_TEMP/native-text/evidence/libastro_fyne_text_experiment.so" \
+            --out "$RUNNER_TEMP/native-text/evidence/surface-transfer.json"
       - name: Capture the unchanged original Astro typography source and paint native glyphs
         run: |
           set -euo pipefail
@@ -62,6 +69,7 @@ jobs:
           bun ci/text-engine-probe/validate-browser.ts "$task_evidence/browser"
           python3 ci/text-engine-probe/driver.py --source-root "$GITHUB_WORKSPACE" \
             --library "$RUNNER_TEMP/native-text/evidence/libastro_fyne_text_experiment.so" \
+            --surface-build-contract "$RUNNER_TEMP/native-text/evidence/surface-build-contract.json" \
             --policy ci/text-engine-probe/policy.json --out "$task_evidence/native"
           (cd native && GOWORK=off GOFLAGS=-mod=readonly GOMAXPROCS=2 go build -p=1 \
             -o "$RUNNER_TEMP/native-text/compare" ./visual/cmd/astro-fyne-compare)

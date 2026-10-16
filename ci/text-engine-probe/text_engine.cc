@@ -12,6 +12,7 @@
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPixmap.h"
 #include "include/core/SkStrikeRef.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkSurfaceProps.h"
@@ -29,8 +30,18 @@
 #include <string>
 #include <vector>
 
+static_assert(SK_R32_SHIFT == 16 && SK_G32_SHIFT == 8 && SK_B32_SHIFT == 0 && SK_A32_SHIFT == 24,
+              "The declared Linux Skia public color-order definitions must match");
+static_assert(kN32_SkColorType == kBGRA_8888_SkColorType,
+              "The declared Linux native N32 surface must be BGRA8888");
+#ifndef SK_CPU_LENDIAN
+#error "The declared native text probe requires little-endian pixels"
+#endif
+
 namespace {
 thread_local std::string error;
+thread_local atf_surface_metadata last_surface{};
+thread_local bool has_surface = false;
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -131,7 +142,13 @@ extern "C" {
 const char* atf_error() { return error.c_str(); }
 size_t atf_abi_size(uint32_t type) {
   return type == 1 ? sizeof(atf_policy) : type == 2 ? sizeof(atf_glyph) :
-    type == 3 ? sizeof(atf_metrics) : 0;
+    type == 3 ? sizeof(atf_metrics) : type == 4 ? sizeof(atf_surface_metadata) : 0;
+}
+int atf_last_surface_metadata(atf_surface_metadata* metadata, size_t size) {
+  if (!metadata || size != sizeof(*metadata)) { error = "Invalid surface metadata output/size"; return 0; }
+  if (!has_surface) { error = "No successful native surface metadata"; return 0; }
+  *metadata = last_surface;
+  return 1;
 }
 void atf_surface_defaults(float* contrast, float* gamma) {
   SkSurfaceProps defaults;
@@ -255,14 +272,46 @@ int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
     const SkSurfaceProps props(0, geometry, run->policy.contrast, run->policy.gamma);
     const auto info = SkImageInfo::Make(static_cast<int>(width), static_cast<int>(height),
       kRGBA_8888_SkColorType, kOpaque_SkAlphaType, SkColorSpace::MakeSRGB());
-    auto surface = SkSurfaces::WrapPixels(info, rgba, static_cast<size_t>(width) * 4, &props);
-    require(surface != nullptr, "Could not wrap native RGBA destination");
+    const auto native_info = info.makeColorType(kN32_SkColorType);
+    const size_t row_bytes = static_cast<size_t>(width) * 4;
+    auto surface = SkSurfaces::Raster(native_info, row_bytes, &props);
+    require(surface != nullptr, "Could not allocate native N32 destination");
     auto* canvas = surface->getCanvas();
+    require(canvas->writePixels(info, rgba, row_bytes, 0, 0), "Could not convert RGBA input to N32");
     canvas->scale(static_cast<float>(scale), static_cast<float>(scale));
     SkPaint paint; paint.setColor(0xff000000u | foreground_rgb);
     canvas->drawGlyphs({run->ids.data(), run->ids.size()},
       {run->positions.data(), run->positions.size()},
       SkPoint::Make(line_x_css, line_y_css + run->metrics.baseline_css), run->font, paint);
+    std::vector<uint8_t> output(length);
+    require(surface->readPixels(info, output.data(), row_bytes, 0, 0),
+            "Could not convert native N32 output to RGBA");
+    for (size_t i = 3; i < length; i += 4) require(output[i] == 255, "Native output lost opaque alpha");
+    const auto actual = surface->imageInfo();
+    const auto& actual_props = surface->props();
+    SkPixmap actual_pixels;
+    require(surface->peekPixels(&actual_pixels) && actual_pixels.rowBytes() == row_bytes &&
+            actual.colorType() == kN32_SkColorType && actual.alphaType() == kOpaque_SkAlphaType &&
+            actual.colorSpace() && actual.colorSpace()->isSRGB() &&
+            actual.width() == static_cast<int>(width) && actual.height() == static_cast<int>(height),
+            "Native surface differs from the declared N32 contract");
+    const auto* first = static_cast<const uint8_t*>(actual_pixels.addr());
+    const atf_surface_metadata observed{
+      SK_R32_SHIFT, SK_G32_SHIFT, SK_B32_SHIFT, SK_A32_SHIFT, 1,
+      static_cast<uint32_t>(kN32_SkColorType), static_cast<uint32_t>(kRGBA_8888_SkColorType),
+      static_cast<uint32_t>(kBGRA_8888_SkColorType),
+      static_cast<uint32_t>(info.colorType()), static_cast<uint32_t>(actual.colorType()),
+      static_cast<uint32_t>(info.alphaType()), static_cast<uint32_t>(actual.alphaType()),
+      static_cast<uint32_t>(info.colorSpace() && info.colorSpace()->isSRGB()),
+      static_cast<uint32_t>(actual.colorSpace() && actual.colorSpace()->isSRGB()),
+      static_cast<uint32_t>(actual.width()), static_cast<uint32_t>(actual.height()),
+      static_cast<uint32_t>(row_bytes), static_cast<uint32_t>(actual_pixels.rowBytes()),
+      static_cast<uint32_t>(actual_props.pixelGeometry()), first[0], first[1], first[2], first[3],
+      actual_props.textContrast(), actual_props.textGamma()
+    };
+    std::memcpy(rgba, output.data(), length);
+    last_surface = observed;
+    has_surface = true;
     return 1;
   } catch (const std::exception& failure) { error = failure.what(); return 0; }
 }

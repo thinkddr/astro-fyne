@@ -8,7 +8,8 @@ render has matching total advances and baselines but still differs in pixels.
 Existing fonts, fixtures, browser settings and reference pixels are unchanged.
 
 The workflow is `.github/workflows/native-fontations-text.yml`. It runs on pushes
-to the isolated `codex/native-fontations-text` branch and supports manual dispatch
+to the isolated `codex/native-fontations-text` and `codex/native-n32-surface`
+branches and supports manual dispatch
 once registered on the default branch. Its timeout is 45 minutes. Run the build
 on a hosted Linux ARM64 machine, following [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
@@ -21,6 +22,7 @@ bash ci/text-engine-probe/build-remote.sh --resolve --work "$RUNNER_TEMP/native-
 bash ci/text-engine-probe/build-remote.sh --build --work "$RUNNER_TEMP/native-text"
 python3 ci/text-engine-probe/driver.py --source-root "$GITHUB_WORKSPACE" \
   --library "$RUNNER_TEMP/native-text/evidence/libastro_fyne_text_experiment.so" \
+  --surface-build-contract "$RUNNER_TEMP/native-text/evidence/surface-build-contract.json" \
   --policy ci/text-engine-probe/policy.json \
   --out artifacts/native-fontations-text/native
 ```
@@ -30,6 +32,51 @@ validates its required browser-provenance sidecar, builds the existing strict
 PNG comparator with read-only production modules, and compares both complete
 frames. Every pixel mismatch returns a failed job. Artifacts upload on failure;
 there is no expected-mismatch exemption or tolerance reduction.
+
+## Native N32 surface candidate
+
+The isolated N32 branch evaluates one source-supported destination correction.
+At the pinned Skia revision, the bitmap glyph painter retains surface pixel
+geometry only for N32 destinations with SrcOver paint
+([source](https://github.com/google/skia/blob/9d07e5bad9e3e21da2426946e589daa647218271/src/core/SkGlyphRunPainter.cpp#L211-L240)).
+Linux GN defines `SK_R32_SHIFT=16`, making N32 BGRA8888 on this little-endian ARM
+profile ([build definition](https://github.com/google/skia/blob/9d07e5bad9e3e21da2426946e589daa647218271/BUILD.gn#L20-L34)).
+The earlier explicit RGBA8888 destination falls outside that gate. Merely naming
+N32 in consumers would also be insufficient: consumer header defaults differ
+unless their public color-order definitions match the library.
+
+This candidate aligns Cargo CXX and final C ABI definitions with GN. The build
+retains the actual GN commands for SkBitmapDevice/SkGlyphRunPainter, all four
+named Cargo CXX consumers, and the final C ABI argv/compiler hashes, then requires
+the expected definition in each selected context. It does not inspect every
+translation unit in libskia. These receipts
+describe this standalone build, not Chromium's actual binary or effective policy.
+`surface-build-contract.json` binds the receipts, compiled sources and library.
+
+The public pixel buffer remains RGBA8888/opaque/sRGB. Each paint allocates a private
+N32/opaque/sRGB surface, checks Skia's input `writePixels` and output `readPixels`
+conversions, and copies the separate RGBA output into caller memory only after
+all checks succeed. There is no byte reinterpretation or manual foreground
+channel swap. Input alpha must remain 255; transparency is not added.
+
+Hosted controls use fixed unequal R/B colors and channel boundaries
+0/1/127/128/254/255. Off-canvas text makes the exact transfer expectation
+independent of glyph rasterization; raw first-pixel BGRA bytes check the internal
+conversion separately. Invalid paint arguments and invalid metadata output
+sizes/null pointers must leave caller bytes untouched. These controls establish
+transfer behavior only, not visible text parity. Their independent off-canvas
+policy is not reported as an original-source rendering profile result.
+
+The driver records actual surface color/alpha/space/stride/properties and compiled
+consumer color-order values after every original row. These are surface
+observations, **not actual scaler-record or glyph-mask observations**;
+`nativeScalerInternalsObserved` remains false. Font bytes, shaping, source rows,
+origins, foreground, requested policy and strict comparison tolerances are
+unchanged. Removing a destination eligibility restriction does not certify LCD
+execution or browser equivalence. The preceding unchanged host-query profile's
+strict mismatches, 3,890 pixels at DPR 1 and 8,794 at DPR 2, remain separate failed
+evidence ([run 38918856417](https://github.com/thinkddr/astro-fyne/actions/runs/38918856417)).
+No N32 candidate pixel result is claimed before its own hosted run.
 
 The `--resolve` step is automatic source resolution, not a human approval gate.
 It downloads only the necessary source repositories and four Chromium-vendored
