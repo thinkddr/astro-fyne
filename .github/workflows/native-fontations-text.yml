@@ -75,6 +75,12 @@ jobs:
           python3 ci/text-engine-probe/test_surface_transfer.py --source-root "$GITHUB_WORKSPACE" \
             --library "$RUNNER_TEMP/native-text/evidence/libastro_fyne_text_experiment.so" \
             --out "$RUNNER_TEMP/native-text/evidence/surface-transfer.json"
+      - name: Check immutable glyph snapshots and empty native lines
+        run: |
+          python3 ci/text-engine-probe/test_snapshot_transfer.py --source-root "$GITHUB_WORKSPACE" \
+            --library "$RUNNER_TEMP/native-text/evidence/libastro_fyne_text_experiment.so" \
+            --surface-build-contract "$RUNNER_TEMP/native-text/evidence/surface-build-contract.json" \
+            --out "$RUNNER_TEMP/native-text/evidence/snapshot-transfer"
       - name: Capture the unchanged original Astro typography source and paint native glyphs
         run: |
           set -euo pipefail

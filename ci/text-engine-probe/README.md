@@ -33,6 +33,26 @@ PNG comparator with read-only production modules, and compares both complete
 frames. Every pixel mismatch returns a failed job. Artifacts upload on failure;
 there is no expected-mismatch exemption or tolerance reduction.
 
+## Immutable glyph snapshots
+
+`atf_paint_snapshot` accepts copies of native-shaped glyph records and paints
+them with the same font policy, line baseline and checked N32 path as `atf_paint`.
+The caller owns the copied records and the font engine lifetime; no original
+run handle needs to stay alive. The function does not reshape the text or read
+browser measurements. Its existing opaque RGBA and DPR 1/2 limits still apply.
+Empty text is a valid zero-glyph line with native font metrics.
+
+The hosted snapshot controls shape all seven original rows, copy their metrics
+and glyphs, paint the original runs, destroy every run, and paint new buffers
+from the copies at both DPRs. Both complete buffers must remain identical.
+Separate controls paint visible text at fractional origins over fixed unequal
+channel backgrounds, including a clipped left edge. They also check empty lines
+against fixed unequal channel bytes, and require
+invalid snapshots to preserve caller bytes, guard bytes and last-success surface
+metadata. The workflow retains original/snapshot PNGs and the actual records in
+`snapshot-transfer/`. This is preparation for native widget integration; it
+does not certify Fyne widgets, editors, inverse conversion or GPU rendering.
+
 ## Native N32 surface
 
 The N32 renderer applies one source-supported destination correction.

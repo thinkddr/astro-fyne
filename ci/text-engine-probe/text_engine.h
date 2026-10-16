@@ -50,10 +50,12 @@ void atf_close(atf_engine* engine);
 // Borrowed sanitized bytes are valid while the engine is alive.
 const uint8_t* atf_effective_font(const atf_engine* engine, size_t* length);
 // Static single-face Latin/combining probe only. No fallback or bidi segmentation.
+// Empty text is a valid zero-glyph line; utf8 may be null when length is zero.
 atf_run* atf_shape(atf_engine* engine, const uint8_t* utf8, size_t length,
                   float font_css, float line_height_css, const atf_policy* policy);
 void atf_free_run(atf_run* run);
 int atf_run_metrics(const atf_run* run, atf_metrics* metrics);
+// A zero-glyph run accepts a null output with count zero.
 int atf_copy_glyphs(const atf_run* run, atf_glyph* glyphs, size_t count);
 // Paint through private native N32 storage, converting to/from opaque RGBA8.
 // Failed calls leave caller bytes unchanged. Origin is a native line-box origin,
@@ -61,6 +63,12 @@ int atf_copy_glyphs(const atf_run* run, atf_glyph* glyphs, size_t count);
 int atf_paint(const atf_run* run, uint8_t* rgba, size_t length,
               uint32_t width, uint32_t height, uint32_t scale,
               float line_x_css, float line_y_css, uint32_t foreground_rgb);
+// Paint an immutable copy of native-shaped glyph records without reshaping.
+// Font engine lifetime is external; no run handle is retained by the caller.
+int atf_paint_snapshot(atf_engine* engine, const atf_glyph* glyphs, size_t count,
+                       float font_css, float line_height_css, const atf_policy* policy,
+                       uint8_t* rgba, size_t length, uint32_t width, uint32_t height,
+                       uint32_t scale, float line_x_css, float line_y_css, uint32_t foreground_rgb);
 #ifdef __cplusplus
 }
 #endif
