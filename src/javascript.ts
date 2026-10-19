@@ -28,6 +28,24 @@ export async function bundleJavascript(
   actions: string[] = [],
   stylesheets: string[] = [],
 ): Promise<JavascriptArchive> {
+  const { archive } = await prepareJavascriptBundle(
+    source,
+    selected,
+    props,
+    actions,
+    stylesheets,
+  );
+  return archive;
+}
+
+/** Return the archive and directly read source paths for output protection. */
+export async function prepareJavascriptBundle(
+  source: string,
+  selected = "default",
+  props: Record<string, unknown> = {},
+  actions: string[] = [],
+  stylesheets: string[] = [],
+): Promise<{ archive: JavascriptArchive; inputPaths: string[] }> {
   source = resolve(source);
   if (![".astro", ".tsx", ".jsx", ".ts", ".js"].includes(extname(source)))
     throw new Error("JavaScript mode needs an Astro/TSX/JSX/TS/JS entry");
@@ -41,7 +59,8 @@ export async function bundleJavascript(
     throw new Error(
       "_afyAstroSlots is reserved for native Astro slot metadata",
     );
-  const sources = new Map<string, string>(),
+  const inputPaths = new Set<string>(),
+    sources = new Map<string, string>(),
     root = dirname(source);
   const cssSources = new Map<
     string,
@@ -65,6 +84,7 @@ export async function bundleJavascript(
     return rules;
   };
   const recordCSS = (file: string, text: string) => {
+    inputPaths.add(resolve(file));
     const path = relative(root, file).replaceAll("\\", "/"),
       digest = hash(text),
       previous = cssSources.get(path);
@@ -142,6 +162,7 @@ export async function bundleJavascript(
                   "Browser scripts cannot import Astro server components",
                 );
               const text = await readFile(args.path, "utf8");
+              inputPaths.add(resolve(args.path));
               const identity = relative(root, args.path).replaceAll("\\", "/");
               sources.set(identity, hash(text));
               return {
@@ -179,6 +200,7 @@ export async function bundleJavascript(
                 };
               }
               const text = await readFile(args.path, "utf8");
+              inputPaths.add(resolve(args.path));
               sources.set(
                 relative(root, args.path).replaceAll("\\", "/"),
                 hash(text),
@@ -240,10 +262,12 @@ export async function bundleJavascript(
     );
     scriptFactories.push(`[${JSON.stringify(label)}]:()=>{${code}}`);
   }
-  const license = await readFile(
-    resolve(fileURLToPath(import.meta.resolve("preact")), "../../LICENSE"),
-    "utf8",
-  );
+  const licensePath = resolve(
+      fileURLToPath(import.meta.resolve("preact")),
+      "../../LICENSE",
+    ),
+    license = await readFile(licensePath, "utf8");
+  inputPaths.add(licensePath);
   const code = `/* Bundled Preact: ${license.replaceAll("*/", "* / ")} */\nfunction(host,archive){if(archive.schema!==${heightAnimations ? 2 : 1})throw new Error("JavaScript archive schema differs from its compiled animation ABI");const globalThis={};${runtime}\nconst runtime=globalThis._afyRuntime(host,archive);${stylesheets.length ? `runtime.environment._afyCssInstall(${JSON.stringify(externalStyles)});` : ""}return(function(environment){const{document,window,self,globalThis,Math,Date,setTimeout,clearTimeout,requestAnimationFrame,cancelAnimationFrame,queueMicrotask,fetch,setInterval,getComputedStyle,console}=environment;${scriptFactories.length ? `globalThis._afyAstroScripts={${scriptFactories.join(",")}};` : ""}${program}\nreturn runtime.bind(globalThis._afyComponent,globalThis._afyPreact);})(runtime.environment);}`;
   const archive: JavascriptArchive = {
     schema: heightAnimations ? 2 : 1,
@@ -275,7 +299,7 @@ export async function bundleJavascript(
       : {}),
   };
   await validateJavascriptArchive(archive);
-  return archive;
+  return { archive, inputPaths: [...inputPaths].sort() };
 }
 
 /** Close archive vocabulary and verify all code before any generated writes. */
