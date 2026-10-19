@@ -26,6 +26,7 @@ feature. Include resources in source hashes. Preserve mounting and event semanti
 generation command must preserve handwritten files and complete source validation before
 writing its artifacts.
 
-Contributions use Apache-2.0. Preserve existing copyright notices and add an SPDX identifier
+This project does not accept external contributions: only the maintainer, Daniel Delgado
+Ramos, commits to it. The code is Apache-2.0. Preserve existing copyright notices and add an SPDX identifier
 to source files. Explain the provenance and license of bundled resources. Do not include
 credentials, user data or third-party assets without a redistribution license.
