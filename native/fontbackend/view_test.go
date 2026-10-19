@@ -157,10 +157,10 @@ return {flush(){},finishReplay(){},snapshot,dispatch(){host("action","observed",
 	}
 	data, license := fontBytes(t, "Regular"), fontLicense(t)
 	spec := catalog.Spec{Schema: 1, Kind: "astro-fyne-catalogue", Name: "NominalFonts",
-		Resources: []catalog.Resource{{Name: "fonts/NotoSans-Regular.ttf", MediaType: "font/ttf", Hash: fontHash(data), Content: data, License: license}},
-		FontFaces: []catalog.FontFace{{ID: "regular", Family: "Host", Weight: 400, Style: "normal", Resource: "fonts/NotoSans-Regular.ttf", Hash: fontHash(data)}},
+		Resources:  []catalog.Resource{{Name: "fonts/NotoSans-Regular.ttf", MediaType: "font/ttf", Hash: fontHash(data), Content: data, License: license}},
+		FontFaces:  []catalog.FontFace{{ID: "regular", Family: "Host", Weight: 400, Style: "normal", Resource: "fonts/NotoSans-Regular.ttf", Hash: fontHash(data)}},
 		Components: []catalog.Component{{ID: "Counter", Kind: "javascript", Payload: string(payload), Hash: fontHash(payload), FontFaces: []string{"regular"}, Actions: []string{"observed"}}},
-		Islands: []catalog.Island{{ID: "left", Component: "Counter", Key: "same"}, {ID: "right", Component: "Counter", Key: "same"}},
+		Islands:    []catalog.Island{{ID: "left", Component: "Counter", Key: "same"}, {ID: "right", Component: "Counter", Key: "same"}},
 	}
 	registry, err := catalog.New(spec)
 	if err != nil {
