@@ -542,6 +542,21 @@ function style(
       const flexField = Object.hasOwn(flexProperties, property)
         ? flexProperties[property]
         : undefined;
+      if (flexField === "Order") {
+        // JSX writes a negative order as unary minus over a literal.
+        const negative = val.kind === "unary" && val.op === "-";
+        const literal = negative ? val.value : val;
+        const order =
+          literal.kind === "literal" && typeof literal.value === "number"
+            ? (negative ? -1 : 1) * literal.value
+            : NaN;
+        if (!Number.isInteger(order) || Math.abs(order) > 2 ** 31 - 1)
+          throw new Error(
+            `${node.id}: CSS order requires a 32-bit integer literal.`,
+          );
+        flex.Order = order + 0;
+        continue;
+      }
       if (flexField) {
         if (
           val.kind !== "literal" ||
@@ -572,16 +587,6 @@ function style(
               `${node.id}: CSS ${property} is unsupported in responsive flex.`,
             );
           flex[flexField] = val.value;
-        } else if (flexField === "Order") {
-          if (
-            typeof val.value !== "number" ||
-            !Number.isInteger(val.value) ||
-            Math.abs(val.value) > 2 ** 31 - 1
-          )
-            throw new Error(
-              `${node.id}: CSS order requires a 32-bit integer literal.`,
-            );
-          flex.Order = val.value;
         } else if (["Grow", "Shrink"].includes(flexField)) {
           if (typeof val.value !== "number")
             throw new Error(
