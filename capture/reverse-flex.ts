@@ -151,7 +151,7 @@ try {
               css.direction !== "ltr" ||
               css.writingMode !== "horizontal-tb" ||
               css.flexWrap !== "nowrap" ||
-              css.order !== "0" ||
+              !/^-?\d+$/.test(css.order) ||
               [
                 css.marginTop,
                 css.marginRight,
