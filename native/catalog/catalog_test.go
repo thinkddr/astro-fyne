@@ -248,9 +248,9 @@ func TestCatalogueRetainsFontAdmissionAndDiagnostics(t *testing.T) {
 	resourceError := `catalog: invalid, duplicate or changed resource "fonts/NotoSans-Regular.ttf"`
 	bindingError := `catalog: invalid, conflicting or missing font binding "regular"`
 	for _, scenario := range []struct {
-		name string
+		name   string
 		change func(*Spec)
-		want string
+		want   string
 	}{
 		{"actual-weight", func(s *Spec) { s.FontFaces[0].Weight = 700 }, `catalog: font "regular": declared font weight/style does not match actual face`},
 		{"actual-style", func(s *Spec) { s.FontFaces[0].Style = "italic" }, `catalog: font "regular": declared font weight/style does not match actual face`},
