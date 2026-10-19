@@ -154,6 +154,9 @@ Physical clicks enter through native containers, plain text, supported controls 
 associated labels. A listener-free child keeps its own event target; capture and bubbling
 run once through the virtual DOM. Raw text inside a container targets its parent element.
 Adding or removing listeners and moving a retained element preserve its native object.
+Hand-authored frame bindings require an event type followed by its capture flag, such as
+`clickfalse` or `inputtrue`. Native and browser adapters reject ambiguous spellings such
+as `click`; earlier native versions ignored that invalid metadata.
 The generated browser uses one delegated click entry with exact DOM-object ownership.
 The pointer gate compares actual Chromium coordinate clicks with Fyne `test.TapCanvas`
 through native → Astro → native continuation. It checks event traces, cancellation,
