@@ -134,6 +134,37 @@ serialize or activate this adapter in browser output. Nominal glyph admission
 does not certify shaping, prevent every renderer fallback or establish pixel
 equivalence.
 
+## Prepare catalogue JSON in build tools
+
+`prepareCatalogueSource` accepts an existing catalogue JSON string without a
+temporary input file. Use it from a Bun build tool in the converter checkout:
+
+```ts
+import { prepareCatalogueSource } from "./src/catalogue-cli.ts";
+import { applyArtifacts } from "./src/artifacts.ts";
+
+const plan = await prepareCatalogueSource(catalogueJSON, {
+  out: "native/generated",
+  name: "Widgets",
+  direction: "native",
+  protectedInputs: ["src/App.astro", "font-faces.json"],
+});
+await applyArtifacts(plan.artifacts, { check: false });
+```
+
+`catalogueJSON` must satisfy the existing catalogue format. Preparation validates
+every component and returns `{ spec, artifacts }` without writing output. The
+exact source string supplies the archive copy and source hash; the preparer does
+not reserialize its JSON. Native and web generation use the same options and
+toolchain as the file API, except that no `catalogue` input path is needed.
+
+`protectedInputs` is optional. Its paths are copied and resolved before async
+preparation, and a planned artifact that matches any protected path rejects the
+whole plan. This is a lexical path check; the artifact writer keeps its existing
+symlink and ownership checks. Pass `{ check: true }` to `applyArtifacts` to verify
+the destination without writing. The file API continues to protect its own
+catalogue input automatically.
+
 ## Components and independent islands
 
 A `Component` contains a stable ID, a supported kind, exact JSON payload text,
