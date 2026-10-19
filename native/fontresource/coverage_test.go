@@ -340,9 +340,9 @@ func coverageFont(t *testing.T, groups []coverageGroup) []byte {
 			t.Fatal("coverage fixture groups must be ordered and disjoint")
 		}
 		at := 28 + index*12
-		binary.BigEndian.PutUint32(cmap[at : at+4], group.start)
-		binary.BigEndian.PutUint32(cmap[at+4 : at+8], group.end)
-		binary.BigEndian.PutUint32(cmap[at+8 : at+12], group.glyph)
+		binary.BigEndian.PutUint32(cmap[at:at+4], group.start)
+		binary.BigEndian.PutUint32(cmap[at+4:at+8], group.end)
+		binary.BigEndian.PutUint32(cmap[at+8:at+12], group.glyph)
 	}
 	tables["cmap"] = cmap
 	return assembleFont(t, tables)
