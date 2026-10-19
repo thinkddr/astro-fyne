@@ -30,6 +30,15 @@ supported selectors, flat layers, specificity/order/importance, variables and de
 inheritance are reevaluated after source state changes. Original-browser computed styles
 are compared with native frames. General CSS layout, media/state/font/resource adapters
 and pixel equivalence remain pending.
+The JavaScript route also compiles [bounded CSS height animations](docs/css-height-animations.md)
+into native flow updates with independent instance clocks and schema 2 checkpoints.
+Its strict image gate covers declared integer-height frames at DPR 1; fractional
+geometry and easing remain measured diagnostics. [Portable numeric motion](docs/motion.md)
+uses separate explicit geometry bindings. Neither contract establishes general CSS animation parity.
+
+Reusable [catalogues](docs/catalogue.md) transport component archives, themes, source
+layouts, licensed resources, exact CSS/font bytes and independent island checkpoints.
+Both CLI directions generate these libraries without serializing arbitrary Go callbacks.
 The relational `:has()` selector supports anchored descendant, child and following
 sibling chains and lists, with live state reevaluation and argument-list specificity.
 Nested `:has()` and pseudo-elements remain diagnosed. The

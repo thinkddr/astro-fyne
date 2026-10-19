@@ -20,9 +20,9 @@ const maximumAnimationTimeMS = 1e12
 
 // AnimationState transports the sampled CSS timeline without a host clock.
 type AnimationState struct {
-	Schema int `json:"schema"`
-	TimeMS float64 `json:"timeMs"`
-	PlayState string `json:"playState"`
+	Schema    int     `json:"schema"`
+	TimeMS    float64 `json:"timeMs"`
+	PlayState string  `json:"playState"`
 }
 
 func validateAnimationState(state AnimationState) error {
@@ -80,7 +80,7 @@ func (state *AnimationState) UnmarshalJSON(data []byte) error {
 }
 
 // Clock supplies a monotonic host time. Exported state never stores this clock.
-type Clock interface { Now() time.Time }
+type Clock interface{ Now() time.Time }
 
 type ClockFunc func() time.Time
 
@@ -88,11 +88,11 @@ func (clock ClockFunc) Now() time.Time { return clock() }
 
 type Options struct {
 	ManualAnimations bool
-	Clock Clock
+	Clock            Clock
 }
 
 type animationScheduler struct {
-	stop chan struct{}
+	stop   chan struct{}
 	queued atomic.Bool
 }
 

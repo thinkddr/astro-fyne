@@ -31,9 +31,9 @@ type Stylesheet struct {
 	Text string `json:"text"`
 }
 type Event struct {
-	Node  string  `json:"node"`
-	Type  string  `json:"type"`
-	Value *string `json:"value,omitempty"`
+	Node   string   `json:"node"`
+	Type   string   `json:"type"`
+	Value  *string  `json:"value,omitempty"`
 	TimeMS *float64 `json:"timeMs,omitempty"`
 }
 type JournalEntry struct {
@@ -71,8 +71,8 @@ type Archive struct {
 	// Raw frame JSON retains empty strings/arrays and field order for replay validation.
 	Frame json.RawMessage `json:"frame,omitempty"`
 
-	Stylesheets []Stylesheet `json:"stylesheets,omitempty"`
-	Animation *AnimationState `json:"animation,omitempty"`
+	Stylesheets []Stylesheet    `json:"stylesheets,omitempty"`
+	Animation   *AnimationState `json:"animation,omitempty"`
 }
 
 func Validate(archive Archive) error {
@@ -177,17 +177,17 @@ func Validate(archive Archive) error {
 // Widget uses Fyne's event goroutine. Goja is never called from concurrent UI work.
 type Widget struct {
 	*webui.View
-	vm      *goja.Runtime
-	api     *goja.Object
-	fault   error
-	budget  time.Duration
-	archive Archive
-	options Options
+	vm              *goja.Runtime
+	api             *goja.Object
+	fault           error
+	budget          time.Duration
+	archive         Archive
+	options         Options
 	animationAnchor time.Time
-	animationTime float64
-	animationLast time.Time
-	scheduler *animationScheduler
-	closed bool
+	animationTime   float64
+	animationLast   time.Time
+	scheduler       *animationScheduler
+	closed          bool
 }
 
 func New(archive Archive, actions webui.Actions, backends ...webui.Backend) (*Widget, error) {

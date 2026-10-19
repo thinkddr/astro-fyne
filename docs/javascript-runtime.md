@@ -99,11 +99,19 @@ source program to change data or action bindings.
 
 ## What is transported
 
-Archive schema 1, kind `astro-fyne-javascript`, contains the self-contained program,
+Archives use kind `astro-fyne-javascript` and contain the self-contained program,
 its SHA-256 digest, source digests, initial JSON props, named actions, input events,
 host results and the current virtual frame. Restoration reruns the source and replays
 the events. This rebuilds closures, refs, hook state, keyed component lifetimes and
 module mutations without serializing a Goja heap or recovering function bodies.
+
+Programs without compiled animations use schema 1. Supported source CSS animations
+use schema 2, adding a versioned logical time/play-state envelope and event timestamps.
+Restoration samples each recorded event time and the final checkpoint before checking
+the saved frame, then anchors running playback to a fresh host clock. The generated
+`New<Name>WithOptions` constructor accepts explicit native clock ownership. See
+[automatic CSS height animations](css-height-animations.md) for the bounded source
+profile, browser controls, cleanup and remaining pixel-precision work.
 
 `Math.random`, current-time `Date` calls and named action results are recorded.
 Replayed actions consume their recorded results and errors without calling the host.
@@ -142,6 +150,10 @@ Listener identity includes event type, callback and capture flag. Boolean/option
 their DOM behavior. Assigning a direct handler to `null` removes its listener slot; assigning
 it again appends a new slot. A direct handler returning `false` cancels a cancelable event;
 ordinary listener returns are ignored. Abort signals still need a native adapter.
+Real native pointer entry points currently come from supported controls and associated
+labels. Their virtual events can bubble through ancestor listeners; direct background
+clicks on containers or plain text still need a pointer adapter. Programmatic event
+dispatch tests do not establish native pointer activation for those elements.
 HTML element and attribute names use ASCII case folding. Supported controls retain
 boolean `disabled` presence, dirty input values, reflected checkbox/button values and
 text/checkbox value-mode transitions. Textareas retain child-text defaults and normalized

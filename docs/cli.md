@@ -93,6 +93,11 @@ their hashes. Both output directions include `App.css-sources.json` and
 stylesheet and regenerate to change compiled behavior. See
 [CSS in both directions](css-roundtrip.md) for the supported subset and limits.
 
+Supported [CSS height animations](css-height-animations.md) use these same commands;
+no animation flag or hand-written target map is required. Animated program archives
+retain logical clock state in schema 2. Generated Go widgets expose both an automatic
+constructor and `New<Name>WithOptions` for a host-controlled clock.
+
 ## Export from Fyne
 
 A generated JavaScript widget exports its program with `ExportJavascript()`:
