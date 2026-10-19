@@ -10,6 +10,10 @@ import {
 } from "../src/javascript.ts";
 import { generateJavascript } from "../src/javascript-cli.ts";
 import { captureCSSHeight } from "../capture/css-height-roundtrip.ts";
+import {
+  prepareCSSZeroHeight,
+  verifyCSSZeroHeight,
+} from "./css-zero-height.ts";
 
 const root = resolve(import.meta.dir, ".."),
   out = join(root, "artifacts/css-height-roundtrip"),
@@ -286,6 +290,7 @@ export default function HeightHarness(){const [mounted,setMounted]=useState(true
       }),
     ),
   });
+  await prepareCSSZeroHeight({ root, out, command, retain });
 } else {
   const binary = JSON.parse(
     await readFile(join(out, "native-binary.json"), "utf8"),
@@ -337,4 +342,5 @@ export default function HeightHarness(){const [mounted,setMounted]=useState(true
       file.hash,
       `implementation changed after native build: ${file.path}`,
     );
+  await verifyCSSZeroHeight({ root, out, command, retain });
 }

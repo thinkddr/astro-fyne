@@ -376,11 +376,13 @@ if (mode === "prepare") {
         states: unknown[];
         calls: unknown[];
         stableDOMObjects: number;
+        archives?: unknown[];
       }) => ({
         label: record.label,
         frames: record.states.length,
         effects: record.calls.length,
         stableDOMObjects: record.stableDOMObjects,
+        retainedArchives: record.archives?.length ?? 0,
       }),
     ),
     stableNativeObjects: returned.follow.stableNativeObjects,

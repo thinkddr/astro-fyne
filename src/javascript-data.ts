@@ -1,7 +1,115 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 
-import type { JavascriptAnimationState } from "./javascript-types.ts";
+import type {
+  JavascriptAnimationState,
+  JavascriptFrame,
+} from "./javascript-types.ts";
+
+/** Zero sizing is admitted only where native flow has the same empty box. */
+export function validateJavascriptZeroHeight(frame: JavascriptFrame): void {
+  const style = frame.style ?? {},
+    value = style.height;
+  let height: number | undefined;
+  if (typeof value === "number") height = value;
+  else if (typeof value === "string") {
+    const text = value.replace(/^[ \t\r\n\f]+|[ \t\r\n\f]+$/g, "");
+    if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:px)?$/.test(text)) {
+      const parsed = Number(text.replace(/px$/, ""));
+      if (
+        parsed === 0 &&
+        !/^[+-]?(?:0+(?:\.0*)?|\.0+)(?:[eE][+-]?\d+)?(?:px)?$/.test(text)
+      )
+        throw new Error("CSS nonzero height underflows native pixels");
+      if (text.endsWith("px") || parsed === 0) height = parsed;
+    }
+  }
+  if (height !== undefined && height > 0 && Math.fround(height) === 0)
+    throw new Error("CSS positive height underflows native pixels");
+  if (height !== 0) return;
+  if (!frame.css)
+    throw new Error(
+      "CSS zero height requires the stylesheet cascade adapter; inline-only zero sizing is unsupported",
+    );
+  const dimensions: Record<string, number> = {};
+  for (const name of ["fontSize", "lineHeight", "borderRadius"]) {
+    const value = style[name];
+    if (value === undefined || value === "") continue;
+    const text = String(value).replace(/^[ \t\r\n\f]+|[ \t\r\n\f]+$/g, ""),
+      dimension = Number(text.replace(/px$/, ""));
+    if (
+      !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:px)?$/.test(text) ||
+      !Number.isFinite(dimension) ||
+      dimension < 0 ||
+      (typeof value === "number" &&
+        name !== "lineHeight" &&
+        dimension > 3.4028234663852886e38) ||
+      (typeof value === "string" && !text.endsWith("px") && dimension !== 0)
+    )
+      throw new Error(`CSS ${name} requires finite nonnegative pixels`);
+    if (
+      dimension === 0 &&
+      !/^[+-]?(?:0+(?:\.0*)?|\.0+)(?:[eE][+-]?\d+)?(?:px)?$/.test(text)
+    )
+      throw new Error(`CSS nonzero ${name} underflows native pixels`);
+    if (dimension === 0)
+      throw new Error(`CSS zero ${name} requires presence-aware native sizing`);
+    const native = Math.fround(dimension);
+    if (!Number.isFinite(native) || native === 0)
+      throw new Error(`CSS ${name} is outside positive native pixels`);
+    dimensions[name] = native;
+  }
+  if (typeof style.lineHeight === "number") {
+    const lineHeight = Math.fround(
+      dimensions.lineHeight! * (dimensions.fontSize ?? 14),
+    );
+    if (!Number.isFinite(lineHeight) || lineHeight === 0)
+      throw new Error(
+        "CSS lineHeight multiplier is outside positive native pixels",
+      );
+  }
+  const zero = (value: unknown) =>
+    value === undefined ||
+    value === "" ||
+    (typeof value === "number"
+      ? value === 0
+      : typeof value === "string" &&
+        /^[+-]?(?:0+(?:\.0*)?|\.0+)(?:[eE][+-]?\d+)?(?:px)?$/.test(
+          value.replace(/^[ \t\r\n\f]+|[ \t\r\n\f]+$/g, ""),
+        ));
+  if (
+    !new Set([
+      "div",
+      "main",
+      "section",
+      "article",
+      "aside",
+      "header",
+      "footer",
+    ]).has(frame.tag) ||
+    (frame.children?.length ?? 0) !== 0 ||
+    (frame.text ?? "") !== "" ||
+    (style.display !== undefined &&
+      style.display !== "" &&
+      style.display !== "block") ||
+    (style.width !== undefined && style.width !== "") ||
+    (style.flexDirection !== undefined && style.flexDirection !== "") ||
+    [
+      "padding",
+      "paddingTop",
+      "paddingRight",
+      "paddingBottom",
+      "paddingLeft",
+      "borderWidth",
+      "borderRadius",
+      "margin",
+      "gap",
+    ].some((name) => !zero(style[name]))
+  )
+    throw new Error(
+      "CSS zero height requires an empty undecorated auto-width block leaf",
+    );
+}
 
 export function validateJavascriptAnimationState(
   value: unknown,

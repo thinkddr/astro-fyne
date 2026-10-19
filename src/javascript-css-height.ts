@@ -264,13 +264,22 @@ export function compileHeightKeyframes(node: any, css: any, at: string) {
       const values = declaration.value?.children;
       if (
         values?.length !== 1 ||
-        values[0].type !== "Dimension" ||
-        values[0].unit.toLowerCase() !== "px"
+        !(
+          (values[0].type === "Dimension" &&
+            values[0].unit.toLowerCase() === "px") ||
+          (values[0].type === "Number" && Number(values[0].value) === 0)
+        )
       )
-        fail(at, "keyframe height requires explicit positive pixels");
-      height = number(values[0], at, Number.MIN_VALUE, 1_000_000);
-      if (Math.fround(height) <= 0)
-        fail(at, "height must remain positive native pixels");
+        fail(at, "keyframe height requires explicit nonnegative pixels");
+      height = number(values[0], at, 0, 1_000_000);
+      if (
+        (height > 0 && Math.fround(height) === 0) ||
+        (height === 0 &&
+          !/^[+-]?(?:0+(?:\.0*)?|\.0+)(?:[eE][+-]?\d+)?$/.test(
+            String(values[0].value),
+          ))
+      )
+        fail(at, "positive height underflows native pixels");
     }
     if (height === undefined) fail(at, "every keyframe block requires height");
     for (const offset of offsets) frames.set(offset, height);
