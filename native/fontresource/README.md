@@ -17,7 +17,37 @@ The pinned parser may ignore some optional `loca`/`glyf` parse errors. Index bou
 do not validate contours, composite references/cycles, instructions or glyph
 coverage. This is not a complete outline validator.
 
-Callers must first validate their descriptor domain. The catalogue admits weight
+## Nominal coverage
+
+`NewStaticFace(data, weight, style)` accepts 1..20 MiB, weight 400/700 and style
+`normal`/`italic`, then applies the static font validation above. It looks up
+every Unicode scalar through the pinned parser's selected `NominalGlyph` mapping.
+Glyph zero is missing; any nonzero mapping outside the declared glyph count is
+diagnosed. Surrogates are excluded. A mapped glyph may have an empty outline.
+
+The immutable `StaticFace` provides `Contains(rune)` and `ValidateText(string)`.
+Text must be valid UTF-8 and every scalar must have a covered nominal glyph.
+`Profile()` returns independent ranges with inclusive `start`/`end` endpoints,
+schema 1, the exact font SHA-256, weight/style and the binary's declared parser
+dependency identity. This profile requires the original
+`github.com/go-text/typesetting@v0.3.4` dependency. Missing metadata, replacements
+and other versions require an explicit adapter. Build metadata is not source
+attestation for modified or vendored dependencies.
+
+The build-contract test checks admission in the original dependency build and
+rejection in deliberately replaced builds. Positive coverage fixtures require
+the original qualified dependency.
+
+A profile is output metadata; there is no profile import API, and changing a
+copy cannot change a face's private coverage.
+Nil and zero faces have no coverage, reject text validation and return a zero
+profile. A constructed face with no covered scalars still accepts empty text.
+
+The API retains no parsed font or caller-owned bytes. It does not perform
+substitution, variation-selector matching, shaping, browser font loading or
+runtime admission. Nominal coverage does not certify outline or raster parity.
+
+Callers of `Validate` must first validate their descriptor domain. The catalogue admits weight
 400 or 700 and style `normal` or `italic`; it also owns family aliases, resource
 paths, SHA-256 digests, explicit license notices and resource/archive limits.
 These metadata requirements remain in `native/catalog`.
