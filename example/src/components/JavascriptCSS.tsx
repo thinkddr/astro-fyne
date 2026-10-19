@@ -8,6 +8,8 @@ export function JavascriptCSS() {
   return (
     <section class="css-theme" data-mode={mode ? "alt" : "base"}>
       <p id="css-count">{count}</p>
+      <p id="css-supports-group">Conditional stylesheet</p>
+      <p id="css-supports-negated">Negated feature query</p>
       <p id="css-cycle-self">Self cycle</p>
       <p id="css-cycle-mutual">Mutual cycle</p>
       <p id="css-cycle-fallback">Fallback dependency</p>

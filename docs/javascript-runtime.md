@@ -203,7 +203,15 @@ include element/class/ID/attributes, descendant/child/sibling combinators, `:is`
 `:not`, `:root`, checked/disabled/enabled and simple child/empty states. Flat named layers,
 specificity, source order, `!important`, inline priorities, inheritance, variables/fallbacks
 and ordered padding/background declarations are retained through dynamic class changes
-and continuation. Variable resolution follows the selected fallback path and invalidates
+and continuation. `@supports` declaration conditions preserve nested parentheses, `not`,
+`and` and `or`, including groups inside layers and conditional live selectors. The bounded
+capability profile in [`javascript-css-supports.ts`](../src/javascript-css-supports.ts)
+is checked against actual Chromium `CSS.supports` results in CI. It covers the listed
+display/color probes and Tailwind's hyphenation/margin-trim/Mozilla guard. Unknown probes,
+selector queries and mixed boolean operators require an adapter; they are never guessed
+false. Inactive blocks keep their original archived source without entering the cascade.
+This capability profile does not add native rendering for a queried property's values.
+Variable resolution follows the selected fallback path and invalidates
 active cycle participants. Unused fallbacks are not evaluated. Inherited custom properties
 retain their already computed values; explicit `inherit`, `unset` and `initial` are supported.
 Complete-value variables, whitespace-separated padding lists and comma-separated RGB/RGBA
@@ -227,7 +235,7 @@ establish browser parity for it. See the
 [HTML selector rules](https://html.spec.whatwg.org/multipage/semantics-other.html#case-sensitivity-of-selectors)
 and [bidirectional CSS contract](css-roundtrip.md).
 
-CSS modules, media/feature queries, nesting, dynamic pointer/focus states, fonts and URL
+CSS modules, media queries, further feature queries, nesting, dynamic pointer/focus states, fonts and URL
 resources, general layout and rich text still require native adapters. Invalid/unresolved
 variables and unsupported initial/revert semantics are diagnosed. Explicit zero sizing
 and zero default control padding require presence-aware native sizing; they are not
