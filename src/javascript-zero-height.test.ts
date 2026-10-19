@@ -42,7 +42,7 @@ test("stylesheet zero endpoints retain source bytes and sample zero without chan
         [1100, 64],
         [1600, 32],
         [2100, 0],
-      ]) {
+      ] as const) {
         doc.advanceAnimations(time);
         const frames = doc.snapshot();
         expect(
@@ -211,12 +211,13 @@ test("zero-height browser admission preserves native font, line-height and radiu
         prepareJavascriptDOM([frame({ [name]: 3.4028235e38 })]),
       ).toThrow(/finite nonnegative pixels/);
   }
-  for (const style of [
+  const supported: NonNullable<JavascriptFrame["style"]>[] = [
     { fontSize: 20, lineHeight: 1.5 },
     { fontSize: " \t20px\r\n\f", lineHeight: "30px" },
     { display: "" },
     { fontSize: 1e-38, lineHeight: 3.4028235e38 },
-  ])
+  ];
+  for (const style of supported)
     expect(() => prepareJavascriptDOM([frame(style)])).not.toThrow();
   expect(() => prepareJavascriptDOM([frame({ display: " " })])).toThrow(
     /zero height/,

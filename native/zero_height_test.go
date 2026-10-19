@@ -96,6 +96,7 @@ func TestUnsupportedExplicitZeroHeightPreservesCommittedTree(t *testing.T) {
 		{Kind: "container", Children: []Node{{ID: "child", Kind: "container"}}},
 		{Kind: "container", Style: Style{PaddingTop: 1}},
 		{Kind: "container", Style: Style{BorderWidth: 1}},
+		{Kind: "container", Style: Style{BorderColor: "#112233", BorderWidth: 1}},
 		{Kind: "container", Style: Style{Radius: 1}},
 		{Kind: "container", Style: Style{Width: 10}},
 		{Kind: "container", Style: Style{Direction: "row"}},

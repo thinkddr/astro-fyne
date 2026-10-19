@@ -749,7 +749,7 @@ func resolveLegacyStyles(nodes []Node, backend Backend) (map[string]Style, error
 				if node.Kind != "container" || node.Text != "" || len(node.Children) != 0 ||
 					(s.Display != "" && s.Display != "block") || s.Direction != "" || s.Width != 0 ||
 					s.PaddingTop != 0 || s.PaddingRight != 0 || s.PaddingBottom != 0 || s.PaddingLeft != 0 ||
-					s.BorderWidth != 0 || s.Radius != 0 || s.Gap != 0 || metadata != (FlexStyle{}) {
+					node.Style.BorderWidth != 0 || s.BorderWidth != 0 || s.Radius != 0 || s.Gap != 0 || metadata != (FlexStyle{}) {
 					return fmt.Errorf("webui: explicit zero height on %q requires an empty undecorated auto-width block leaf; backend defaults must preserve that profile", node.ID)
 				}
 			}
