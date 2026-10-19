@@ -30,21 +30,21 @@ type probeFrame struct {
 }
 
 type probeControl struct {
-	Operation    string                    `json:"operation"`
-	AdvanceMS    float64                   `json:"advanceMs"`
-	Value        *float64                  `json:"value,omitempty"`
-	RestoreState *motion.State             `json:"restoreState,omitempty"`
-	State        motion.State              `json:"state"`
-	Sample       motion.Sample             `json:"sample"`
-	Geometry     map[string]probeGeometry  `json:"geometry"`
+	Operation    string                   `json:"operation"`
+	AdvanceMS    float64                  `json:"advanceMs"`
+	Value        *float64                 `json:"value,omitempty"`
+	RestoreState *motion.State            `json:"restoreState,omitempty"`
+	State        motion.State             `json:"state"`
+	Sample       motion.Sample            `json:"sample"`
+	Geometry     map[string]probeGeometry `json:"geometry"`
 }
 
 type probeCase struct {
-	Name     string                    `json:"name"`
-	Spec     motion.Spec               `json:"spec"`
-	Targets  map[string]probeGeometry  `json:"targets"`
-	Samples  []probeFrame              `json:"samples"`
-	Controls []probeControl            `json:"controls"`
+	Name     string                   `json:"name"`
+	Spec     motion.Spec              `json:"spec"`
+	Targets  map[string]probeGeometry `json:"targets"`
+	Samples  []probeFrame             `json:"samples"`
+	Controls []probeControl           `json:"controls"`
 }
 
 func objectGeometry(objects map[string]fyne.CanvasObject) map[string]probeGeometry {
@@ -68,8 +68,8 @@ func TestMotionBrowserEvidence(t *testing.T) {
 	defer app.Quit()
 	base := map[string]probeGeometry{"panel": {11, 12, 30, 40}, "other": {200, 80, 20, 25}}
 	type input struct {
-		name string
-		spec motion.Spec
+		name  string
+		spec  motion.Spec
 		times []float64
 	}
 	linear := specification()
@@ -141,15 +141,24 @@ func TestMotionBrowserEvidence(t *testing.T) {
 			} {
 				clock.advance(time.Duration(step.AdvanceMS * float64(time.Millisecond)))
 				switch step.Operation {
-				case "play": err = control.Play()
-				case "tick": err = control.Tick()
-				case "pause": err = control.Pause()
-				case "rate": err = control.SetPlaybackRate(*step.Value)
-				case "reverse": err = control.Reverse()
-				case "seek": err = control.Seek(*step.Value)
-				case "finish": err = control.Finish()
-				case "cancel": err = control.Cancel()
-				case "restore": err = control.RestoreState(*step.RestoreState)
+				case "play":
+					err = control.Play()
+				case "tick":
+					err = control.Tick()
+				case "pause":
+					err = control.Pause()
+				case "rate":
+					err = control.SetPlaybackRate(*step.Value)
+				case "reverse":
+					err = control.Reverse()
+				case "seek":
+					err = control.Seek(*step.Value)
+				case "finish":
+					err = control.Finish()
+				case "cancel":
+					err = control.Cancel()
+				case "restore":
+					err = control.RestoreState(*step.RestoreState)
 				}
 				require(t, err)
 				step.State, err = control.State()
@@ -173,7 +182,13 @@ func TestMotionBrowserEvidence(t *testing.T) {
 }
 
 func reflectGeometry(a, b map[string]probeGeometry) bool {
-	if len(a) != len(b) { return false }
-	for id, g := range a { if b[id] != g { return false } }
+	if len(a) != len(b) {
+		return false
+	}
+	for id, g := range a {
+		if b[id] != g {
+			return false
+		}
+	}
 	return true
 }

@@ -97,14 +97,14 @@ func ParseState(data []byte) (State, error) {
 }
 
 type Controller struct {
-	mu        sync.Mutex
-	clip      *Clip
-	clock     Clock
-	dispatch  Dispatch
-	binding   *FyneBinding
-	state     State
-	anchor    time.Time
-	closed    bool
+	mu       sync.Mutex
+	clip     *Clip
+	clock    Clock
+	dispatch Dispatch
+	binding  *FyneBinding
+	state    State
+	anchor   time.Time
+	closed   bool
 }
 
 func NewController(clip *Clip, clock Clock, binding *FyneBinding, dispatch Dispatch) (*Controller, error) {

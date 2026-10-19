@@ -60,10 +60,10 @@ type Timing struct {
 
 // Spec is construction data. NewClip and Spec() copy every mutable slice.
 type Spec struct {
-	Schema int    `json:"schema"`
-	ID     string `json:"id"`
+	Schema int     `json:"schema"`
+	ID     string  `json:"id"`
 	Tracks []Track `json:"tracks"`
-	Timing Timing `json:"timing"`
+	Timing Timing  `json:"timing"`
 }
 
 // Clip owns validated, immutable metadata. Its zero value is invalid.

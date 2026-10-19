@@ -59,7 +59,10 @@ func TestTimingBoundariesFractionalIterationsAndDirections(t *testing.T) {
 	for _, point := range []struct{ at, want float64 }{{0, 0}, {100, 0}, {600, 50}, {1100, 100}, {1600, 50}, {2100, 0}, {2600, 50}, {3000, 50}} {
 		sample(t, value, point.at, point.want)
 	}
-	for _, item := range []struct{ direction string; want float64 }{{"normal", 25}, {"reverse", 75}, {"alternate", 75}, {"alternate-reverse", 25}} {
+	for _, item := range []struct {
+		direction string
+		want      float64
+	}{{"normal", 25}, {"reverse", 75}, {"alternate", 75}, {"alternate-reverse", 25}} {
 		spec.Timing.Direction = item.direction
 		sample(t, clip(t, spec), 1350, item.want)
 	}
@@ -75,7 +78,10 @@ func TestFillZeroDurationZeroIterationsAndNoRepeat(t *testing.T) {
 		spec := specification()
 		spec.Timing.Fill, spec.Timing.DelayMS = fill, 100
 		value := clip(t, spec)
-		for _, item := range []struct{ at float64; active bool }{{99, fill == "backwards" || fill == "both"}, {100, true}, {1099, true}, {1100, fill == "forwards" || fill == "both"}} {
+		for _, item := range []struct {
+			at     float64
+			active bool
+		}{{99, fill == "backwards" || fill == "both"}, {100, true}, {1099, true}, {1100, fill == "forwards" || fill == "both"}} {
 			got, err := value.Sample(item.at)
 			if err != nil || got.Active != item.active || !item.active && len(got.Values) != 0 {
 				t.Fatalf("%s at %v: %+v, %v", fill, item.at, got, err)
@@ -190,22 +196,26 @@ func TestEasingJSONRejectsNullCoordinatesInsideOtherArchives(t *testing.T) {
 
 func TestInvalidMotionMetadataCannotCreateAClip(t *testing.T) {
 	for name, change := range map[string]func(*motion.Spec){
-		"schema": func(s *motion.Spec) { s.Schema = 2 },
-		"id": func(s *motion.Spec) { s.ID = "bad id" },
-		"opacity": func(s *motion.Spec) { s.Tracks[0].Property = "opacity" },
-		"transform": func(s *motion.Spec) { s.Tracks[0].Property = "transform" },
-		"duplicate ID": func(s *motion.Spec) { s.Tracks = append(s.Tracks, s.Tracks[0]) },
-		"duplicate axis": func(s *motion.Spec) { track := s.Tracks[0]; track.ID = "other"; s.Tracks = append(s.Tracks, track) },
+		"schema":           func(s *motion.Spec) { s.Schema = 2 },
+		"id":               func(s *motion.Spec) { s.ID = "bad id" },
+		"opacity":          func(s *motion.Spec) { s.Tracks[0].Property = "opacity" },
+		"transform":        func(s *motion.Spec) { s.Tracks[0].Property = "transform" },
+		"duplicate ID":     func(s *motion.Spec) { s.Tracks = append(s.Tracks, s.Tracks[0]) },
+		"duplicate axis":   func(s *motion.Spec) { track := s.Tracks[0]; track.ID = "other"; s.Tracks = append(s.Tracks, track) },
 		"missing endpoint": func(s *motion.Spec) { s.Tracks[0].Keyframes[0].Offset = 0.1 },
 		"duplicate offset": func(s *motion.Spec) { s.Tracks[0].Keyframes = []motion.Keyframe{{Offset: 0}, {Offset: 0}, {Offset: 1}} },
-		"unordered": func(s *motion.Spec) { s.Tracks[0].Keyframes = []motion.Keyframe{{Offset: 0}, {Offset: 0.8}, {Offset: 0.2}, {Offset: 1}} },
-		"NaN value": func(s *motion.Spec) { s.Tracks[0].Keyframes[0].Value = math.NaN() },
+		"unordered": func(s *motion.Spec) {
+			s.Tracks[0].Keyframes = []motion.Keyframe{{Offset: 0}, {Offset: 0.8}, {Offset: 0.2}, {Offset: 1}}
+		},
+		"NaN value":         func(s *motion.Spec) { s.Tracks[0].Keyframes[0].Value = math.NaN() },
 		"infinite duration": func(s *motion.Spec) { s.Timing.DurationMS = math.Inf(1) },
 		"negative duration": func(s *motion.Spec) { s.Timing.DurationMS = -1 },
-		"infinite repeat": func(s *motion.Spec) { s.Timing.Iterations = math.Inf(1) },
-		"negative repeat": func(s *motion.Spec) { s.Timing.Iterations = -1 },
+		"infinite repeat":   func(s *motion.Spec) { s.Timing.Iterations = math.Inf(1) },
+		"negative repeat":   func(s *motion.Spec) { s.Timing.Iterations = -1 },
 		"duration overflow": func(s *motion.Spec) { s.Timing.DurationMS = 1e12; s.Timing.Iterations = 1e9 },
-		"invalid curve": func(s *motion.Spec) { s.Timing.Easing = motion.Easing{Kind: "cubic-bezier", Points: []float64{-1, 0, 0, 1}} },
+		"invalid curve": func(s *motion.Spec) {
+			s.Timing.Easing = motion.Easing{Kind: "cubic-bezier", Points: []float64{-1, 0, 0, 1}}
+		},
 		"negative dimension": func(s *motion.Spec) { s.Tracks[0].Property = motion.Width; s.Tracks[0].Keyframes[0].Value = -1 },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -219,7 +229,7 @@ func TestInvalidMotionMetadataCannotCreateAClip(t *testing.T) {
 }
 
 type manualClock struct {
-	mu sync.Mutex
+	mu  sync.Mutex
 	now time.Time
 }
 
@@ -325,7 +335,9 @@ func TestRealFyneGeometryIsBatchedAndFailuresAreAtomic(t *testing.T) {
 	failed := false
 	dispatches := 0
 	control := controller(t, value, clock, binding, func(task func() error) error {
-		if failed { return errors.New("dispatch unavailable") }
+		if failed {
+			return errors.New("dispatch unavailable")
+		}
 		dispatches++
 		return task()
 	})
@@ -336,21 +348,33 @@ func TestRealFyneGeometryIsBatchedAndFailuresAreAtomic(t *testing.T) {
 	before, err := control.State()
 	require(t, err)
 	for _, rate := range []float64{math.NaN(), math.Inf(1), 1e20} {
-		if control.SetPlaybackRate(rate) == nil { t.Fatal("invalid rate accepted") }
+		if control.SetPlaybackRate(rate) == nil {
+			t.Fatal("invalid rate accepted")
+		}
 	}
-	if control.Seek(math.NaN()) == nil { t.Fatal("NaN seek accepted") }
+	if control.Seek(math.NaN()) == nil {
+		t.Fatal("NaN seek accepted")
+	}
 	bad := before
 	bad.ClipHash = strings.Repeat("0", 64)
-	if control.RestoreState(bad) == nil { t.Fatal("foreign clip state accepted") }
+	if control.RestoreState(bad) == nil {
+		t.Fatal("foreign clip state accepted")
+	}
 	bad = before
 	bad.CurrentTimeMS = new(float64)
 	*bad.CurrentTimeMS = math.NaN()
-	if control.RestoreState(bad) == nil { t.Fatal("nonfinite restored time accepted") }
+	if control.RestoreState(bad) == nil {
+		t.Fatal("nonfinite restored time accepted")
+	}
 	bad = before
 	bad.PlayState = "unknown"
-	if control.RestoreState(bad) == nil { t.Fatal("unknown playback state accepted") }
+	if control.RestoreState(bad) == nil {
+		t.Fatal("unknown playback state accepted")
+	}
 	failed = true
-	if control.Seek(500) == nil { t.Fatal("failed dispatcher accepted") }
+	if control.Seek(500) == nil {
+		t.Fatal("failed dispatcher accepted")
+	}
 	failed = false
 	after, err := control.State()
 	require(t, err)
@@ -358,13 +382,19 @@ func TestRealFyneGeometryIsBatchedAndFailuresAreAtomic(t *testing.T) {
 		t.Fatal("failed call changed state or native geometry")
 	}
 	require(t, control.Cancel())
-	if object.Position() != fyne.NewPos(10, 20) || object.Size() != fyne.NewSize(30, 40) { t.Fatal("cancel did not restore owned geometry") }
+	if object.Position() != fyne.NewPos(10, 20) || object.Size() != fyne.NewSize(30, 40) {
+		t.Fatal("cancel did not restore owned geometry")
+	}
 	require(t, control.Play())
 	clock.advance(-time.Second)
-	if control.Tick() == nil { t.Fatal("backward clock accepted") }
+	if control.Tick() == nil {
+		t.Fatal("backward clock accepted")
+	}
 	require(t, control.Close())
 	require(t, control.Close())
-	if object.Position() != fyne.NewPos(10, 20) || object.Size() != fyne.NewSize(30, 40) || !errors.Is(control.Tick(), motion.ErrClosed) { t.Fatal("close failed to restore/release playback") }
+	if object.Position() != fyne.NewPos(10, 20) || object.Size() != fyne.NewSize(30, 40) || !errors.Is(control.Tick(), motion.ErrClosed) {
+		t.Fatal("close failed to restore/release playback")
+	}
 }
 
 func TestStateTransportContinuesWithoutWallClockJump(t *testing.T) {
@@ -392,7 +422,9 @@ func TestStateTransportContinuesWithoutWallClockJump(t *testing.T) {
 		strings.Replace(string(data), `"schema":1`, `"schema":1,"schema":1`, 1),
 		strings.Replace(string(data), `"currentTimeMs":400`, `"currentTimeMs":null`, 1),
 	} {
-		if _, err := motion.ParseState([]byte(invalid)); err == nil { t.Fatal("invalid transported state accepted") }
+		if _, err := motion.ParseState([]byte(invalid)); err == nil {
+			t.Fatal("invalid transported state accepted")
+		}
 	}
 }
 
@@ -402,15 +434,23 @@ func TestBindingReferencesOwnershipAndOvershootDiagnostics(t *testing.T) {
 	object := canvas.NewRectangle(nil)
 	object.Resize(fyne.NewSize(20, 30))
 	value := clip(t, specification())
-	if _, err := motion.BindFyne(value, map[string]fyne.CanvasObject{"panel": object}, 0); err == nil { t.Fatal("layout ownership was inferred") }
-	if _, err := motion.BindFyne(value, nil, motion.OwnGeometry); err == nil { t.Fatal("missing target accepted") }
+	if _, err := motion.BindFyne(value, map[string]fyne.CanvasObject{"panel": object}, 0); err == nil {
+		t.Fatal("layout ownership was inferred")
+	}
+	if _, err := motion.BindFyne(value, nil, motion.OwnGeometry); err == nil {
+		t.Fatal("missing target accepted")
+	}
 	var typedNil *canvas.Rectangle
-	if _, err := motion.BindFyne(value, map[string]fyne.CanvasObject{"panel": typedNil}, motion.OwnGeometry); err == nil { t.Fatal("typed nil target accepted") }
+	if _, err := motion.BindFyne(value, map[string]fyne.CanvasObject{"panel": typedNil}, motion.OwnGeometry); err == nil {
+		t.Fatal("typed nil target accepted")
+	}
 	alias := specification()
 	other := alias.Tracks[0]
 	other.ID, other.Target = "second", "other"
 	alias.Tracks = append(alias.Tracks, other)
-	if _, err := motion.BindFyne(clip(t, alias), map[string]fyne.CanvasObject{"panel": object, "other": object}, motion.OwnGeometry); err == nil { t.Fatal("native target alias accepted") }
+	if _, err := motion.BindFyne(clip(t, alias), map[string]fyne.CanvasObject{"panel": object, "other": object}, motion.OwnGeometry); err == nil {
+		t.Fatal("native target alias accepted")
+	}
 	spec := specification()
 	spec.Tracks = append(spec.Tracks, motion.Track{ID: "size", Target: "panel", Property: motion.Width, Keyframes: []motion.Keyframe{{Offset: 0}, {Offset: 1, Value: 10}}})
 	spec.Timing.Easing = motion.Easing{Kind: "cubic-bezier", Points: []float64{0.3, -5, 0.7, -5}}
@@ -418,10 +458,14 @@ func TestBindingReferencesOwnershipAndOvershootDiagnostics(t *testing.T) {
 	binding, err := motion.BindFyne(value, map[string]fyne.CanvasObject{"panel": object}, motion.OwnGeometry)
 	require(t, err)
 	control := controller(t, value, &manualClock{}, binding, motion.Direct)
-	if control.Seek(500) == nil { t.Fatal("negative dimension overshoot accepted") }
+	if control.Seek(500) == nil {
+		t.Fatal("negative dimension overshoot accepted")
+	}
 	state, err := control.State()
 	require(t, err)
-	if state.PlayState != "idle" || object.Position() != fyne.NewPos(0, 0) || object.Size() != fyne.NewSize(20, 30) { t.Fatal("overshoot failure mutated the object or controller") }
+	if state.PlayState != "idle" || object.Position() != fyne.NewPos(0, 0) || object.Size() != fyne.NewSize(20, 30) {
+		t.Fatal("overshoot failure mutated the object or controller")
+	}
 }
 
 func TestInactiveFillsRestoreUnderlyingNativeGeometry(t *testing.T) {
@@ -437,9 +481,13 @@ func TestInactiveFillsRestoreUnderlyingNativeGeometry(t *testing.T) {
 	require(t, err)
 	control := controller(t, value, &manualClock{}, binding, motion.Direct)
 	require(t, control.Seek(600))
-	if object.Position().X != 50 { t.Fatal("active frame was not applied") }
+	if object.Position().X != 50 {
+		t.Fatal("active frame was not applied")
+	}
 	for _, at := range []float64{99, 1100, 2000} {
 		require(t, control.Seek(at))
-		if object.Position() != fyne.NewPos(11, 12) || object.Size() != fyne.NewSize(30, 40) { t.Fatal("inactive fill retained animated geometry") }
+		if object.Position() != fyne.NewPos(11, 12) || object.Size() != fyne.NewSize(30, 40) {
+			t.Fatal("inactive fill retained animated geometry")
+		}
 	}
 }
