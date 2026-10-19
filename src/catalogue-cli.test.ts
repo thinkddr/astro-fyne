@@ -959,3 +959,163 @@ test("declared catalogue motions export typed definitions and complete portable 
   await generateCatalogue({ ...options, check: true });
   expect(await tree(out)).toEqual(initial);
 });
+
+test("catalogue layout CSS retains opacity and text declarations without a literal font family", async () => {
+  const spec = emptyCatalogue("Layouts"),
+    sourceStyle = {
+      ...style,
+      measured: false as const,
+      display: "flex",
+      opacity: 0.4,
+      fontFamily: "",
+      fontSize: 18,
+      lineHeight: 26,
+      fontWeight: 700,
+      fontStyle: "italic",
+      textAlign: "center",
+      whiteSpace: "nowrap",
+      flex: { boxSizing: "border-box", basis: 0, minWidth: 0 },
+    };
+  spec.layouts.push(
+    { id: "caption", style: sourceStyle },
+    { id: "transparent", style: { ...sourceStyle, opacity: 0 } },
+  );
+  const input = await save(spec),
+    out = join(directory, "web"),
+    options = {
+      catalogue: input.path,
+      out,
+      name: "Layouts",
+      direction: "web" as const,
+    };
+  await generateCatalogue(options);
+  const module = await readFile(join(out, "Layouts.catalogue.tsx"), "utf8"),
+    exported = module.match(/^export const layouts=(.*);$/m);
+  expect(exported).not.toBeNull();
+  const layouts = JSON.parse(exported![1]!);
+  expect(layouts.caption).toMatchObject({
+    opacity: 0.4,
+    fontSize: 18,
+    lineHeight: "26px",
+    fontWeight: 700,
+    fontStyle: "italic",
+    textAlign: "center",
+    whiteSpace: "nowrap",
+    flexBasis: 0,
+    minWidth: 0,
+    boxSizing: "border-box",
+  });
+  expect(layouts.caption.fontFamily).toBeUndefined();
+  expect(layouts.transparent.opacity).toBe(0);
+  const initial = await tree(out);
+  await generateCatalogue({ ...options, check: true });
+  expect(await tree(out)).toEqual(initial);
+  const report = JSON.parse(
+    await readFile(join(out, "Layouts.catalogue.report.json"), "utf8"),
+  );
+  expect(
+    JSON.parse(await readFile(join(out, report.archiveFile), "utf8")).layouts,
+  ).toEqual(spec.layouts);
+});
+
+test("repeated scene label references are rejected atomically while one declared form remains usable", async () => {
+  const spec = emptyCatalogue("Forms"),
+    document = scene();
+  document.roots[0]!.children[0] = {
+    id: "email-label",
+    kind: "text",
+    text: "Email",
+    labelFor: "email",
+    style: { ...style, width: 180, height: 24 },
+    children: [],
+  };
+  document.roots[0]!.children.push({
+    id: "email",
+    kind: "input",
+    value: "example@example.invalid",
+    accessibleLabel: "Email address",
+    style: { ...style, width: 180, height: 32 },
+    children: [],
+  });
+  spec.components.push(
+    component("unrelated", "scene", scene()),
+    component("form", "scene", document),
+  );
+  spec.islands.push(
+    { id: "left-form", component: "form", key: "same-key" },
+    { id: "right-form", component: "form", key: "same-key" },
+  );
+  const input = await save(spec),
+    out = join(directory, "web"),
+    publicDir = join(directory, "public"),
+    options = {
+      catalogue: input.path,
+      out,
+      publicDir,
+      name: "Forms",
+      direction: "web" as const,
+    };
+  await expect(generateCatalogue(options)).rejects.toThrow(
+    'scene "form" uses labelFor and requires a single declared island',
+  );
+  await expect(stat(out)).rejects.toThrow();
+  await expect(stat(publicDir)).rejects.toThrow();
+  spec.islands.pop();
+  await save(spec);
+  await generateCatalogue(options);
+  const form = await readFile(join(out, "FormsComponent1.tsx"), "utf8");
+  expect(form).toContain('htmlFor={"email"}');
+  expect(form).toContain('id={"email"}');
+  const report = JSON.parse(
+    await readFile(join(out, "Forms.catalogue.report.json"), "utf8"),
+  );
+  expect(report.limitations).toContain(
+    "Scene components retain snapshot IDs; scenes with labelFor require a single declared island and globally unique host IDs",
+  );
+  await generateCatalogue({ ...options, check: true });
+});
+
+test("different declared scene components cannot share document-global label targets", async () => {
+  const spec = emptyCatalogue("DistinctForms"),
+    document = scene();
+  document.roots[0]!.children[0] = {
+    id: "email-label",
+    kind: "text",
+    text: "Email",
+    labelFor: "email",
+    style: { ...style, width: 180, height: 24 },
+    children: [],
+  };
+  document.roots[0]!.children.push({
+    id: "email",
+    kind: "input",
+    accessibleLabel: "Email address",
+    value: "",
+    style: { ...style, width: 180, height: 32 },
+    children: [],
+  });
+  spec.components.push(
+    component("first-form", "scene", document),
+    component("second-form", "scene", structuredClone(document)),
+  );
+  spec.islands.push(
+    { id: "left", component: "first-form", key: "left" },
+    { id: "right", component: "second-form", key: "right" },
+  );
+  const input = await save(spec),
+    out = join(directory, "web"),
+    publicDir = join(directory, "public");
+  await expect(
+    generateCatalogue({
+      catalogue: input.path,
+      out,
+      publicDir,
+      name: "DistinctForms",
+      direction: "web",
+    }),
+  ).rejects.toThrow(
+    'scene "first-form" uses labelFor and requires a single declared island',
+  );
+  await expect(stat(out)).rejects.toThrow();
+  await expect(stat(publicDir)).rejects.toThrow();
+});

@@ -73,6 +73,14 @@ run `astro-fyne to-fyne Updated.catalogue.json` to restore supported state in Go
 Scene/program checkpoint contracts remain their existing explicit export APIs;
 this helper currently accepts JavaScript island handles.
 
+A scene containing labels with `labelFor` currently requires exactly one
+declared island for web generation. Combining it with another island is
+diagnosed before writing, because document-wide control IDs could associate a
+label with another instance. This includes distinct scene components, not just
+repeated references to the same component. Hosts that manually mount exported
+scene components must provide unique document-wide IDs; reusable scene ID
+scoping still needs a separate runtime contract.
+
 The generated Astro page mounts all declared islands. Its module imports
 component CSS and font declarations. Named theme/layout objects are available
 for explicit host application; they do not alter the archived components.
@@ -234,6 +242,11 @@ declarations; an actual source factory validates their behavior in its complete
 tree. Fixed captured coordinates do not describe a reusable source layout.
 Setting `LayoutSpec.Native` to a Go layout algorithm produces a diagnostic
 instead of silently dropping executable behavior.
+
+Generated layout CSS retains opacity, alignment, whitespace and declared text
+metrics even when the family is inherited. Retaining a declaration does not add
+a native compositor: actual responsive Fyne binding still diagnoses unsupported
+group opacity and other missing adapters in the complete source tree.
 
 Theme and layout references describe dependencies, not automatic overrides.
 The host explicitly applies returned themes and layouts. A default JavaScript

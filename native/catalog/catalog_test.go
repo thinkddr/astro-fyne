@@ -509,3 +509,35 @@ func TestCataloguePortableProgramsRequireExplicitRestorationFactories(t *testing
 		t.Fatalf("program digest was not checked: %v", err)
 	}
 }
+
+func TestCatalogueFontsWorkWithFyneTextMeasurement(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	registry := requireRegistry(t, fontFixture(t))
+	component, err := registry.Component("Counter")
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := registry.backend(component)
+	style := webui.Style{FontFamily: "AstroNoto", FontWeight: 400, FontSize: 14, LineHeight: 20, Measured: true}
+	if err := backend.Validate(style, true); err != nil {
+		t.Fatal(err)
+	}
+	text := backend.Text("Hgx", style)
+	theme, err := registry.Theme("light", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, resource := range []fyne.Resource{backend.Fonts["AstroNoto"][webui.Font{Weight: 400}], theme.Font(fyne.TextStyle{})} {
+		text.FontSource = resource
+		before := text.MinSize()
+		if before.Width <= 0 || before.Height <= 0 {
+			t.Fatal("catalogue font produced empty text metrics")
+		}
+		copied := resource.Content()
+		copied[0] ^= 0xff
+		if text.MinSize() != before || !bytes.Equal(resource.Content(), registry.Resources()[0].Content) {
+			t.Fatal("font cache identity or immutable font bytes changed")
+		}
+	}
+}

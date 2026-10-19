@@ -23,7 +23,8 @@ import { validateProgramArchive } from "./program.ts";
 import { emitGo, scopeHelper } from "./emit.ts";
 import { emitWebProgram } from "./program-web.ts";
 import { emitNativeScene } from "./scene-native.ts";
-import { emitWebScene } from "./reverse.ts";
+import { emitWebScene, validateSceneDocument } from "./reverse.ts";
+import type { SceneNode, SceneSourceStyle } from "./reverse.ts";
 import { sourceStyleCSS } from "./scene-layout.ts";
 
 const header =
@@ -69,6 +70,23 @@ function localModule(module: string) {
     throw new Error("actions-module requires a local or package import");
 }
 
+function catalogueLayoutCSS(style: SceneSourceStyle) {
+  const result = sourceStyleCSS(style);
+  result.opacity = style.opacity;
+  for (const name of ["fontStyle", "textAlign", "whiteSpace"] as const)
+    if (style[name]) result[name] = style[name];
+  for (const name of ["fontSize", "fontWeight"] as const)
+    if (style[name]) result[name] = style[name];
+  if (style.lineHeight) result.lineHeight = `${style.lineHeight}px`;
+  return result;
+}
+
+function hasLabelReference(nodes: SceneNode[]): boolean {
+  return nodes.some(
+    (node) => !!node.labelFor || hasLabelReference(node.children),
+  );
+}
+
 /** Prepare the complete library before touching the destination. */
 export async function prepareCatalogue(options: CatalogueOptions) {
   if (
@@ -92,6 +110,20 @@ export async function prepareCatalogue(options: CatalogueOptions) {
       ignoreBOM: true,
     }).decode(await readFile(input)),
     spec = await parseCatalogue(source);
+  if (options.direction === "web" && spec.islands.length > 1) {
+    const declared = new Set(spec.islands.map((island) => island.component));
+    for (const component of spec.components)
+      if (
+        component.kind === "scene" &&
+        declared.has(component.id) &&
+        hasLabelReference(
+          validateSceneDocument(JSON.parse(component.payload)).roots,
+        )
+      )
+        throw new Error(
+          `Catalogue web scene ${JSON.stringify(component.id)} uses labelFor and requires a single declared island until document-wide scene ID scoping is supported`,
+        );
+  }
   const artifacts: Artifact[] = [];
   const text = (
     path: string,
@@ -338,7 +370,10 @@ func merge${options.name}Fonts(target *webui.FyneBackend,extra webui.FyneBackend
       spec.themes.map((theme) => [theme.id, theme.tokens]),
     );
     const layouts = Object.fromEntries(
-      spec.layouts.map((layout) => [layout.id, sourceStyleCSS(layout.style)]),
+      spec.layouts.map((layout) => [
+        layout.id,
+        catalogueLayoutCSS(layout.style),
+      ]),
     );
     text(
       `${options.name}.catalogue.tsx`,
@@ -388,6 +423,7 @@ export function ${options.name}Island({id,actions,handleRef}:${options.name}Isla
     visual: { pixelPerfectVerified: false },
     limitations: [
       "Named themes and layouts are explicit host dependencies, not automatic style overrides",
+      "Scene components retain snapshot IDs; scenes with labelFor require a single declared island and globally unique host IDs",
       "Motion definitions require an explicit target binding and clock",
       "Arbitrary Go functions and unsupported CSS require platform adapters",
     ],

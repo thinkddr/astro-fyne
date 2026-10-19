@@ -143,7 +143,7 @@ func (r *Registry) Theme(id string, base fyne.Theme) (*webui.CapturedTheme, erro
 		}
 		for _, faceID := range item.FontFaces {
 			face, resource := findFont(spec, faceID)
-			result.Fonts[fyne.TextStyle{Bold: face.Weight == 700, Italic: face.Style == "italic"}] = frozenResource{resource.Name, bytes.Clone(resource.Content)}
+			result.Fonts[fyne.TextStyle{Bold: face.Weight == 700, Italic: face.Style == "italic"}] = &frozenResource{resource.Name, bytes.Clone(resource.Content)}
 		}
 		return result, result.Validate()
 	}
@@ -271,7 +271,7 @@ func (r *Registry) backend(component Component) webui.FyneBackend {
 		if fonts[face.Family] == nil {
 			fonts[face.Family] = map[webui.Font]fyne.Resource{}
 		}
-		fonts[face.Family][webui.Font{Weight: face.Weight, Italic: face.Style == "italic"}] = frozenResource{resource.Name, bytes.Clone(resource.Content)}
+		fonts[face.Family][webui.Font{Weight: face.Weight, Italic: face.Style == "italic"}] = &frozenResource{resource.Name, bytes.Clone(resource.Content)}
 	}
 	return webui.FyneBackend{Fonts: fonts}
 }
@@ -281,8 +281,8 @@ type frozenResource struct {
 	data []byte
 }
 
-func (r frozenResource) Name() string    { return r.name }
-func (r frozenResource) Content() []byte { return bytes.Clone(r.data) }
+func (r *frozenResource) Name() string    { return r.name }
+func (r *frozenResource) Content() []byte { return bytes.Clone(r.data) }
 
 func findFont(spec Spec, id string) (FontFace, Resource) {
 	for _, face := range spec.FontFaces {

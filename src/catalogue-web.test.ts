@@ -88,8 +88,10 @@ function fixture(archive = archiveFixture()): CatalogueSpec {
 }
 function mount(archive: JavascriptArchive): JavascriptAPI {
   const factory: JavascriptFactory = eval(`(${archive.code})`),
-    api = factory(() => {
-      throw new Error("Unexpected host effect");
+    api = factory((kind) => {
+      if (kind === "now") return 1000;
+      if (kind === "random") return 0.25;
+      throw new Error(`Unexpected host effect ${kind}`);
     }, archive);
   api.flush();
   for (const event of archive.events) {
