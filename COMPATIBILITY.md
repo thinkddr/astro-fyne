@@ -30,6 +30,10 @@ supported selectors, flat layers, specificity/order/importance, variables and de
 inheritance are reevaluated after source state changes. Original-browser computed styles
 are compared with native frames. General CSS layout, media/state/font/resource adapters
 and pixel equivalence remain pending.
+The relational `:has()` selector supports anchored descendant, child and following
+sibling chains and lists, with live state reevaluation and argument-list specificity.
+Nested `:has()` and pseudo-elements remain diagnosed. The
+[CSS guide](docs/css-roundtrip.md) describes this bounded selector support.
 CSS migration is required in both directions. The
 [CSS round-trip guide](docs/css-roundtrip.md) distinguishes retained stylesheet
 behavior from resolved scene CSS and records the remaining boundaries.

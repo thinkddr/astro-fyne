@@ -12,11 +12,13 @@
     "jsxImportSource": "preact"
   },
   "include": [
+    "bin/**/*.ts",
     "src/**/*.ts",
     "capture/**/*.ts",
     "ci/program-roundtrip.ts",
     "ci/javascript-roundtrip.ts",
     "ci/css-roundtrip.ts",
+    "ci/css-has-roundtrip.ts",
     "ci/text-engine-probe/*.ts",
     "example/src/components/**/*.tsx",
     "example/src/pages/**/*.tsx"

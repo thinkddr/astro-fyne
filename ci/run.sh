@@ -9,6 +9,11 @@ if [[ -n "$task_unformatted" ]]; then
   exit 1
 fi
 bun install --frozen-lockfile --ignore-scripts
+bun link
+task_cli_smoke="$(mktemp -d)"
+mkdir -p artifacts/cli
+(cd "$task_cli_smoke" && astro-fyne --help) > artifacts/cli/installed-help.txt
+rmdir "$task_cli_smoke"
 # Start with actual Fyne objects, then compile the exported scene into a web page.
 (cd native && GOMAXPROCS=2 go run -p=1 ./reverse/cmd/scene-fixture --out ../artifacts/reverse)
 (cd native && GOMAXPROCS=2 go run -p=1 ./reverse/cmd/scene-fixture --controls --out ../artifacts/reverse-controls)
@@ -21,7 +26,7 @@ bun src/cli.ts reverse --scene artifacts/reverse-controls/scene.json --out examp
 cp example/src/pages/reverse-controls/ReverseControls.* artifacts/reverse-controls/
 bun run typecheck
 bun test src
-bunx --no-install prettier --check README.md docs src capture example ci/program-roundtrip.ts ci/javascript-roundtrip.ts ci/css-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json typography-probe.json image-enlargement.json image-enlargement-scenario.json ci/image-sampling/*.md ci/image-sampling/source-pin.json ci/image-production-pin.json package.json tsconfig.json
+bunx --no-install prettier --check README.md docs bin src capture example ci/program-roundtrip.ts ci/javascript-roundtrip.ts ci/css-roundtrip.ts ci/css-has-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json typography-probe.json image-enlargement.json image-enlargement-scenario.json ci/image-sampling/*.md ci/image-sampling/source-pin.json ci/image-production-pin.json package.json tsconfig.json
 bun src/cli.ts generate --config astro-fyne.json
 bun src/cli.ts check --config astro-fyne.json
 bun src/cli.ts generate --config conformance.json
@@ -70,6 +75,7 @@ bun ci/program-roundtrip.ts
 bun ci/javascript-roundtrip.ts
 bun ci/javascript-roundtrip.ts --astro
 bun ci/css-roundtrip.ts prepare
+bun ci/css-has-roundtrip.ts prepare
 # Include the generated portable islands in the real Astro build and type check.
 bun run typecheck
 bun run build:web
@@ -99,6 +105,7 @@ bun capture/program-astro.ts http://127.0.0.1:4321 artifacts/program-roundtrip
 bun capture/javascript-astro.ts http://127.0.0.1:4321 artifacts/javascript-roundtrip
 bun capture/astro-javascript.ts http://127.0.0.1:4321 artifacts/astro-javascript-roundtrip
 bun ci/css-roundtrip.ts verify
+bun ci/css-has-roundtrip.ts verify
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/geometry --out artifacts --width 320 --height 240 --scale 1 --source-hash "$task_source_hash"
 bun capture/behavior.ts http://127.0.0.1:4321/conformance conformance-scenario.json artifacts/web-behavior.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH"
 bun capture/keyed-behavior.ts http://127.0.0.1:4321/keyed keyed-scenario.json artifacts/web-keyed-behavior.json "$task_keyed_source_hash"

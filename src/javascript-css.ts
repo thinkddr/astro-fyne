@@ -6,6 +6,16 @@ const cssPackage = "css-tree";
 const css = await import(cssPackage);
 const asciiLower = (value: string) =>
   value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+const isIdentifier = (value: string) => {
+  let count = 0,
+    valid = true;
+  css.tokenize(":" + value, (type: number) => {
+    count++;
+    if (type !== (count === 1 ? css.tokenTypes.Colon : css.tokenTypes.Ident))
+      valid = false;
+  });
+  return valid && count === 2;
+};
 
 /** Compile CSS syntax only. Cascading stays in the shared native/browser VM. */
 export async function compileJavascriptCSS(
@@ -61,26 +71,39 @@ export async function compileJavascriptCSS(
   function compare(a: number[], b: number[]) {
     return a[0]! - b[0]! || a[1]! - b[1]! || a[2]! - b[2]!;
   }
-  function selectors(list: any): any[] {
-    if (list.type !== "SelectorList")
+  function selectors(list: any, relative = false, insideHas = false): any[] {
+    if (list?.type !== "SelectorList" || (relative && !list.children.length))
       throw new Error("CSS selector syntax requires an adapter");
     return list.children.map((selector: any) => {
-      const parts: any[] = [{ tests: [], before: "" }],
+      const parts: any[] = [{ tests: [], before: relative ? " " : "" }],
         score = [0, 0, 0];
+      let first = true;
       for (const node of selector.children) {
         const tests = parts[parts.length - 1].tests;
         if (node.type === "Combinator") {
-          if (![" ", ">", "+", "~"].includes(node.name) || !tests.length)
+          if (![" ", ">", "+", "~"].includes(node.name))
             throw new Error("CSS combinator requires an adapter");
-          parts.push({ tests: [], before: node.name });
+          if (!tests.length) {
+            if (!relative || !first)
+              throw new Error("CSS combinator requires an adapter");
+            parts[0].before = node.name;
+          } else parts.push({ tests: [], before: node.name });
         } else if (
           ["TypeSelector", "ClassSelector", "IdSelector"].includes(node.type)
         ) {
+          if (node.type === "IdSelector" && !isIdentifier(node.name))
+            throw new Error("CSS ID selector syntax requires an adapter");
           const name = css.ident.decode(node.name);
+          if (node.type === "TypeSelector" && tests.length)
+            throw new Error("CSS type selector order requires an adapter");
           if (name.includes("|"))
             throw new Error("CSS namespaces require an adapter");
-          tests.push([node.type, name]);
-          if (name !== "*")
+          tests.push(
+            node.type === "TypeSelector"
+              ? [node.type, name, node.name === "*"]
+              : [node.type, name],
+          );
+          if (node.type !== "TypeSelector" || node.name !== "*")
             score[
               node.type === "IdSelector"
                 ? 0
@@ -112,8 +135,22 @@ export async function compileJavascriptCSS(
           score[1]!++;
         } else if (node.type === "PseudoClassSelector") {
           const name = asciiLower(node.name);
-          if (["is", "where", "not"].includes(name)) {
-            const nested = selectors(node.children?.[0]);
+          if (["is", "where", "not", "has"].includes(name)) {
+            if (name === "has" && insideHas)
+              throw new Error("CSS :has() cannot contain another :has()");
+            const empty = node.children?.length === 0;
+            if (name === "not" && empty)
+              throw new Error("CSS :not() requires a nonempty selector list");
+            const nested =
+              empty && ["is", "where"].includes(name)
+                ? []
+                : selectors(
+                    node.children?.[0],
+                    name === "has",
+                    insideHas || name === "has",
+                  );
+            if (name === "not" && !nested.length)
+              throw new Error("CSS :not() requires a nonempty selector list");
             tests.push([name, nested]);
             if (name !== "where") {
               const s = specificity(nested);
@@ -138,6 +175,7 @@ export async function compileJavascriptCSS(
               `CSS pseudo-class :${name} requires a native state/selector adapter`,
             );
         } else throw new Error(`CSS selector ${node.type} requires an adapter`);
+        first = false;
       }
       if (!parts[parts.length - 1].tests.length)
         throw new Error("CSS selector ends in a combinator");

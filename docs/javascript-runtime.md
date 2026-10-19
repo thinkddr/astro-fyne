@@ -200,7 +200,11 @@ pixel dimensions, spacing, solid colors/borders, typography and row/column direc
 Local side-effect CSS imports and recursive local `@import` retain their source hashes
 and install ordered source rules in the shared Goja/browser runtime. Supported selectors
 include element/class/ID/attributes, descendant/child/sibling combinators, `:is`, `:where`,
-`:not`, `:root`, checked/disabled/enabled and simple child/empty states. Flat named layers,
+`:not`, `:has`, `:root`, checked/disabled/enabled and simple child/empty states. Relative
+`:has()` arguments support descendant, child, adjacent sibling and following sibling
+chains and lists. Matching follows live DOM and supported control state; specificity
+uses the most specific argument, even when another argument matches. Nested `:has()`
+and pseudo-elements require further adapters and produce diagnostics. Flat named layers,
 specificity, source order, `!important`, inline priorities, inheritance, variables/fallbacks
 and ordered padding/background declarations are retained through dynamic class changes
 and continuation. Variable resolution follows the selected fallback path and invalidates

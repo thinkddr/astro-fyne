@@ -97,78 +97,118 @@ export function createCSSCascade() {
       node.parentNode?.childNodes.filter((n) => n.nodeType === 1) ?? [];
     return siblings[siblings.indexOf(node) - 1] ?? null;
   }
-  function matches(selector, node, index = selector.parts.length - 1) {
+  function next(node) {
+    const siblings =
+      node.parentNode?.childNodes.filter((n) => n.nodeType === 1) ?? [];
+    return siblings[siblings.indexOf(node) + 1] ?? null;
+  }
+  function related(node, combinator) {
+    if (combinator === ">")
+      return node.childNodes.filter((child) => child.nodeType === 1);
+    if (combinator === "+") {
+      const sibling = next(node);
+      return sibling ? [sibling] : [];
+    }
+    const nodes = [];
+    if (combinator === "~") {
+      for (let sibling = next(node); sibling; sibling = next(sibling))
+        nodes.push(sibling);
+    } else {
+      const pending = [...node.childNodes];
+      while (pending.length) {
+        const descendant = pending.pop();
+        if (descendant.nodeType !== 1) continue;
+        nodes.push(descendant);
+        pending.push(...descendant.childNodes);
+      }
+    }
+    return nodes;
+  }
+  function matchesRelative(selector, anchor) {
+    let candidates = [anchor];
+    for (const part of selector.parts) {
+      const following = new Set();
+      for (const node of candidates)
+        for (const candidate of related(node, part.before))
+          if (matchesPart(part, candidate)) following.add(candidate);
+      if (!following.size) return false;
+      candidates = [...following];
+    }
+    return true;
+  }
+  function matchesPart(part, node) {
     if (!node || node.nodeType !== 1) return false;
-    const part = selector.parts[index];
-    if (
-      !part.tests.every((test) => {
-        const [kind, name, operator, value, flags] = test;
-        if (kind === "TypeSelector")
+    return part.tests.every((test) => {
+      const [kind, name, operator, value, flags] = test;
+      if (kind === "TypeSelector") {
+        const universal = operator === undefined ? name === "*" : operator;
+        return universal || asciiLower(node.localName) === asciiLower(name);
+      }
+      if (kind === "IdSelector") return node.attrs.id === name;
+      if (kind === "ClassSelector")
+        return (node.attrs.class ?? "").split(/[\t\n\f\r ]+/).includes(name);
+      if (kind === "attribute") {
+        let actual = node.getAttribute(name),
+          expected = value;
+        if (actual === null) return false;
+        if (!operator) return true;
+        if (
+          flags === "i" ||
+          (!flags && htmlInsensitiveAttributes.has(asciiLower(name)))
+        ) {
+          actual = asciiLower(actual);
+          expected = asciiLower(expected);
+        }
+        if (operator === "=") return actual === expected;
+        if (operator === "~=")
           return (
-            name === "*" || asciiLower(node.localName) === asciiLower(name)
+            !!expected &&
+            !/[\t\n\f\r ]/.test(expected) &&
+            actual.split(/[\t\n\f\r ]+/).includes(expected)
           );
-        if (kind === "IdSelector") return node.attrs.id === name;
-        if (kind === "ClassSelector")
-          return (node.attrs.class ?? "").split(/[\t\n\f\r ]+/).includes(name);
-        if (kind === "attribute") {
-          let actual = node.getAttribute(name),
-            expected = value;
-          if (actual === null) return false;
-          if (!operator) return true;
-          if (
-            flags === "i" ||
-            (!flags && htmlInsensitiveAttributes.has(asciiLower(name)))
-          ) {
-            actual = asciiLower(actual);
-            expected = asciiLower(expected);
-          }
-          if (operator === "=") return actual === expected;
-          if (operator === "~=")
-            return (
-              !!expected &&
-              !/[\t\n\f\r ]/.test(expected) &&
-              actual.split(/[\t\n\f\r ]+/).includes(expected)
-            );
-          if (operator === "|=")
-            return actual === expected || actual.startsWith(expected + "-");
-          if (operator === "^=")
-            return !!expected && actual.startsWith(expected);
-          if (operator === "$=") return !!expected && actual.endsWith(expected);
-          if (operator === "*=") return !!expected && actual.includes(expected);
-          throw new Error("CSS attribute operator requires an adapter");
-        }
-        if (["is", "where", "not"].includes(kind)) {
-          const hit = name.some((item) => matches(item, node));
-          return kind === "not" ? !hit : hit;
-        }
-        if (kind === "pseudo") {
-          if (name === "root") return node.localName === "html";
-          if (name === "checked")
-            return (
-              node.localName === "input" &&
-              asciiLower(node.attrs.type ?? "") === "checkbox" &&
-              node._checked
-            );
-          if (name === "disabled" || name === "enabled")
-            return (
-              ["input", "button", "textarea"].includes(node.localName) &&
-              !!node.disabled === (name === "disabled")
-            );
-          if (name === "empty")
-            return !node.childNodes.some(
-              (n) => n.nodeType === 1 || n.data?.length,
-            );
-          if (name === "first-child") return !previous(node);
-          if (name === "last-child")
-            return (
-              node ===
-              node.parentNode?.childNodes.filter((n) => n.nodeType === 1).at(-1)
-            );
-        }
-        return false;
-      })
-    )
+        if (operator === "|=")
+          return actual === expected || actual.startsWith(expected + "-");
+        if (operator === "^=") return !!expected && actual.startsWith(expected);
+        if (operator === "$=") return !!expected && actual.endsWith(expected);
+        if (operator === "*=") return !!expected && actual.includes(expected);
+        throw new Error("CSS attribute operator requires an adapter");
+      }
+      if (["is", "where", "not"].includes(kind)) {
+        const hit = name.some((item) => matches(item, node));
+        return kind === "not" ? !hit : hit;
+      }
+      if (kind === "has")
+        return name.some((item) => matchesRelative(item, node));
+      if (kind === "pseudo") {
+        if (name === "root") return node.localName === "html";
+        if (name === "checked")
+          return (
+            node.localName === "input" &&
+            asciiLower(node.attrs.type ?? "") === "checkbox" &&
+            node._checked
+          );
+        if (name === "disabled" || name === "enabled")
+          return (
+            ["input", "button", "textarea"].includes(node.localName) &&
+            !!node.disabled === (name === "disabled")
+          );
+        if (name === "empty")
+          return !node.childNodes.some(
+            (n) => n.nodeType === 1 || n.data?.length,
+          );
+        if (name === "first-child") return !previous(node);
+        if (name === "last-child")
+          return (
+            node ===
+            node.parentNode?.childNodes.filter((n) => n.nodeType === 1).at(-1)
+          );
+      }
       return false;
+    });
+  }
+  function matches(selector, node, index = selector.parts.length - 1) {
+    const part = selector.parts[index];
+    if (!matchesPart(part, node)) return false;
     if (!index) return true;
     if (part.before === ">")
       return matches(selector, node.parentNode, index - 1);

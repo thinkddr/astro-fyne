@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
+  "bin": {
+    "astro-fyne": "bin/astro-fyne.ts"
+  },
   "overrides": {
     "http-cache-semantics": "4.3.0"
   },

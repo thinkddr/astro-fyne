@@ -36,32 +36,44 @@ export function helpText(command?: Command): string {
 Usage: bun run astro-fyne <command> [options]
 
 Commands:
-  generate, to-fyne  Generate Fyne Go widgets from the configured pages.
+  generate, to-fyne  Convert a file to Fyne or generate configured pages.
   check             Verify generated files are current without writing them.
   watch             Generate once, then regenerate when source files change.
   analyze           Print source analysis as JSON without generating files.
-  reverse, to-web   Generate Astro, Preact, CSS and assets from a Fyne scene.
+  reverse, to-web   Convert exported Fyne JSON to Astro + Preact.
   help [command]    Show general or command-specific help.
 
 Examples:
+  bun run to-fyne src/App.astro
+  bun run to-fyne src/Counter.tsx
+  bun run to-web App.program.json
+  bun run to-web scene.json --out src/pages/native --name NativePage
   bun run to-fyne
-  bun run to-fyne --javascript --source src/Counter.tsx --out native/generated --name Counter
-  bun run to-fyne --scene scene.json --out native/generated --name NativePage
   bun run check --config path/to/astro-fyne.json
-  bun run to-web --scene scene.json --out src/pages/native --name NativePage
-  bun run to-web --program counter.program.json --out src/pages/counter --name Counter
 
 Run "bun run astro-fyne <command> --help" for options and examples.
-Conversion offers declarative Go lowering or --javascript execution in pure-Go Goja.
+Source file shortcuts use JavaScript execution in pure-Go Goja with native Fyne controls.
+Exported JSON selects its existing JavaScript, portable program or scene route.
+Configured generation also offers declarative Go lowering.
 Both modes use native Fyne widgets and documented platform contracts. Generated output alone
 does not certify visual equivalence; compare browser and native captures.
 `;
   if (command === "reverse")
     return `astro-fyne reverse (alias: to-web) — Fyne → Astro + Preact
 
-Usage: bun run to-web --scene <file> --out <directory> --name <Name> [options]
+Usage: bun run to-web <exported.json> [options]
 
-Required:
+File shortcut:
+  Detects JavaScript archives, portable programs and schema 1/2 scenes from JSON.
+  Defaults: --out src/pages/<file-name>, --name <FileName>.
+  Strips .program, .javascript and .scene filename suffixes.
+  Override either default with --out or --name. --check never writes output.
+  Put the input immediately after the command; do not combine it with input flags.
+
+Explicit forms (all existing options remain available):
+  bun run to-web --scene <file> --out <directory> --name <Name> [options]
+
+Inputs and explicit output options:
   --scene <file>           Fyne scene JSON exported by the native scene API.
   --program <file>         Portable generated program, used instead of --scene.
   --javascript            Use a bundled JavaScript archive or --source component.
@@ -82,6 +94,8 @@ Options:
   -h, --help              Show this help without reading or writing any files.
 
 Examples:
+  bun run to-web App.program.json
+  bun run to-web native.scene.json --check
   bun run to-web --scene scene.json --out src/pages/native --name NativePage --public-dir public
   bun run to-web --scene scene.json --out src/pages/native --name NativePage --actions-module ../../actions --check
 
@@ -92,6 +106,17 @@ subset; generated output does not certify visual equivalence.
   const sceneHelp =
     command === "generate" || command === "check"
       ? `
+File shortcut:
+  bun run ${command === "generate" ? "to-fyne" : "check"} src/App.astro
+  bun run ${command === "generate" ? "to-fyne" : "check"} App.program.json
+  Astro/TSX/JSX/TS/JS files use the JavaScript adapter in pure-Go Goja with
+  native Fyne controls. This does not translate arbitrary JavaScript into Go.
+  Exported JSON selects JavaScript, portable program or schema 1/2 scene input.
+  Defaults: --out native/generated, --name <FileName> in PascalCase.
+  Override either default with --out or --name; --check never writes output.
+  Put the input immediately after the command; do not combine it with input flags.
+  Go source requires a native scene/program JSON export first.
+
 Native scene input:
   bun run ${command === "generate" ? "to-fyne" : "check"} --scene <file> --out <directory> --name <Name> [options]
   --scene <file>           Rebuild schema 1 fixed or schema 2 responsive native scenes.
@@ -127,7 +152,7 @@ JavaScript execution:
   };
   return `astro-fyne ${command}${command === "generate" ? " (alias: to-fyne)" : ""} — ${descriptions[command]}
 
-Usage: bun run ${command === "generate" ? "to-fyne" : command} [options]
+Usage: bun run ${command === "generate" ? "to-fyne" : command}${["generate", "check"].includes(command) ? " [input]" : ""} [options]
 
 Options:
   --config <file>          Configuration JSON. Default: astro-fyne.json in the

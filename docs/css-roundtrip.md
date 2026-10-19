@@ -17,12 +17,28 @@ The current routes preserve different information:
 | Exported Fyne scene → Astro/Preact              | Emits CSS, native theme tokens and supported node styles. Responsive scenes retain their source layout values.                                                         | A resolved native scene cannot infer the original selectors, breakpoints or variable bindings without retained source information.             |
 
 The JavaScript cascade currently supports type, class, ID and attribute selectors;
-descendant, child and sibling combinators; `:is()`, `:where()` and `:not()`;
+descendant, child and sibling combinators; `:is()`, `:where()`, `:not()` and `:has()`;
 the documented structural and checked/disabled states; flat cascade layers;
 specificity, declaration order and `!important`; custom properties and declared
 inheritance. See [the runtime contract](javascript-runtime.md) for the exact
 value and control limits. These features do not establish native layout or
 pixel equivalence for every declaration accepted by a browser.
+
+`:has()` evaluates its relative selectors from the element being styled. It
+supports descendant, child (`>`), adjacent sibling (`+`) and following sibling
+(`~`) relationships, including lists and chains of those relationships. Rules
+are reevaluated after DOM, class, attribute and supported control state changes.
+For example, `.card:has(> input:checked)` can change a card's supported styles
+when its checkbox changes, and `.card:has(+ .selected)` can style the card before
+a selected sibling. This does not add checkbox painting or a general layout
+engine.
+
+The specificity of `:has()` uses its most specific argument, including arguments
+that do not match. `:where()` still contributes zero specificity. Nested
+`:has()`, pseudo-elements and unsupported selectors produce diagnostics,
+including inside `:is()`, `:not()` or `:where()`. CSS nesting remains a separate
+unsupported feature. The matching rules follow
+[Selectors Level 4](https://www.w3.org/TR/selectors-4/#relational).
 
 Supported resolved custom properties on the single responsive root remain
 inline declarations in the exported page and values in the regenerated Fyne
@@ -30,11 +46,10 @@ theme's `CSS(name)` map. Theme installation and passing `Tokens` to a subsequent
 scene export remain explicit host operations. This does not add `var()` painting,
 dynamic token scopes or automatic application-wide theme changes.
 
-Use a local stylesheet with the existing CLI:
+Use a local stylesheet with the [CLI](cli.md):
 
 ```sh
-bun run to-fyne --javascript --source src/App.tsx \
-  --stylesheet src/app.css --out native/generated --name App
+astro-fyne to-fyne src/App.tsx --stylesheet src/app.css
 ```
 
 New JavaScript programs retain the exact UTF-8 contents of local stylesheets,
@@ -52,7 +67,9 @@ still restore their compiled behavior, but cannot recover missing original text.
 Invalid UTF-8 input produces a diagnostic instead of changing source bytes.
 
 For the inverse direction, export the native program with `ExportJavascript()`
-and pass its JSON archive to `to-web --javascript --program`. To export a
+and pass its JSON archive to `astro-fyne to-web App.program.json`. The CLI
+detects the archive type. The explicit `to-web --javascript --program` form
+also remains available. To export a
 handwritten Fyne view, use the scene route. The
 [JavaScript continuation guide](javascript-runtime.md#continue-in-astro-and-return-to-go)
 and [scene export guide](../README.md#convert-fyne-to-astro--preact) describe the complete
