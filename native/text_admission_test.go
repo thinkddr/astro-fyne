@@ -73,9 +73,12 @@ func TestLegacyTextAdmissionUsesInheritedStylesOnceWithoutExposingMetadata(t *te
 		got := backend.calls[i].Style
 		want := view.elements[id].style
 		want.Flex = nil
-		if got != want || got.FontFamily != "Host" || got.FontSize != 18 || got.LineHeight != 24 || got.FontWeight != 700 || got.FontStyle != "italic" || got.Color != "#223344" || got.Opacity != 1 {
+		if got != want || got.FontFamily != "Host" || got.FontSize != 18 || got.LineHeight != 24 || got.FontWeight != 700 || got.FontStyle != "italic" || got.Opacity != 1 {
 			t.Fatalf("admission differs from inherited paint style for %s: got %+v want %+v", id, got, want)
 		}
+	}
+	if backend.calls[0].Style.Color != "#223344" || backend.calls[1].Style.Color != "#ffffff" {
+		t.Fatal("admission lost the inherited caption color or button default color")
 	}
 	if nodes[0].Children[0].Style.Flex != metadata || !metadata.HeightSet || nodes[0].Children[0].Style.FontFamily != "" || view.elements["caption"].style.Height != 30 {
 		t.Fatal("admission mutated source metadata or committed style")
