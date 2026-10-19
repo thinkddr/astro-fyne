@@ -1,0 +1,27 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#zero-root {
+  background-color: #ffffff;
+  padding: 0;
+  margin: 0;
+}
+#zero-panel {
+  height: 0px;
+  background-color: #2468ac;
+  animation: zero-height 1000ms linear 100ms 2 alternate both;
+}
+#zero-static {
+  height: 0;
+  background-color: #ff0000;
+}
+#zero-following {
+  height: 24px;
+  background-color: #c65432;
+}
+@keyframes zero-height {
+  from {
+    height: 0;
+  }
+  to {
+    height: 64px;
+  }
+}

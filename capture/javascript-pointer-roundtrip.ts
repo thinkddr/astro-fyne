@@ -137,8 +137,18 @@ export async function captureJavascriptPointers(base: string, out: string) {
     ) {
       await page.evaluate(() => window.afyPointers.clear());
       const states = [await state(page)],
-        points: unknown[] = [];
+        points: unknown[] = [],
+        archives: JavascriptArchive[] = [];
       assert.deepEqual(states[0], pointerArchiveState(expected.archives[0]!));
+      if (managed) {
+        const initial = await page.evaluate(() => window.afyPointers.export());
+        assert.deepEqual(
+          initial,
+          expected.archives[0],
+          `${label}: initial archive`,
+        );
+        archives.push(initial);
+      }
       for (const [index, step] of steps.entries()) {
         const element = page.locator(`[id=${JSON.stringify(step.id)}]`),
           box = await element.boundingBox();
@@ -189,6 +199,7 @@ export async function captureJavascriptPointers(base: string, out: string) {
             archive.journal,
             expected.archives[index + 1]!.journal,
           );
+          archives.push(archive);
         }
       }
       const calls = await page.evaluate(() => window.afyPointers.calls());
@@ -202,6 +213,7 @@ export async function captureJavascriptPointers(base: string, out: string) {
         states,
         points,
         calls,
+        ...(managed ? { archives } : {}),
         stableDOMObjects: states[0]!.order.length,
         actualCoordinateClicks: true,
       };
@@ -263,7 +275,12 @@ export async function captureJavascriptPointers(base: string, out: string) {
     assert.deepEqual(managed.errors, []);
     await managed.page.close();
 
-    const rejections: { name: string; error: string }[] = [];
+    const rejections: {
+      name: string;
+      error: string;
+      effects: unknown[][];
+      exportRejected: boolean;
+    }[] = [];
     for (const name of ["wrapper", "foreign"] as const) {
       const { page, errors } = await mount(
         "/javascript-pointer-roundtrip/restored",
@@ -293,10 +310,8 @@ export async function captureJavascriptPointers(base: string, out: string) {
       await settle(page);
       assert.equal(errors.length, 1);
       assert.match(errors[0]!, /root pointer adapter/);
-      assert.deepEqual(
-        await page.evaluate(() => window.afyPointers.calls()),
-        [],
-      );
+      const effects = await page.evaluate(() => window.afyPointers.calls());
+      assert.deepEqual(effects, []);
       const exportRejected = await page.evaluate(() => {
         try {
           window.afyPointers.export();
@@ -311,7 +326,7 @@ export async function captureJavascriptPointers(base: string, out: string) {
         }
       });
       assert.equal(exportRejected, true, "pointer-faulted DOM was exported");
-      rejections.push({ name, error: errors[0]! });
+      rejections.push({ name, error: errors[0]!, effects, exportRejected });
       await page.close();
     }
     const verified = await verifyBrowserProvenance(browser, provenance);

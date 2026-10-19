@@ -74,7 +74,7 @@ func TestJavascriptDimensionStringsAllowOnlyOuterCSSWhitespace(t *testing.T) {
 
 func TestJavascriptCSSZeroSizingCannotBypassThePresenceGuardWithWhitespace(t *testing.T) {
 	w := &Widget{}
-	for _, name := range []string{"width", "height", "fontSize", "lineHeight", "borderRadius"} {
+	for _, name := range []string{"width", "fontSize", "lineHeight", "borderRadius"} {
 		for _, value := range []any{float64(0), "0px", " \t\r\n\f0px\f\n\r\t "} {
 			_, err := w.nodes([]Frame{{UID: "1", Tag: "div", CSS: true, Style: map[string]any{name: value}}})
 			if err == nil || !strings.Contains(err.Error(), "CSS zero "+name) {

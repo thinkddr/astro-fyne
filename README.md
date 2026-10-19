@@ -33,6 +33,11 @@ remaining target and event limitations.
 The guide separates retained stylesheet behavior from exported scene styles;
 full CSS and universal visual parity remain unfinished.
 
+Automatic CSS height conversion supports `0` and `0px` on empty, undecorated
+block panels, including animation endpoints. Inline-only zero height, controls
+and nonempty or decorated panels remain diagnosed. See
+[CSS height animations](docs/css-height-animations.md).
+
 The same route now accepts [Astro source files](docs/astro-javascript.md), including
 synchronous frontmatter, nested components/default and named slots, hydrated Preact islands and
 processed scripts. CI compares their native continuation with the original Astro page.
@@ -66,13 +71,17 @@ The linked CLI also works from your own project directory:
 
 ```sh
 astro-fyne to-fyne src/App.tsx
+# In your Go host, save ExportJavascript() as JSON to App.program.json.
 astro-fyne to-web App.program.json
+# Save the browser handle's exportJavascript() result as App.web.program.json.
+astro-fyne to-fyne App.web.program.json --name App
 ```
 
 The source shortcut uses the native Goja route, includes supported CSS imports
 and defaults to `native/generated`. The inverse shortcut detects exported
 JavaScript programs, declarative programs, catalogues and native scenes; `App.program.json`
-defaults to `src/pages/app`. Override destinations with `--out`, names with
+defaults to `src/pages/app`. The JSON files come from native/browser export APIs;
+source generation embeds its initial archive in Go. Override destinations with `--out`, names with
 `--name`, and verify either direction with `--check`. Keep the linked checkout
 and ensure Bun's binary directory is on `PATH`. See the
 [CLI guide](docs/cli.md) for native export, CSS and complete examples.
