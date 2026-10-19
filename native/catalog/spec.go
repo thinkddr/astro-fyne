@@ -64,11 +64,11 @@ type Component struct {
 }
 
 type Island struct {
-	ID        string `json:"id"`
-	Component string `json:"component"`
-	Key       string `json:"key"`
+	ID           string `json:"id"`
+	Component    string `json:"component"`
+	Key          string `json:"key"`
 	StatePayload string `json:"statePayload,omitempty"`
-	StateHash string `json:"stateHash,omitempty"`
+	StateHash    string `json:"stateHash,omitempty"`
 }
 
 type Spec struct {

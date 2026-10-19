@@ -20,24 +20,50 @@ func New(spec Spec) (*Registry, error) {
 		return nil, err
 	}
 	copied := copySpec(spec)
-	if copied.Resources == nil { copied.Resources = []Resource{} }
-	if copied.Stylesheets == nil { copied.Stylesheets = []Stylesheet{} }
-	if copied.FontFaces == nil { copied.FontFaces = []FontFace{} }
-	if copied.Themes == nil { copied.Themes = []ThemeSpec{} }
-	if copied.Layouts == nil { copied.Layouts = []LayoutSpec{} }
-	if copied.Components == nil { copied.Components = []Component{} }
-	if copied.Islands == nil { copied.Islands = []Island{} }
+	if copied.Resources == nil {
+		copied.Resources = []Resource{}
+	}
+	if copied.Stylesheets == nil {
+		copied.Stylesheets = []Stylesheet{}
+	}
+	if copied.FontFaces == nil {
+		copied.FontFaces = []FontFace{}
+	}
+	if copied.Themes == nil {
+		copied.Themes = []ThemeSpec{}
+	}
+	if copied.Layouts == nil {
+		copied.Layouts = []LayoutSpec{}
+	}
+	if copied.Components == nil {
+		copied.Components = []Component{}
+	}
+	if copied.Islands == nil {
+		copied.Islands = []Island{}
+	}
 	for i := range copied.Stylesheets {
-		if copied.Stylesheets[i].Content == nil { copied.Stylesheets[i].Content = []byte{} }
+		if copied.Stylesheets[i].Content == nil {
+			copied.Stylesheets[i].Content = []byte{}
+		}
 	}
 	for i := range copied.Themes {
-		if copied.Themes[i].Tokens == nil { copied.Themes[i].Tokens = map[string]string{} }
-		if copied.Themes[i].FontFaces == nil { copied.Themes[i].FontFaces = []string{} }
+		if copied.Themes[i].Tokens == nil {
+			copied.Themes[i].Tokens = map[string]string{}
+		}
+		if copied.Themes[i].FontFaces == nil {
+			copied.Themes[i].FontFaces = []string{}
+		}
 	}
 	for i := range copied.Components {
-		if copied.Components[i].Stylesheets == nil { copied.Components[i].Stylesheets = []string{} }
-		if copied.Components[i].FontFaces == nil { copied.Components[i].FontFaces = []string{} }
-		if copied.Components[i].Actions == nil { copied.Components[i].Actions = []string{} }
+		if copied.Components[i].Stylesheets == nil {
+			copied.Components[i].Stylesheets = []string{}
+		}
+		if copied.Components[i].FontFaces == nil {
+			copied.Components[i].FontFaces = []string{}
+		}
+		if copied.Components[i].Actions == nil {
+			copied.Components[i].Actions = []string{}
+		}
 	}
 	return &Registry{spec: copied, factories: map[string]NativeFactory{}}, nil
 }
@@ -167,7 +193,9 @@ func (r *Registry) NewIsland(id string, actions webui.Actions) (fyne.Widget, err
 // WithIslandState records an explicit exported checkpoint without changing code.
 // Factory bindings are host state and must be registered on the returned registry.
 func (r *Registry) WithIslandState(id, payload string) (*Registry, error) {
-	if payload == "" { return nil, fmt.Errorf("catalog: island state requires a complete JavaScript archive") }
+	if payload == "" {
+		return nil, fmt.Errorf("catalog: island state requires a complete JavaScript archive")
+	}
 	spec := r.Spec()
 	for i := range spec.Islands {
 		if spec.Islands[i].ID == id {
@@ -253,7 +281,7 @@ type frozenResource struct {
 	data []byte
 }
 
-func (r frozenResource) Name() string { return r.name }
+func (r frozenResource) Name() string    { return r.name }
 func (r frozenResource) Content() []byte { return bytes.Clone(r.data) }
 
 func findFont(spec Spec, id string) (FontFace, Resource) {

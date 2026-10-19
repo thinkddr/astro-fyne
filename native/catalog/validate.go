@@ -10,13 +10,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
 	"math"
-	"regexp"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -63,7 +63,9 @@ func decode(data []byte, target any) error {
 	if len(data) == 0 || len(data) > 128*1024*1024 || !utf8.Valid(data) {
 		return fmt.Errorf("catalog: JSON requires valid UTF-8 within 128MiB")
 	}
-	if err := uniqueJSONFields(data); err != nil { return err }
+	if err := uniqueJSONFields(data); err != nil {
+		return err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
@@ -79,8 +81,12 @@ func decode(data []byte, target any) error {
 }
 
 func requiredFields(data []byte, kind reflect.Type) error {
-	if kind == reflect.TypeOf(json.RawMessage{}) { return nil }
-	if kind.Kind() == reflect.Pointer { return requiredFields(data, kind.Elem()) }
+	if kind == reflect.TypeOf(json.RawMessage{}) {
+		return nil
+	}
+	if kind.Kind() == reflect.Pointer {
+		return requiredFields(data, kind.Elem())
+	}
 	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) && kind.Kind() != reflect.Interface {
 		return fmt.Errorf("catalog: null is not a declared value")
 	}
@@ -100,7 +106,9 @@ func requiredFields(data []byte, kind reflect.Type) error {
 			for _, name := range []string{"theme", "layout"} {
 				if value, exists := fields[name]; exists {
 					var reference string
-					if err := json.Unmarshal(value, &reference); err != nil || reference == "" { return fmt.Errorf("catalog: optional reference %s must be nonempty when present", name) }
+					if err := json.Unmarshal(value, &reference); err != nil || reference == "" {
+						return fmt.Errorf("catalog: optional reference %s must be nonempty when present", name)
+					}
 				}
 			}
 		}
@@ -108,88 +116,156 @@ func requiredFields(data []byte, kind reflect.Type) error {
 		for i := 0; i < kind.NumField(); i++ {
 			field := kind.Field(i)
 			tag := strings.Split(field.Tag.Get("json"), ",")
-			if tag[0] == "-" || !field.IsExported() { continue }
+			if tag[0] == "-" || !field.IsExported() {
+				continue
+			}
 			name := tag[0]
-			if name == "" { name = field.Name }
+			if name == "" {
+				name = field.Name
+			}
 			allowed[name] = true
 			value, exists := fields[name]
 			if !exists {
-				if !slices.Contains(tag[1:], "omitempty") { return fmt.Errorf("catalog: missing JSON field %q", name) }
+				if !slices.Contains(tag[1:], "omitempty") {
+					return fmt.Errorf("catalog: missing JSON field %q", name)
+				}
 				continue
 			}
-			if err := requiredFields(value, field.Type); err != nil { return fmt.Errorf("catalog: %s: %w", name, err) }
+			if err := requiredFields(value, field.Type); err != nil {
+				return fmt.Errorf("catalog: %s: %w", name, err)
+			}
 		}
-		for name := range fields { if !allowed[name] { return fmt.Errorf("catalog: unknown field %q", name) } }
+		for name := range fields {
+			if !allowed[name] {
+				return fmt.Errorf("catalog: unknown field %q", name)
+			}
+		}
 	} else if kind.Kind() == reflect.Map {
 		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(data, &fields); err != nil || fields == nil { return fmt.Errorf("catalog: JSON object required") }
-		for _, value := range fields { if err := requiredFields(value, kind.Elem()); err != nil { return err } }
+		if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
+			return fmt.Errorf("catalog: JSON object required")
+		}
+		for _, value := range fields {
+			if err := requiredFields(value, kind.Elem()); err != nil {
+				return err
+			}
+		}
 	} else if kind.Kind() == reflect.Slice && kind.Elem().Kind() != reflect.Uint8 {
 		var items []json.RawMessage
-		if err := json.Unmarshal(data, &items); err != nil || items == nil { return fmt.Errorf("catalog: JSON array required") }
-		for _, item := range items { if err := requiredFields(item, kind.Elem()); err != nil { return err } }
+		if err := json.Unmarshal(data, &items); err != nil || items == nil {
+			return fmt.Errorf("catalog: JSON array required")
+		}
+		for _, item := range items {
+			if err := requiredFields(item, kind.Elem()); err != nil {
+				return err
+			}
+		}
 	} else if kind.Kind() == reflect.Slice && kind.Elem().Kind() == reflect.Uint8 {
 		var value string
-		if err := json.Unmarshal(data, &value); err != nil { return fmt.Errorf("catalog: base64 string required") }
+		if err := json.Unmarshal(data, &value); err != nil {
+			return fmt.Errorf("catalog: base64 string required")
+		}
 	}
 	return nil
 }
 
 func uniqueJSONFields(data []byte) error {
-	if err := jsonUnicode(data); err != nil { return err }
+	if err := jsonUnicode(data); err != nil {
+		return err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	count := 0
 	var visit func(int) error
 	visit = func(depth int) error {
 		count++
-		if depth > 256 || count > 1000000 { return fmt.Errorf("catalog: JSON depth/value limit exceeded") }
+		if depth > 256 || count > 1000000 {
+			return fmt.Errorf("catalog: JSON depth/value limit exceeded")
+		}
 		token, err := decoder.Token()
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		delimiter, compound := token.(json.Delim)
-		if !compound { return nil }
+		if !compound {
+			return nil
+		}
 		switch delimiter {
 		case '{':
 			seen := map[string]bool{}
 			for decoder.More() {
 				key, err := decoder.Token()
-				if err != nil { return err }
+				if err != nil {
+					return err
+				}
 				name, ok := key.(string)
-				if !ok || seen[name] { return fmt.Errorf("catalog: duplicate JSON field %q", name) }
+				if !ok || seen[name] {
+					return fmt.Errorf("catalog: duplicate JSON field %q", name)
+				}
 				seen[name] = true
-				if err := visit(depth+1); err != nil { return err }
+				if err := visit(depth + 1); err != nil {
+					return err
+				}
 			}
 		case '[':
-			for decoder.More() { if err := visit(depth+1); err != nil { return err } }
+			for decoder.More() {
+				if err := visit(depth + 1); err != nil {
+					return err
+				}
+			}
 		default:
 			return fmt.Errorf("catalog: unexpected JSON delimiter")
 		}
 		_, err = decoder.Token()
 		return err
 	}
-	if err := visit(0); err != nil { return err }
-	if _, err := decoder.Token(); err != io.EOF { return fmt.Errorf("catalog: trailing JSON data") }
+	if err := visit(0); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		return fmt.Errorf("catalog: trailing JSON data")
+	}
 	return nil
 }
 
 func jsonUnicode(data []byte) error {
 	for at := 0; at < len(data); at++ {
-		if data[at] != '"' { continue }
+		if data[at] != '"' {
+			continue
+		}
 		at++
 		for at < len(data) && data[at] != '"' {
-			if data[at] != '\\' { at++; continue }
-			if at+1 >= len(data) { return fmt.Errorf("catalog: invalid JSON string escape") }
-			if data[at+1] != 'u' { at += 2; continue }
-			if at+6 > len(data) { return fmt.Errorf("catalog: invalid JSON Unicode escape") }
+			if data[at] != '\\' {
+				at++
+				continue
+			}
+			if at+1 >= len(data) {
+				return fmt.Errorf("catalog: invalid JSON string escape")
+			}
+			if data[at+1] != 'u' {
+				at += 2
+				continue
+			}
+			if at+6 > len(data) {
+				return fmt.Errorf("catalog: invalid JSON Unicode escape")
+			}
 			value, err := strconv.ParseUint(string(data[at+2:at+6]), 16, 16)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			at += 6
 			if value >= 0xd800 && value <= 0xdbff {
-				if at+6 > len(data) || string(data[at:at+2]) != `\u` { return fmt.Errorf("catalog: JSON strings require paired Unicode surrogates") }
+				if at+6 > len(data) || string(data[at:at+2]) != `\u` {
+					return fmt.Errorf("catalog: JSON strings require paired Unicode surrogates")
+				}
 				low, err := strconv.ParseUint(string(data[at+2:at+6]), 16, 16)
-				if err != nil || low < 0xdc00 || low > 0xdfff { return fmt.Errorf("catalog: JSON strings require paired Unicode surrogates") }
+				if err != nil || low < 0xdc00 || low > 0xdfff {
+					return fmt.Errorf("catalog: JSON strings require paired Unicode surrogates")
+				}
 				at += 6
-			} else if value >= 0xdc00 && value <= 0xdfff { return fmt.Errorf("catalog: JSON strings require paired Unicode surrogates") }
+			} else if value >= 0xdc00 && value <= 0xdfff {
+				return fmt.Errorf("catalog: JSON strings require paired Unicode surrogates")
+			}
 		}
 	}
 	return nil
@@ -311,7 +387,9 @@ func validate(spec Spec) error {
 		if !identifier.MatchString(island.ID) || islands[island.ID] || components[island.Component].ID == "" || !validText(island.Key, 1024) {
 			return fmt.Errorf("catalog: invalid, duplicate or unbound island %q", island.ID)
 		}
-		if err := validateIslandState(island, components[island.Component]); err != nil { return err }
+		if err := validateIslandState(island, components[island.Component]); err != nil {
+			return err
+		}
 		islands[island.ID] = true
 	}
 	motions := map[string]bool{}
@@ -331,14 +409,22 @@ func validate(spec Spec) error {
 }
 
 func validateIslandState(island Island, component Component) error {
-	if island.StatePayload == "" && island.StateHash == "" { return nil }
+	if island.StatePayload == "" && island.StateHash == "" {
+		return nil
+	}
 	if component.Kind != "javascript" || island.StatePayload == "" || len(island.StatePayload) > 64*1024*1024 || !utf8.ValidString(island.StatePayload) || !validDigest(island.StateHash) || digest([]byte(island.StatePayload)) != island.StateHash {
 		return fmt.Errorf("catalog: island %q requires a bound JavaScript state archive", island.ID)
 	}
 	var prototype, state javascript.Archive
-	if err := decode([]byte(component.Payload), &prototype); err != nil { return err }
-	if err := decode([]byte(island.StatePayload), &state); err != nil { return err }
-	if err := javascript.Validate(state); err != nil { return err }
+	if err := decode([]byte(component.Payload), &prototype); err != nil {
+		return err
+	}
+	if err := decode([]byte(island.StatePayload), &state); err != nil {
+		return err
+	}
+	if err := javascript.Validate(state); err != nil {
+		return err
+	}
 	if state.Code != prototype.Code || state.CodeHash != prototype.CodeHash || !slices.Equal(state.Sources, prototype.Sources) || !slices.Equal(state.Stylesheets, prototype.Stylesheets) || !slices.Equal(state.Actions, prototype.Actions) {
 		return fmt.Errorf("catalog: island %q state cannot replace component code, CSS, sources or action contracts", island.ID)
 	}
@@ -377,7 +463,9 @@ func sameActions(a, b []string) bool {
 }
 
 func validateComponent(component Component, sheets map[string]Stylesheet) error {
-	if component.Kind != "javascript" && len(component.Stylesheets) != 0 { return fmt.Errorf("catalog: scene/program components cannot add a live stylesheet outside their compiled contract") }
+	if component.Kind != "javascript" && len(component.Stylesheets) != 0 {
+		return fmt.Errorf("catalog: scene/program components cannot add a live stylesheet outside their compiled contract")
+	}
 	var actions []string
 	switch component.Kind {
 	case "javascript":
@@ -412,8 +500,12 @@ func validateComponent(component Component, sheets map[string]Stylesheet) error 
 		if archive.Schema != 1 || archive.Kind != "astro-fyne-program" || !validDigest(archive.SourceHash) || !validDigest(archive.ProgramHash) || digest([]byte(archive.Program)) != archive.ProgramHash || len(archive.Program) > 64*1024*1024 {
 			return fmt.Errorf("catalog: portable program identity mismatch")
 		}
-		var metadata struct { Actions []string `json:"actions"` }
-		if err := uniqueJSONFields([]byte(archive.Program)); err != nil { return err }
+		var metadata struct {
+			Actions []string `json:"actions"`
+		}
+		if err := uniqueJSONFields([]byte(archive.Program)); err != nil {
+			return err
+		}
 		if err := json.Unmarshal([]byte(archive.Program), &metadata); err != nil {
 			return err
 		}
@@ -499,7 +591,7 @@ func validateFont(data []byte, face FontFace) error {
 	end := uint64(12 + count*16)
 	previous := ""
 	tables := map[string][]byte{}
-	type tableRange struct { start, end uint64 }
+	type tableRange struct{ start, end uint64 }
 	ranges := []tableRange{}
 	for i := 0; i < count; i++ {
 		table := data[12+i*16 : 28+i*16]
@@ -508,14 +600,18 @@ func validateFont(data []byte, face FontFace) error {
 		if tag <= previous || start%4 != 0 || start < end || size == 0 || start+size > uint64(len(data)) {
 			return fmt.Errorf("TrueType table exceeds resource bounds")
 		}
-		for _, b := range table[:4] { if b < 32 || b > 126 { return fmt.Errorf("invalid TrueType table tag") } }
+		for _, b := range table[:4] {
+			if b < 32 || b > 126 {
+				return fmt.Errorf("invalid TrueType table tag")
+			}
+		}
 		previous = tag
 		value := data[start : start+size]
 		if fontChecksum(value, tag == "head") != binary.BigEndian.Uint32(table[4:8]) {
 			return fmt.Errorf("TrueType table checksum mismatch")
 		}
 		tables[tag] = value
-		ranges = append(ranges, tableRange{start, start+size})
+		ranges = append(ranges, tableRange{start, start + size})
 		switch tag {
 		case "fvar", "gvar", "avar", "CFF ", "CFF2", "SVG ", "CBDT", "sbix", "COLR":
 			return fmt.Errorf("variable or color fonts require a dedicated backend")
@@ -523,11 +619,27 @@ func validateFont(data []byte, face FontFace) error {
 			os2 = data[start : start+size]
 		}
 	}
-	slices.SortFunc(ranges, func(a, b tableRange) int { if a.start < b.start { return -1 }; if a.start > b.start { return 1 }; return 0 })
-	for i := 1; i < len(ranges); i++ { if ranges[i].start < ranges[i-1].end { return fmt.Errorf("overlapping TrueType tables") } }
-	if fontChecksum(data, false) != 0xb1b0afba { return fmt.Errorf("global TrueType checksum mismatch") }
-	for tag, minimum := range map[string]int{"head":54,"hhea":36,"maxp":32,"OS/2":78,"cmap":4,"name":6,"loca":2,"glyf":1,"hmtx":4} {
-		if len(tables[tag]) < minimum { return fmt.Errorf("missing TrueType table %s", tag) }
+	slices.SortFunc(ranges, func(a, b tableRange) int {
+		if a.start < b.start {
+			return -1
+		}
+		if a.start > b.start {
+			return 1
+		}
+		return 0
+	})
+	for i := 1; i < len(ranges); i++ {
+		if ranges[i].start < ranges[i-1].end {
+			return fmt.Errorf("overlapping TrueType tables")
+		}
+	}
+	if fontChecksum(data, false) != 0xb1b0afba {
+		return fmt.Errorf("global TrueType checksum mismatch")
+	}
+	for tag, minimum := range map[string]int{"head": 54, "hhea": 36, "maxp": 32, "OS/2": 78, "cmap": 4, "name": 6, "loca": 2, "glyf": 1, "hmtx": 4} {
+		if len(tables[tag]) < minimum {
+			return fmt.Errorf("missing TrueType table %s", tag)
+		}
 	}
 	if len(os2) < 64 || int(binary.BigEndian.Uint16(os2[4:6])) != face.Weight || (binary.BigEndian.Uint16(os2[62:64])&1 != 0) != (face.Style == "italic") || binary.BigEndian.Uint16(os2[62:64])&512 != 0 {
 		return fmt.Errorf("declared font weight/style does not match actual face")
@@ -544,7 +656,9 @@ func fontChecksum(data []byte, head bool) uint32 {
 		var word uint32
 		for i := 0; i < 4; i++ {
 			word <<= 8
-			if at+i < len(data) && !(head && at == 8) { word += uint32(data[at+i]) }
+			if at+i < len(data) && !(head && at == 8) {
+				word += uint32(data[at+i])
+			}
 		}
 		result += word
 	}
@@ -567,7 +681,9 @@ func validateScene(document reverse.Document) error {
 			return fmt.Errorf("catalog: invalid scene bitmap resource")
 		}
 		config, format, err := image.DecodeConfig(bytes.NewReader(resource.Content))
-		if err != nil || config.Width != resource.Width || config.Height != resource.Height || config.Width <= 0 || config.Height <= 0 || config.Width > 16384 || config.Height > 16384 || (format == "png") != (resource.MediaType == "image/png") { return fmt.Errorf("catalog: scene bitmap dimensions or media type differ") }
+		if err != nil || config.Width != resource.Width || config.Height != resource.Height || config.Width <= 0 || config.Height <= 0 || config.Width > 16384 || config.Height > 16384 || (format == "png") != (resource.MediaType == "image/png") {
+			return fmt.Errorf("catalog: scene bitmap dimensions or media type differ")
+		}
 		resources[resource.Name] = true
 	}
 	count := 0
@@ -582,7 +698,9 @@ func validateScene(document reverse.Document) error {
 				return fmt.Errorf("catalog: invalid or duplicate scene node")
 			}
 			ids[node.ID] = true
-			if !node.Style.Measured || node.Style.Flex != nil || node.Href != "" || node.Kind == "image" && !resources[node.Resource] || node.Kind != "image" && node.Resource != "" { return fmt.Errorf("catalog: scene geometry, navigation or bitmap reference requires an adapter") }
+			if !node.Style.Measured || node.Style.Flex != nil || node.Href != "" || node.Kind == "image" && !resources[node.Resource] || node.Kind != "image" && node.Resource != "" {
+				return fmt.Errorf("catalog: scene geometry, navigation or bitmap reference requires an adapter")
+			}
 			if err := validateStyle(node.Style); err != nil {
 				return err
 			}
