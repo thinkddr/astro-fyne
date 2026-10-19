@@ -97,7 +97,7 @@ func Validate(data []byte, weight int, style string) error {
 		if locationFormat == 1 {
 			offset = uint64(binary.BigEndian.Uint32(loca[at : at+4]))
 		} else {
-			offset = uint64(binary.BigEndian.Uint16(loca[at : at+2])) * 2
+			offset = uint64(binary.BigEndian.Uint16(loca[at:at+2])) * 2
 		}
 		if offset < last || offset > glyfSize {
 			return fmt.Errorf("TrueType glyph index is out of bounds")

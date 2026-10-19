@@ -420,9 +420,9 @@ func setGlyphOffset(t *testing.T, tables map[string][]byte, index int, offset ui
 		if offset%2 != 0 || offset/2 > 65535 {
 			t.Fatal("short glyph offset is not representable")
 		}
-		binary.BigEndian.PutUint16(tables["loca"][index*2 : index*2+2], uint16(offset/2))
+		binary.BigEndian.PutUint16(tables["loca"][index*2:index*2+2], uint16(offset/2))
 	} else {
-		binary.BigEndian.PutUint32(tables["loca"][index*4 : index*4+4], offset)
+		binary.BigEndian.PutUint32(tables["loca"][index*4:index*4+4], offset)
 	}
 }
 
