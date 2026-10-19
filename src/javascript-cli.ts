@@ -276,6 +276,7 @@ export async function javascriptMain(
   direction: "native" | "web",
   check = false,
 ) {
+  let fonts: string | undefined;
   const argv = [...args],
     seen = new Set<string>(),
     options: Partial<Options> = { direction, check };
@@ -300,6 +301,7 @@ export async function javascriptMain(
         "--actions",
         "--actions-module",
         "--package",
+        "--fonts",
       ].includes(flag)
     )
       throw usageError(`Unknown JavaScript option: ${flag}`);
@@ -315,6 +317,7 @@ export async function javascriptMain(
     else if (flag === "--stylesheet") options.stylesheet = value;
     else if (flag === "--actions") options.actions = value.split(",");
     else if (flag === "--actions-module") options.actionsModule = value;
+    else if (flag === "--fonts") fonts = value;
     else options.packageName = value;
   }
   if (!options.out || !options.name)
@@ -326,5 +329,25 @@ export async function javascriptMain(
     throw usageError(
       "Use --package for native output and --actions-module for web output",
     );
+  if (fonts) {
+    if (direction !== "native" || !options.source || options.program)
+      throw usageError(
+        "--fonts with JavaScript requires native --source input; convert the exported catalogue with to-web",
+      );
+    const { generateSourceCatalogue } = await import("./source-catalogue.ts");
+    await generateSourceCatalogue({
+      source: options.source,
+      fonts,
+      out: options.out,
+      name: options.name,
+      ...(options.selected ? { selected: options.selected } : {}),
+      ...(options.props ? { props: options.props } : {}),
+      ...(options.stylesheet ? { stylesheet: options.stylesheet } : {}),
+      ...(options.actions ? { actions: options.actions } : {}),
+      ...(options.packageName ? { packageName: options.packageName } : {}),
+      check: options.check,
+    });
+    return;
+  }
   await generateJavascript(options as Options);
 }

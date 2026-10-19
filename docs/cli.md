@@ -141,6 +141,12 @@ astro-fyne to-fyne src/App.tsx --check
 astro-fyne to-web App.program.json --check
 ```
 
+For source entries with licensed local fonts, use
+`astro-fyne to-fyne src/App.astro --fonts fonts.json`. The
+[source font guide](source-fonts.md) documents the short manifest and generated
+native constructors/catalogue exporter. Export the complete catalogue to retain
+fonts when converting back to Astro + Preact; scene font arrays stay unchanged.
+
 Regeneration refuses to overwrite handwritten files. Errors leave the existing
 output intact. For configured declarative projects, use `astro-fyne watch` to
 regenerate after supported source changes, then rebuild the native application.

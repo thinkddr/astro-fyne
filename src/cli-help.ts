@@ -46,6 +46,7 @@ Commands:
 Examples:
   bun run to-fyne src/App.astro
   bun run to-fyne src/Counter.tsx
+  bun run to-fyne src/App.astro --fonts fonts.json
   bun run to-web App.program.json
   bun run to-web scene.json --out src/pages/native --name NativePage
   bun run to-fyne
@@ -146,6 +147,9 @@ JavaScript execution:
   --props <file>           Initial JSON props for source input.
   --stylesheet <file>      Local CSS for --javascript --source input.
   --actions <names>        Comma-separated callback names bound by the Go host.
+  --fonts <file>           Licensed local-font manifest for native --source input.
+                           Generates a catalogue with New<Name>/Export<Name>Catalogue.
+                           See docs/source-fonts.md; scene font arrays stay unchanged.
   Generated Go embeds JavaScript executed in Goja, with native Fyne controls.
   See docs/javascript-runtime.md for replay and native platform boundaries.
 `

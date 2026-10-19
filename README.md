@@ -45,6 +45,9 @@ processed scripts. CI compares their native continuation with the original Astro
 Reusable [component catalogues](docs/catalogue.md) package widgets, exact CSS source,
 licensed fonts/resources, themes, source layouts and independent island checkpoints.
 The same CLI generates a native registry or an Astro/Preact library from its JSON export.
+`astro-fyne to-fyne src/App.astro --fonts fonts.json` creates a catalogue directly
+from source with licensed local fonts, easy native constructors and a complete
+catalogue exporter. See the [source font guide](docs/source-fonts.md).
 [Portable motion](docs/motion.md) provides native Go controllers and a matching browser
 adapter for explicit numeric keyframes, clocks and target bindings.
 

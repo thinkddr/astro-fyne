@@ -30,6 +30,11 @@ and widget operations belong on Fyne's event goroutine.
 
 ## Convert a catalogue with the CLI
 
+Source entries can create a one-island catalogue automatically with
+`astro-fyne to-fyne src/App.astro --fonts fonts.json`. See
+[source conversion with fonts](source-fonts.md) for the licensed manifest,
+convenience constructors and complete catalogue export.
+
 Save `registry.Marshal()` as `Widgets.catalogue.json` and run:
 
 ```sh
