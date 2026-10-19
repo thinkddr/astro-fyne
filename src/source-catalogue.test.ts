@@ -251,12 +251,45 @@ test("font-free shortcuts and scene font arrays keep their existing routes", asy
   const scene = {
     schema: 1,
     viewport: { width: 100, height: 100, scale: 1 },
-    roots: [],
+    roots: [
+      {
+        id: "root",
+        kind: "container",
+        style: {
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+          paddingTop: 0,
+          paddingRight: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
+          gap: 0,
+          direction: "row",
+          background: "#fff",
+          color: "#000",
+          borderColor: "transparent",
+          borderWidth: 0,
+          radius: 0,
+          fontSize: 14,
+          lineHeight: 20,
+          fontWeight: 400,
+          fontFamily: "Host",
+          fontStyle: "normal",
+          textAlign: "left",
+          whiteSpace: "nowrap",
+          display: "block",
+          opacity: 1,
+          measured: true,
+        },
+        children: [],
+      },
+    ],
     resources: [],
     tokens: {},
     requiredActions: [],
   };
-  await writeFile(join(directory, "empty.scene.json"), JSON.stringify(scene));
+  await writeFile(join(directory, "legacy.scene.json"), JSON.stringify(scene));
   await writeFile(
     join(directory, "assets/scene-fonts.json"),
     JSON.stringify([
@@ -271,7 +304,7 @@ test("font-free shortcuts and scene font arrays keep their existing routes", asy
   );
   success(input.cwd, [
     "to-fyne",
-    "../empty.scene.json",
+    "../legacy.scene.json",
     "--fonts",
     "../assets/scene-fonts.json",
     "--out",
