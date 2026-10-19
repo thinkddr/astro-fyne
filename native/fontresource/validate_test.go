@@ -246,6 +246,186 @@ func TestValidateRejectsMalformedRequiredTablesAfterChecksums(t *testing.T) {
 	})
 }
 
+func TestValidateAcceptsBoundedMetricsAndGlyphIndices(t *testing.T) {
+	for _, format := range []int16{0, 1} {
+		for _, scenario := range []struct {
+			name   string
+			change func(*testing.T, map[string][]byte)
+		}{
+			{"equal-offsets-and-exact-end", func(*testing.T, map[string][]byte) {}},
+			{"one-horizontal-metric", func(t *testing.T, tables map[string][]byte) {
+				glyphs := int(binary.BigEndian.Uint16(tables["maxp"][4:6]))
+				binary.BigEndian.PutUint16(tables["hhea"][34:36], 1)
+				tables["hmtx"] = make([]byte, 4+(glyphs-1)*2)
+			}},
+			{"minimum-units", func(_ *testing.T, tables map[string][]byte) {
+				binary.BigEndian.PutUint16(tables["head"][18:20], 16)
+			}},
+			{"maximum-units", func(_ *testing.T, tables map[string][]byte) {
+				binary.BigEndian.PutUint16(tables["head"][18:20], 16384)
+			}},
+			{"trailing-table-bytes", func(_ *testing.T, tables map[string][]byte) {
+				for _, tag := range []string{"loca", "glyf", "hmtx"} {
+					tables[tag] = append(tables[tag], 0, 0, 0, 0)
+				}
+			}},
+			{"nonzero-first-offset", func(t *testing.T, tables map[string][]byte) {
+				glyphs := int(binary.BigEndian.Uint16(tables["maxp"][4:6]))
+				tables["glyf"] = make([]byte, 14)
+				for index := 0; index < glyphs; index++ {
+					setGlyphOffset(t, tables, index, 2)
+				}
+				setGlyphOffset(t, tables, glyphs, 14)
+			}},
+		} {
+			t.Run(strconv.Itoa(int(format))+"/"+scenario.name, func(t *testing.T) {
+				tables := indexTables(t, format)
+				scenario.change(t, tables)
+				data := assembleFont(t, tables)
+				before := bytes.Clone(data)
+				if err := fontresource.Validate(data, 400, "normal"); err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(data, before) {
+					t.Fatal("index validation changed valid source bytes")
+				}
+			})
+		}
+	}
+}
+
+func TestValidateRejectsRepairedMetricAndIndexFaults(t *testing.T) {
+	for _, format := range []int16{0, 1} {
+		for _, scenario := range []struct {
+			name   string
+			change func(*testing.T, map[string][]byte)
+		}{
+			{"head-magic", func(_ *testing.T, tables map[string][]byte) {
+				binary.BigEndian.PutUint32(tables["head"][12:16], 0)
+			}},
+			{"units-zero", func(_ *testing.T, tables map[string][]byte) {
+				binary.BigEndian.PutUint16(tables["head"][18:20], 0)
+			}},
+			{"units-below-minimum", func(_ *testing.T, tables map[string][]byte) {
+				binary.BigEndian.PutUint16(tables["head"][18:20], 15)
+			}},
+			{"units-above-maximum", func(_ *testing.T, tables map[string][]byte) {
+				binary.BigEndian.PutUint16(tables["head"][18:20], 16385)
+			}},
+			{"zero-glyphs", func(_ *testing.T, tables map[string][]byte) {
+				binary.BigEndian.PutUint16(tables["maxp"][4:6], 0)
+			}},
+			{"zero-horizontal-metrics", func(_ *testing.T, tables map[string][]byte) {
+				binary.BigEndian.PutUint16(tables["hhea"][34:36], 0)
+			}},
+			{"too-many-horizontal-metrics", func(t *testing.T, tables map[string][]byte) {
+				glyphs := binary.BigEndian.Uint16(tables["maxp"][4:6])
+				if glyphs == 65535 {
+					t.Fatal("fixture needs room above its glyph count")
+				}
+				binary.BigEndian.PutUint16(tables["hhea"][34:36], glyphs+1)
+			}},
+			{"negative-location-format", func(_ *testing.T, tables map[string][]byte) {
+				binary.BigEndian.PutUint16(tables["head"][50:52], 0xffff)
+			}},
+			{"unknown-location-format", func(_ *testing.T, tables map[string][]byte) {
+				binary.BigEndian.PutUint16(tables["head"][50:52], 2)
+			}},
+			{"truncated-full-metrics", func(_ *testing.T, tables map[string][]byte) {
+				tables["hmtx"] = tables["hmtx"][:len(tables["hmtx"])-1]
+			}},
+			{"truncated-trailing-bearings", func(_ *testing.T, tables map[string][]byte) {
+				glyphs := int(binary.BigEndian.Uint16(tables["maxp"][4:6]))
+				binary.BigEndian.PutUint16(tables["hhea"][34:36], 1)
+				tables["hmtx"] = make([]byte, 4+(glyphs-1)*2-1)
+			}},
+			{"missing-final-location", func(_ *testing.T, tables map[string][]byte) {
+				width := 2
+				if format == 1 {
+					width = 4
+				}
+				tables["loca"] = tables["loca"][:len(tables["loca"])-width]
+			}},
+			{"one-location-only", func(_ *testing.T, tables map[string][]byte) {
+				width := 2
+				if format == 1 {
+					width = 4
+				}
+				tables["loca"] = tables["loca"][:width]
+			}},
+		} {
+			t.Run(strconv.Itoa(int(format))+"/"+scenario.name, func(t *testing.T) {
+				tables := indexTables(t, format)
+				scenario.change(t, tables)
+				requireRejected(t, assembleFont(t, tables), "invalid TrueType metrics or indices")
+			})
+		}
+		for _, scenario := range []struct {
+			name   string
+			change func(*testing.T, map[string][]byte)
+		}{
+			{"descending-locations", func(t *testing.T, tables map[string][]byte) {
+				setGlyphOffset(t, tables, 1, 4)
+				setGlyphOffset(t, tables, 2, 2)
+			}},
+			{"last-location-past-outline", func(t *testing.T, tables map[string][]byte) {
+				glyphs := int(binary.BigEndian.Uint16(tables["maxp"][4:6]))
+				setGlyphOffset(t, tables, glyphs, 14)
+			}},
+			{"first-location-past-outline", func(t *testing.T, tables map[string][]byte) {
+				setGlyphOffset(t, tables, 0, 14)
+			}},
+			{"maximum-encoded-location", func(t *testing.T, tables map[string][]byte) {
+				glyphs := int(binary.BigEndian.Uint16(tables["maxp"][4:6]))
+				if format == 0 {
+					setGlyphOffset(t, tables, glyphs, 131070)
+				} else {
+					setGlyphOffset(t, tables, glyphs, 0xffffffff)
+				}
+			}},
+		} {
+			t.Run(strconv.Itoa(int(format))+"/"+scenario.name, func(t *testing.T) {
+				tables := indexTables(t, format)
+				scenario.change(t, tables)
+				requireRejected(t, assembleFont(t, tables), "TrueType glyph index is out of bounds")
+			})
+		}
+	}
+}
+
+// Keep the public face's glyph IDs, with empty glyphs and one zero-contour glyph.
+func indexTables(t *testing.T, format int16) map[string][]byte {
+	t.Helper()
+	tables := fixtureTables(t)
+	glyphs := int(binary.BigEndian.Uint16(tables["maxp"][4:6]))
+	if glyphs < 2 {
+		t.Fatal("index fixture needs at least two glyphs")
+	}
+	binary.BigEndian.PutUint16(tables["head"][50:52], uint16(format))
+	binary.BigEndian.PutUint16(tables["hhea"][34:36], uint16(glyphs))
+	tables["hmtx"] = make([]byte, glyphs*4)
+	tables["glyf"] = make([]byte, 12)
+	width := 2
+	if format == 1 {
+		width = 4
+	}
+	tables["loca"] = make([]byte, (glyphs+1)*width)
+	setGlyphOffset(t, tables, glyphs, 12)
+	return tables
+}
+
+func setGlyphOffset(t *testing.T, tables map[string][]byte, index int, offset uint32) {
+	t.Helper()
+	if binary.BigEndian.Uint16(tables["head"][50:52]) == 0 {
+		if offset%2 != 0 || offset/2 > 65535 {
+			t.Fatal("short glyph offset is not representable")
+		}
+		binary.BigEndian.PutUint16(tables["loca"][index*2 : index*2+2], uint16(offset/2))
+	} else {
+		binary.BigEndian.PutUint32(tables["loca"][index*4 : index*4+4], offset)
+	}
+}
+
 func fixtureTables(t *testing.T) map[string][]byte {
 	t.Helper()
 	data := fontFixture(t, "Regular")
