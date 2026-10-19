@@ -134,6 +134,7 @@ export ASTRO_FYNE_SCALE2_ARTIFACTS="$(pwd)/artifacts/scale2"
 export ASTRO_FYNE_RESPONSIVE_FLEX_ARTIFACTS="$(pwd)/artifacts/responsive-flex"
 export ASTRO_FYNE_RESPONSIVE_CONTROLS_ARTIFACTS="$(pwd)/artifacts/responsive-controls"
 export ASTRO_FYNE_RESPONSIVE_BITMAP_ARTIFACTS="$(pwd)/artifacts/responsive-bitmap"
+export ASTRO_FYNE_MOTION_ARTIFACTS="$(pwd)/artifacts/motion-catalogue"
 cd native
 go mod tidy
 git diff --exit-code HEAD -- go.mod go.sum
@@ -146,6 +147,7 @@ GOMAXPROCS=2 go test -count=1 -p=2 -race ./... || task_native_test_status=$?
 # pages only after the native tests have retained the actual frames and scenes.
 if [[ "$task_native_test_status" -eq 0 ]]; then
   cd ..
+  bun capture/motion-catalogue.ts artifacts/motion-catalogue/native.json artifacts/motion-catalogue
   while IFS= read -r task_flex_case; do
     bun src/cli.ts reverse --scene "artifacts/responsive-flex/$task_flex_case/scene.json" --out "example/src/pages/flex-reverse/$task_flex_case" --name FlexReverse --public-dir example/public
     bun src/cli.ts reverse --scene "artifacts/responsive-flex/$task_flex_case/scene.json" --out "example/src/pages/flex-reverse/$task_flex_case" --name FlexReverse --public-dir example/public --check
