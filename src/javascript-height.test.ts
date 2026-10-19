@@ -227,8 +227,9 @@ test("CSS height cascade retains duplicate endpoints and normal important declar
 test("CSS height compiler diagnoses unsupported grammar instead of dropping motion", async () => {
   for (const css of [
     "@keyframes grow{50%{height:20px}to{height:100px}}",
-    "@keyframes grow{from{height:0px}to{height:100px}}",
+    "@keyframes grow{from{height:-1px}to{height:100px}}",
     "@keyframes grow{from{height:1e-50px}to{height:100px}}",
+    "@keyframes grow{from{height:1e-500px}to{height:100px}}",
     "@keyframes grow{from{height:20px}to{height:1000001px}}",
     "@keyframes grow{from{height:20%}to{height:100px}}",
     "@keyframes grow{from{height:auto}to{height:100px}}",

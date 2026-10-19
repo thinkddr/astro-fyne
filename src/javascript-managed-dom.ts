@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 
-import { validJavascriptText } from "./javascript-data.ts";
+import {
+  validJavascriptText,
+  validateJavascriptZeroHeight,
+} from "./javascript-data.ts";
 import type { JavascriptFrame } from "./javascript-types.ts";
 
 const tags = new Set(
@@ -163,6 +166,7 @@ export function prepareJavascriptDOM(
         "unsupported event binding",
       );
       const nested = frame.children ?? [];
+      validateJavascriptZeroHeight(frame);
       if (
         [
           "p",

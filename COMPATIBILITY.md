@@ -40,8 +40,13 @@ are compared with native frames. General CSS layout, media/state/font/resource a
 and pixel equivalence remain pending.
 The JavaScript route also compiles [bounded CSS height animations](docs/css-height-animations.md)
 into native flow updates with independent instance clocks and schema 2 checkpoints.
-Its strict image gate covers declared integer-height frames at DPR 1; fractional
-geometry and easing remain measured diagnostics. [Portable numeric motion](docs/motion.md)
+The stylesheet profile admits `0` and `0px` for empty, undecorated, auto-width
+block leaves and animation endpoints. Other zero-size diagnostics remain unchanged.
+Archives preserve CSS and timeline state; frozen scenes preserve measured zero boxes,
+while source-preserving block-flow scene conversion remains diagnosed. The original
+integer-height gate requires exact RGBA comparisons at DPR 1; the zero-height extension
+requires exact comparisons at DPR 1 and 2. Fractional geometry and easing remain
+uncertified diagnostics. [Portable numeric motion](docs/motion.md)
 uses separate explicit geometry bindings. Neither contract establishes general CSS animation parity.
 
 Reusable [catalogues](docs/catalogue.md) transport component archives, themes, source

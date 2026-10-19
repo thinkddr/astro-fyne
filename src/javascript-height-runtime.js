@@ -2,6 +2,7 @@
 // Copyright 2026 Astro Fyne contributors.
 
 import { createValidatedMotionSampler } from "./motion-sample.js";
+import { validateJavascriptZeroHeight } from "./javascript-data.ts";
 
 const containerTags = new Set([
   "div",
@@ -42,7 +43,7 @@ const zero = [
 function fail(detail, at = "runtime") {
   throw new Error(`CSS height animation at ${at}: ${detail}`);
 }
-function pixel(value, positive, at) {
+function pixel(value, required, at) {
   let number;
   if (typeof value === "number") number = value;
   else if (
@@ -50,18 +51,26 @@ function pixel(value, positive, at) {
     /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:px)?$/.test(value)
   ) {
     number = Number(value.replace(/px$/, ""));
+    if (
+      number === 0 &&
+      !/^[+-]?(?:0+(?:\.0*)?|\.0+)(?:[eE][+-]?\d+)?(?:px)?$/.test(value)
+    )
+      fail("nonzero height underflows native pixels", at);
     if (!value.endsWith("px") && number !== 0)
       fail("height/decorations require explicit finite pixels", at);
-  } else if (value === undefined && !positive) return 0;
+  } else if (value === undefined && !required) return 0;
   else fail("height/decorations require explicit finite pixels", at);
   if (
     !Number.isFinite(number) ||
     number < 0 ||
     number > 1_000_000 ||
     !Number.isFinite(Math.fround(number)) ||
-    (positive && Math.fround(number) <= 0)
+    (number > 0 && Math.fround(number) === 0)
   )
-    fail("height must remain positive native pixels within 1000000px", at);
+    fail(
+      "height requires nonnegative native pixels within 1000000px; positive underflow is unsupported",
+      at,
+    );
   return number;
 }
 function box(node, values, at, requireHeight) {
@@ -108,10 +117,9 @@ export function createHeightAnimations() {
       for (const key of zero)
         if (
           values[key] !== undefined &&
-          /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:px)?$/.test(
+          /^[+-]?(?:0+(?:\.0*)?|\.0+)(?:[eE][+-]?\d+)?(?:px)?$/.test(
             String(values[key]),
-          ) &&
-          Number(String(values[key]).replace(/px$/, "")) === 0
+          )
         ) {
           if (/^margin-/.test(key)) delete values[key];
           else values[key] = "0px";
@@ -189,6 +197,22 @@ export function createHeightAnimations() {
         timing,
         definition.keyframes,
       ]);
+    if (base === 0 || definition.keyframes.some((frame) => frame.value === 0))
+      validateJavascriptZeroHeight({
+        tag: node.localName,
+        css: true,
+        style: {
+          ...Object.fromEntries(
+            Object.entries(values).map(([name, value]) => [
+              name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()),
+              value,
+            ]),
+          ),
+          height: 0,
+        },
+        children: node.childNodes,
+        uid: node.uid,
+      });
     observedEntry.maximumHeight = suppressed
       ? base
       : Math.max(base, ...definition.keyframes.map((frame) => frame.value));

@@ -460,6 +460,7 @@ func (v *View) reconcile() {
 		return
 	}
 	responsive := len(nodes) == 1 && nodes[0].Style.Display == "flex"
+	var legacyStyles map[string]Style
 	backend := v.backend
 	if responsive {
 		backend, err = freezeResponsiveFonts(backend)
@@ -480,6 +481,13 @@ func (v *View) reconcile() {
 		return
 	}
 	freezeFlexStyles(nodes)
+	if !responsive {
+		legacyStyles, err = resolveLegacyStyles(nodes, backend)
+		if err != nil {
+			v.err = err
+			return
+		}
+	}
 	var profileError error
 	if len(v.measurements) > 0 {
 		if frameState(nodes, v.sceneLayout) != v.measurementState {
@@ -560,7 +568,11 @@ func (v *View) reconcile() {
 			if measured, ok := v.measurements[n.ID]; ok && profileError == nil {
 				style = measured
 			}
-			e.style = resolveStyle(n, style, inherited, v.backend, v.responsive)
+			if !v.responsive && !style.Measured {
+				e.style = legacyStyles[n.ID]
+			} else {
+				e.style = resolveStyle(n, style, inherited, v.backend, v.responsive)
+			}
 			e.children = build(n.Children, e.style, e)
 			current[n.ID] = e
 			e.update()
@@ -724,6 +736,32 @@ func validateStyle(id string, s Style) error {
 }
 
 func finite(v float32) bool { return !math.IsNaN(float64(v)) && !math.IsInf(float64(v), 0) }
+
+func resolveLegacyStyles(nodes []Node, backend Backend) (map[string]Style, error) {
+	styles := make(map[string]Style)
+	var walk func([]Node, Style) error
+	walk = func(nodes []Node, inherited Style) error {
+		for _, node := range nodes {
+			s := resolveStyle(node, node.Style, inherited, backend, false)
+			if node.Style.Height == 0 && node.Style.Flex != nil && node.Style.Flex.HeightSet {
+				metadata := *s.Flex
+				metadata.HeightSet = false
+				if node.Kind != "container" || node.Text != "" || len(node.Children) != 0 ||
+					(s.Display != "" && s.Display != "block") || s.Direction != "" || s.Width != 0 ||
+					s.PaddingTop != 0 || s.PaddingRight != 0 || s.PaddingBottom != 0 || s.PaddingLeft != 0 ||
+					node.Style.BorderWidth != 0 || s.BorderWidth != 0 || s.Radius != 0 || s.Gap != 0 || metadata != (FlexStyle{}) {
+					return fmt.Errorf("webui: explicit zero height on %q requires an empty undecorated auto-width block leaf; backend defaults must preserve that profile", node.ID)
+				}
+			}
+			styles[node.ID] = s
+			if err := walk(node.Children, s); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return styles, walk(nodes, Style{})
+}
 
 func visualState(nodes []Node) string {
 	return frameState(nodes, false)
@@ -1045,7 +1083,7 @@ func resolveStyle(n Node, style, inherited Style, backend Backend, responsive bo
 	if style.Radius == 0 {
 		style.Radius = defaults.Radius
 	}
-	if style.Height == 0 {
+	if style.Height == 0 && (style.Flex == nil || !style.Flex.HeightSet) {
 		style.Height = defaults.Height
 	}
 	if style.Width == 0 {
@@ -1128,7 +1166,7 @@ func (e *element) minSize() fyne.Size {
 	if s.Width > 0 {
 		size.Width = s.Width
 	}
-	if s.Height > 0 {
+	if s.Height > 0 || s.Flex != nil && s.Flex.HeightSet {
 		size.Height = s.Height
 	}
 	return size

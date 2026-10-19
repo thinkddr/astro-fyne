@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
-import { validJavascriptText } from "./javascript-data.ts";
+import {
+  validJavascriptText,
+  validateJavascriptZeroHeight,
+} from "./javascript-data.ts";
 import { createCSSCascade } from "./javascript-css-runtime.js";
 
 /** A Preact DOM adapter backed by native objects, never a browser renderer. */
@@ -466,7 +469,7 @@ export function createDocument() {
       throw new Error(
         "Inline CSS priorities require the stylesheet cascade adapter",
       );
-    return {
+    const frame = {
       uid: node.uid,
       tag: node.localName,
       attrs: node.attrs,
@@ -482,6 +485,8 @@ export function createDocument() {
       ),
       children: node.childNodes.map((child) => snapshot(child, resolved)),
     };
+    validateJavascriptZeroHeight(frame);
+    return frame;
   }
   function dispatch(event, activatingTarget) {
     const target = activatingTarget ?? find((node) => node.uid === event.node);

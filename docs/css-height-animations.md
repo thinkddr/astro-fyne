@@ -59,14 +59,16 @@ object cannot reconstruct original selectors or keyframes without this archive.
 ## Accepted source profile
 
 This first adapter accepts one stable, auto-width block root with empty block
-panels directly inside it. Every panel has an explicit positive pixel height.
+panels directly inside it. Every panel has an explicit nonnegative pixel height.
 Padding, borders, margins and gap must be absent or zero. Panel and root widths
 must follow their containing viewport. The root may use automatic height or an
 explicit positive height. The host supplies the matching viewport and origin.
 
 One animation per target may change only `height`. Each track needs explicit
 `0%` and `100%` endpoints; `from`, `to`, percentage selector lists and duplicate
-offsets are supported. Values must remain positive native pixels; individual
+offsets are supported. Zero may be written as `0` or `0px`; the archive retains
+the original stylesheet bytes. Positive values that underflow native `float32`
+pixels are diagnosed, rather than treated as authored zero. Individual
 heights and maximum aggregate flow height are limited to 1,000,000px. This bound
 prevents overflow; it does not promise exact browser subpixel geometry at that
 size. CSS `!important` base heights take precedence over animation samples.
@@ -87,6 +89,27 @@ adapters. Source layout or paint styles on the synthetic host ancestors are
 diagnosed; inherited text styles and inert zero resets are retained. The adapter
 does not add automatic `@font-face` support: font resources still use explicit
 validated font metadata.
+
+An explicit zero-height panel remains a visible native object with zero height;
+it contributes no height to following siblings. Its identity survives expansion
+and collapse. The same bounded profile admits static zero-height panels from a
+stylesheet. Zero-height text, controls, images, nonempty or decorated blocks,
+authored widths and unsupported layouts are diagnosed. Inline-only zero height
+requires the stylesheet cascade adapter and is explicitly diagnosed in both
+directions. Other zero dimensions and zero default control padding keep their
+existing diagnostics. Custom backend defaults must preserve the empty,
+undecorated, auto-width zero-height profile; incompatible defaults are rejected
+before replacing the committed native tree.
+
+Source generation bundles code without executing the component. Runtime-only
+DOM restrictions are diagnosed when mounting or updating it. When a supplied
+archive already contains a frame, both CLI directions validate that frame before
+writing output.
+
+JavaScript archives preserve height declaration presence through the native and
+generated browser routes. Frozen native scenes preserve the measured zero box.
+Preserving source block-flow layout through the scene schema remains diagnosed;
+schema 2 currently represents responsive Flexbox declarations.
 
 ## Instance clocks and checkpoints
 
@@ -133,6 +156,22 @@ paused browser checkpoint back through the CLI, and continues it in native code.
 It checks object identity, independent timelines, controlled automatic clocks,
 capture consistency, invalid seeks, CSS source bytes and unmount cleanup.
 
+The zero-height extension retains separate initialization, source and return
+executables. Its actual generated initialization constructor exports a checkpoint
+at manual time zero, including Preact's real initialization journal and frame.
+Both native source DPR profiles and the generated browser replay that same
+checkpoint; full archive comparisons establish continuation parity, rather than
+equality between independent cold initialization journals. Source and return
+constructors run at DPR 1 and 2. The gate compares authored CSS, native and
+generated browser frames through expansion and collapse, with a static
+zero-height sibling and a paused checkpoint exported at zero. The browser
+checkpoint generates a fresh native constructor which continues the timeline.
+Cold input and initialized archives, full managed checkpoints, snapshots, node
+identities, exact RGBA comparisons, original CSS bytes and browser process
+provenance are retained under
+`artifacts/css-height-roundtrip/zero-height/`. Existing height samples and image
+comparisons remain separate.
+
 Separate linear and eased samples at 333ms retain native/browser geometry and
 pixel differences as uncertified diagnostics. Chromium's used geometry has
 subpixel quantization while Fyne stores float32 geometry. Fractional/eased samples
@@ -151,8 +190,8 @@ DPR does not establish internal layout zoom: Chromium's
 [screen metrics emulator](https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/frame/screen_metrics_emulator.cc#L132-L140)
 preserves the original process scale for its compositor parameters while exposing
 the requested scale separately. The oracle selects no native quantization or
-paint rule. Internal layout zoom and native handling of zero used heights remain
-unverified.
+paint rule. Internal layout zoom and native handling of positive authored heights
+that Chromium resolves to zero remain unverified.
 
 Timing follows [CSS Animations](https://www.w3.org/TR/css-animations-1/) and
 [Web Animations](https://www.w3.org/TR/web-animations-1/).

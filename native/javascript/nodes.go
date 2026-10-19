@@ -7,6 +7,7 @@ import (
 	"fmt"
 	webui "github.com/thinkddr/astro-fyne/native"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -83,20 +84,26 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 					}
 				}
 			}
+			if value, exists := frame.Style["height"]; frame.CSS && exists && value != "" && sourceZeroPixels(value) {
+				for _, name := range []string{"padding", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderWidth", "borderRadius", "margin", "gap"} {
+					if value, exists := frame.Style[name]; exists && !sourceZeroPixels(value) {
+						return nil, fmt.Errorf("javascript: CSS zero height requires an empty undecorated auto-width block leaf; %s must be authored zero", name)
+					}
+				}
+			}
 			var err error
 			node.Style, err = sourceStyle(frame.Style)
 			if err != nil {
 				return nil, fmt.Errorf("javascript: %s: %w", node.ID, err)
 			}
 			if frame.CSS {
-				for _, name := range []string{"width", "height", "fontSize", "lineHeight", "borderRadius"} {
-					value := frame.Style[name]
-					if text, ok := value.(string); ok {
-						value = strings.Trim(text, " \t\r\n\f")
-					}
-					if value == float64(0) || value == "0px" || value == "0" {
+				for name, size := range map[string]float32{"width": node.Style.Width, "fontSize": node.Style.FontSize, "lineHeight": node.Style.LineHeight, "borderRadius": node.Style.Radius} {
+					if value, exists := frame.Style[name]; exists && value != "" && size == 0 {
 						return nil, fmt.Errorf("javascript: CSS zero %s requires presence-aware native sizing", name)
 					}
+				}
+				if value, exists := frame.Style["height"]; exists && value != "" {
+					node.Style.Flex = &webui.FlexStyle{HeightSet: true}
 				}
 				if node.Style.PaddingLeft == 0 && node.Style.PaddingRight == 0 && (node.Kind == "button" || node.Kind == "input" || node.Kind == "textarea") {
 					if _, left := frame.Style["paddingLeft"]; left {
@@ -105,6 +112,21 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 					if _, right := frame.Style["paddingRight"]; right {
 						return nil, fmt.Errorf("javascript: CSS zero control padding requires a native control style adapter")
 					}
+				}
+			}
+			if value, exists := frame.Style["height"]; exists && value != "" && node.Style.Height == 0 {
+				if !frame.CSS {
+					return nil, fmt.Errorf("javascript: CSS zero height requires the stylesheet cascade adapter; inline-only zero sizing is unsupported")
+				}
+				allowed := frame.Tag == "div" || frame.Tag == "main" || frame.Tag == "section" || frame.Tag == "article" || frame.Tag == "aside" || frame.Tag == "header" || frame.Tag == "footer"
+				if !allowed || len(frame.Children) != 0 || frame.Text != "" ||
+					(node.Style.Display != "" && node.Style.Display != "block") || node.Style.Direction != "" ||
+					node.Style.PaddingTop != 0 || node.Style.PaddingRight != 0 || node.Style.PaddingBottom != 0 || node.Style.PaddingLeft != 0 ||
+					node.Style.BorderWidth != 0 || node.Style.Radius != 0 || node.Style.Gap != 0 {
+					return nil, fmt.Errorf("javascript: CSS zero height requires an empty undecorated auto-width block leaf")
+				}
+				if value, exists := frame.Style["width"]; exists && value != "" {
+					return nil, fmt.Errorf("javascript: CSS zero height requires an empty undecorated auto-width block leaf")
 				}
 			}
 			if node.Kind == "checkbox" && len(frame.Style) > 0 {
@@ -165,6 +187,50 @@ func asciiLower(value string) string {
 	return string(data)
 }
 
+var cssPixelNumber = regexp.MustCompile(`^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:px)?$`)
+var cssZeroPixels = regexp.MustCompile(`^[+-]?(?:0+(?:\.0*)?|\.0+)(?:[eE][+-]?\d+)?(?:px)?$`)
+
+func sourceZeroPixels(value any) bool {
+	switch v := value.(type) {
+	case float64:
+		return v == 0
+	case string:
+		return v == "" || cssZeroPixels.MatchString(strings.Trim(v, " \t\r\n\f"))
+	default:
+		return false
+	}
+}
+
+func sourceHeight(value any) (float32, error) {
+	var n float64
+	switch v := value.(type) {
+	case float64:
+		n = v
+	case string:
+		v = strings.Trim(v, " \t\r\n\f")
+		if !cssPixelNumber.MatchString(v) {
+			return 0, fmt.Errorf("CSS height requires finite nonnegative pixels")
+		}
+		var err error
+		n, err = strconv.ParseFloat(strings.TrimSuffix(v, "px"), 64)
+		if err != nil || !strings.HasSuffix(v, "px") && n != 0 {
+			return 0, fmt.Errorf("CSS height requires finite nonnegative pixels")
+		}
+		if n == 0 && !cssZeroPixels.MatchString(v) {
+			return 0, fmt.Errorf("CSS nonzero height underflows native pixels")
+		}
+	default:
+		return 0, fmt.Errorf("CSS height requires finite nonnegative pixels")
+	}
+	if math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > math.MaxFloat32 {
+		return 0, fmt.Errorf("CSS height requires finite nonnegative pixels")
+	}
+	if n > 0 && float32(n) == 0 {
+		return 0, fmt.Errorf("CSS positive height underflows native pixels")
+	}
+	return float32(n), nil
+}
+
 func sourceStyle(properties map[string]any) (webui.Style, error) {
 	style := webui.Style{}
 	number := func(value any) (float32, error) {
@@ -175,6 +241,11 @@ func sourceStyle(properties map[string]any) (webui.Style, error) {
 			}
 		case string:
 			v = strings.Trim(v, " \t\r\n\f")
+			if cssPixelNumber.MatchString(v) && !strings.HasSuffix(v, "px") {
+				if n, err := strconv.ParseFloat(v, 64); err == nil && n == 0 {
+					return 0, nil
+				}
+			}
 			if strings.HasSuffix(v, "px") {
 				n, err := strconv.ParseFloat(strings.TrimSuffix(v, "px"), 32)
 				if err == nil && n >= 0 && !math.IsInf(n, 0) {
@@ -184,7 +255,7 @@ func sourceStyle(properties map[string]any) (webui.Style, error) {
 		}
 		return 0, fmt.Errorf("CSS value %v requires finite nonnegative pixels", value)
 	}
-	numeric := map[string]*float32{"width": &style.Width, "height": &style.Height, "paddingTop": &style.PaddingTop, "paddingRight": &style.PaddingRight, "paddingBottom": &style.PaddingBottom, "paddingLeft": &style.PaddingLeft, "gap": &style.Gap, "fontSize": &style.FontSize, "borderWidth": &style.BorderWidth, "borderRadius": &style.Radius}
+	numeric := map[string]*float32{"width": &style.Width, "paddingTop": &style.PaddingTop, "paddingRight": &style.PaddingRight, "paddingBottom": &style.PaddingBottom, "paddingLeft": &style.PaddingLeft, "gap": &style.Gap, "fontSize": &style.FontSize, "borderWidth": &style.BorderWidth, "borderRadius": &style.Radius}
 	fontSize := float32(14)
 	if value, exists := properties["fontSize"]; exists && value != "" {
 		var err error
@@ -230,6 +301,12 @@ func sourceStyle(properties map[string]any) (webui.Style, error) {
 			continue
 		}
 		switch name {
+		case "height":
+			n, err := sourceHeight(value)
+			if err != nil {
+				return style, err
+			}
+			style.Height = n
 		case "padding":
 			n, err := number(value)
 			if err != nil {
@@ -279,7 +356,7 @@ func sourceStyle(properties map[string]any) (webui.Style, error) {
 				return style, fmt.Errorf("CSS borderStyle requires solid")
 			}
 		case "margin":
-			if value != "0px" && value != float64(0) {
+			if n, err := number(value); err != nil || n != 0 {
 				return style, fmt.Errorf("CSS margins require a native layout adapter")
 			}
 		default:
