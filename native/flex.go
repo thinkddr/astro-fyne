@@ -19,7 +19,8 @@ import (
 // The tree requires a width:100% root with fixed height, pixel item bases and min0.
 // Order is an integer; ties keep source order. Fyne object, focus and paint
 // order stay in source order (items never overlap in this profile).
-// Intrinsic sizing, wrap, RTL, nonzero margins/minima, percentage bases
+// Item margins are nonnegative pixels; MarginSet records all four sides declared.
+// Intrinsic sizing, wrap, RTL, auto/negative margins, nonzero minima, percentage bases
 // and max constraints are unsupported. Text/control/bitmap leaves need explicit styles.
 type FlexStyle struct {
 	Grow           *float32 `json:"grow,omitempty"`
@@ -38,6 +39,10 @@ type FlexStyle struct {
 	BorderStyle    string   `json:"borderStyle,omitempty"`
 	Appearance     string   `json:"appearance,omitempty"`
 	MarginSet      bool     `json:"marginSet,omitempty"`
+	MarginTop      float32  `json:"marginTop,omitempty"`
+	MarginRight    float32  `json:"marginRight,omitempty"`
+	MarginBottom   float32  `json:"marginBottom,omitempty"`
+	MarginLeft     float32  `json:"marginLeft,omitempty"`
 	Order          int      `json:"order,omitempty"`
 }
 
@@ -69,7 +74,7 @@ func validateFlexStyle(id string, style Style) error {
 	if f == nil {
 		return nil
 	}
-	for _, value := range []*float32{f.Grow, f.Shrink, f.Basis, f.MinWidth, f.MinHeight, f.WidthPercent, f.HeightPercent} {
+	for _, value := range []*float32{f.Grow, f.Shrink, f.Basis, f.MinWidth, f.MinHeight, f.WidthPercent, f.HeightPercent, &f.MarginTop, &f.MarginRight, &f.MarginBottom, &f.MarginLeft} {
 		if value != nil && (!finite(*value) || *value < 0) {
 			return fmt.Errorf("webui: nonfinite or negative flex declaration on %q", id)
 		}
@@ -106,7 +111,7 @@ func validateFlexTree(nodes []Node) error {
 				f := node.Style.Flex
 				if f != nil && (f.Grow != nil || f.Shrink != nil || f.Basis != nil || f.MinWidth != nil || f.MinHeight != nil ||
 					f.WidthPercent != nil || f.HeightPercent != nil || f.JustifyContent != "" || f.AlignItems != "" ||
-					f.AlignSelf != "" || f.BoxSizing != "" || f.BorderStyle != "" || f.Appearance != "" || f.MarginSet || f.Order != 0) {
+					f.AlignSelf != "" || f.BoxSizing != "" || f.BorderStyle != "" || f.Appearance != "" || f.MarginSet || f.Order != 0 || f.MarginTop != 0 || f.MarginRight != 0 || f.MarginBottom != 0 || f.MarginLeft != 0) {
 					return fmt.Errorf("webui: flex declarations on %q require a supported responsive flex root", node.ID)
 				}
 				if err := checkLegacy(node.Children); err != nil {
@@ -131,7 +136,7 @@ func validateFlexTree(nodes []Node) error {
 			return fail("root must be a container")
 		}
 		if node.Kind != "container" && (len(node.Children) > 0 || !f.MarginSet) {
-			return fail("leaves require margin:0 and cannot contain children")
+			return fail("leaves require explicit margins and cannot contain children")
 		}
 		switch node.Kind {
 		case "container":
@@ -212,8 +217,8 @@ func validateFlexTree(nodes []Node) error {
 			if f.WidthPercent == nil || *f.WidthPercent != 100 || !f.HeightSet || s.Height <= 0 || f.HeightPercent != nil {
 				return fail("root requires width:100% and a positive definite pixel height")
 			}
-			if f.Order != 0 {
-				return fail("order applies only to flex items")
+			if f.Order != 0 || f.MarginTop != 0 || f.MarginRight != 0 || f.MarginBottom != 0 || f.MarginLeft != 0 {
+				return fail("order and margins apply only to flex items")
 			}
 		} else {
 			if f.Basis == nil || f.MinWidth == nil || f.MinHeight == nil {
@@ -345,6 +350,21 @@ func itemAlignment(parent, child Style) string {
 	return align
 }
 
+// flexMargins returns main start/end and cross start/end margins. Reverse
+// directions start the main axis at the physical right or bottom edge.
+func flexMargins(s Style, row, reverse bool) (mainStart, mainEnd, crossStart, crossEnd float32) {
+	f := s.Flex
+	if row {
+		mainStart, mainEnd, crossStart, crossEnd = f.MarginLeft, f.MarginRight, f.MarginTop, f.MarginBottom
+	} else {
+		mainStart, mainEnd, crossStart, crossEnd = f.MarginTop, f.MarginBottom, f.MarginLeft, f.MarginRight
+	}
+	if reverse {
+		mainStart, mainEnd = mainEnd, mainStart
+	}
+	return
+}
+
 type flexItem struct {
 	base, floor, target, grow, shrink float64
 	frozen                            bool
@@ -359,6 +379,8 @@ func flexibleSizes(children []*element, main float32, row bool, gap float32) []f
 	var hypothetical float64
 	for i, child := range children {
 		f, s := child.style.Flex, child.style
+		start, end, _, _ := flexMargins(s, row, false)
+		available -= float64(start) + float64(end)
 		floor := verticalDecoration(s)
 		if row {
 			floor = horizontalDecoration(s)
@@ -466,8 +488,9 @@ func flexFrames(children []*element, parent Style, content fyne.Size, origin fyn
 	}
 	sizes := flexibleSizes(children, main, row, parent.Gap)
 	used := float64(parent.Gap) * float64(max(len(children)-1, 0))
-	for _, size := range sizes {
-		used += float64(size)
+	for i, size := range sizes {
+		start, end, _, _ := flexMargins(children[i].style, row, reverse)
+		used += float64(size) + float64(start) + float64(end)
 	}
 	free := float64(main) - used
 	var offset, extraGap float64
@@ -520,18 +543,22 @@ func flexFrames(children []*element, parent Style, content fyne.Size, origin fyn
 			crossSize, crossSet, percent = s.Height, f.HeightSet, f.HeightPercent
 			crossFloor = verticalDecoration(s)
 		}
+		mainStart, mainEnd, crossStart, crossEnd := flexMargins(s, row, reverse)
 		align := itemAlignment(parent, s)
-		if percent != nil || !crossSet && align == "stretch" {
+		if percent != nil {
 			crossSize = cross
+		} else if !crossSet && align == "stretch" {
+			crossSize = cross - crossStart - crossEnd
 		}
 		crossSize = max(crossSize, crossFloor)
-		var crossOffset float32
+		crossOffset := crossStart
 		switch align {
 		case "end":
-			crossOffset = cross - crossSize
+			crossOffset = cross - crossSize - crossEnd
 		case "center":
-			crossOffset = (cross - crossSize) / 2
+			crossOffset = crossStart + (cross-crossStart-crossEnd-crossSize)/2
 		}
+		offset += float64(mainStart)
 		mainPosition := offset
 		if reverse {
 			mainPosition = float64(main) - offset - float64(sizes[i])
@@ -546,7 +573,7 @@ func flexFrames(children []*element, parent Style, content fyne.Size, origin fyn
 			return nil, fmt.Errorf("webui: responsive flex computed nonfinite or negative bounds for %q", child.node.ID)
 		}
 		frames[i] = flexFrame{position: position, size: size}
-		offset += float64(sizes[i]) + float64(parent.Gap) + extraGap
+		offset += float64(sizes[i]) + float64(mainEnd) + float64(parent.Gap) + extraGap
 	}
 	return frames, nil
 }

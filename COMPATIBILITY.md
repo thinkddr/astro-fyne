@@ -175,6 +175,10 @@ Supported main axes are `row`, `row-reverse`, `column` and `column-reverse`, wit
 Items may declare an integer `order` (32-bit range); main-axis placement follows order-modified
 document order, with ties in source order. Fyne objects, focus traversal and paint keep source
 order, which matches the browser here because items never overlap. The root cannot declare `order`.
+Items may declare nonnegative pixel margins through `margin` (one value) and the four
+longhands, applied in source order. Margins reduce the free space, offset both axes and
+shrink a stretched cross size; reverse directions start at the physical right or bottom margin.
+The root cannot declare margins.
 `justifyContent` accepts `flex-start`, `flex-end`, `center`, `space-between`,
 `space-around` and `space-evenly`. `alignItems` and `alignSelf` accept `flex-start`,
 `flex-end`, `center` and `stretch`; `alignSelf: "auto"` inherits the container's setting.
@@ -187,7 +191,7 @@ their padding/border floor and remaining space is recalculated. Layout keeps sou
 order and updates existing native objects on resize. Runtime validation checks the
 expanded tree, including component and list results, before it lays out the frame.
 
-Text and control leaves require a definite cross size or stretch, `margin: 0`, an explicit
+Text and control leaves require a definite cross size or stretch, an explicit `margin`, an explicit
 font family, weight 400/700, normal/italic style, positive pixel font size and line height,
 color, text alignment and `whiteSpace: "nowrap"`. Numeric Preact `lineHeight` is a multiplier
 of the explicit pixel `fontSize`; a `px` string is an absolute line height. Unquoted family
@@ -204,12 +208,12 @@ Glyph coverage, matching font bytes and matching box geometry do not establish t
 equivalence. Focus outlines, caret/selection paint, shaping and antialiasing still require
 their own exact pixel profiles.
 
-Bitmap leaves require `display: "block"`, explicit positive pixel dimensions, `margin: 0`
+Bitmap leaves require `display: "block"`, explicit positive pixel dimensions, an explicit `margin`
 and zero padding, border and radius. The responsive bitmap corpus uses the source PNG at its
 natural 16×16 size and scale 1; it does not certify image interpolation at another size or scale.
 
 This mode does not implement text or control intrinsic sizes, automatic/content/percentage
-bases, automatic minima, nonzero/auto margins, wrapping, RTL/vertical writing, baseline alignment,
+bases, automatic minima, auto/negative margins, wrapping, RTL/vertical writing, baseline alignment,
 min/max constraints, the CSS cascade, external stylesheets or arbitrary percentage sizing.
 Unsupported declarations or tree shapes fail explicitly. Measured profiles keep their
 existing exact-viewport restriction.

@@ -21,8 +21,18 @@ export interface SceneFlex {
   borderStyle?: string;
   appearance?: string;
   marginSet?: boolean;
+  marginTop?: number;
+  marginRight?: number;
+  marginBottom?: number;
+  marginLeft?: number;
   order?: number;
 }
+const margins = [
+  "marginTop",
+  "marginRight",
+  "marginBottom",
+  "marginLeft",
+] as const;
 const numeric = [
   "grow",
   "shrink",
@@ -31,6 +41,7 @@ const numeric = [
   "minHeight",
   "widthPercent",
   "heightPercent",
+  ...margins,
 ] as const;
 const booleans = ["widthSet", "heightSet", "marginSet"] as const;
 const choices = {
@@ -147,6 +158,8 @@ export function validateResponsiveScene(document: SceneDocument): void {
     }
     if (!parent) {
       if (f.order) fail(path, "order applies only to flex items");
+      if (margins.some((key) => f[key]))
+        fail(path, "margins apply only to flex items");
       if (
         node.kind !== "container" ||
         s.display !== "flex" ||
@@ -206,7 +219,7 @@ export function validateResponsiveScene(document: SceneDocument): void {
       if (!f.marginSet || node.kind === "textarea")
         fail(
           path,
-          "supported leaves require margin:0; multiline editors are unsupported",
+          "supported leaves require explicit margins; multiline editors are unsupported",
         );
       if (node.kind === "image") {
         if (
@@ -295,7 +308,8 @@ export function sourceStyleCSS(
     "appearance",
   ] as const)
     if (f[key]) css[key] = f[key]!;
-  if (f.marginSet) css.margin = 0;
+  // Longhands keep each side explicit; all four restore marginSet on reimport.
+  for (const key of margins) if (f.marginSet || f[key]) css[key] = f[key] ?? 0;
   if (f.order) css.order = f.order;
   if (s.fontFamily)
     Object.assign(css, {
