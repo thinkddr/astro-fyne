@@ -196,13 +196,13 @@ func TestRetainedPointerObjectsAreInertAfterRemoval(t *testing.T) {
 			retained := v.Object("target").(fyne.Tappable)
 			test.TapCanvas(w.Canvas(), pointerTestPoint(t, v, "target", fyne.NewPos(4, 4)))
 			if clicks != 1 {
-					t.Fatalf("live pointer target did not activate exactly once: %d", clicks)
+				t.Fatalf("live pointer target did not activate exactly once: %d", clicks)
 			}
 			present = false
 			v.Refresh()
 			retained.Tapped(nil)
 			if clicks != 1 || v.Object("target") != nil || w.Canvas().Focused() != nil {
-					t.Fatalf("a retained detached object stayed active: clicks=%d focus=%T", clicks, w.Canvas().Focused())
+				t.Fatalf("a retained detached object stayed active: clicks=%d focus=%T", clicks, w.Canvas().Focused())
 			}
 		})
 	}
