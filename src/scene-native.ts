@@ -59,6 +59,7 @@ const flexNames = {
   borderStyle: "BorderStyle",
   appearance: "Appearance",
   marginSet: "MarginSet",
+  order: "Order",
 } as const;
 
 function styleGo(style: SceneStyle | SceneSourceStyle): string {
@@ -71,7 +72,7 @@ function styleGo(style: SceneStyle | SceneSourceStyle): string {
       `Flex:&webui.FlexStyle{${Object.entries(style.flex)
         .map(([key, value]) => {
           const field = flexNames[key as keyof typeof flexNames];
-          return `${field}:${typeof value === "number" ? `webui.FlexValue(${value})` : typeof value === "string" ? quote(value) : value}`;
+          return `${field}:${typeof value === "number" && key !== "order" ? `webui.FlexValue(${value})` : typeof value === "string" ? quote(value) : value}`;
         })
         .join(",")}}`,
     );

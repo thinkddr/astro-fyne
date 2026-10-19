@@ -836,7 +836,7 @@ test("responsive flex rejects unsupported units, intrinsic sizing and formatting
     "marginLeft:1",
     "borderLeftWidth:1",
     "flex:1",
-    "order:1",
+    "order:1.5",
     "justifyContent:'start'",
     "alignItems:'baseline'",
     "alignSelf:'baseline'",

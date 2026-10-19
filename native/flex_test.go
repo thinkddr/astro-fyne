@@ -401,3 +401,52 @@ func TestResponsiveFlexRejectsComputedNonfiniteFrames(t *testing.T) {
 		t.Fatal("nonfinite computed frames became an exportable scene")
 	}
 }
+
+func TestFlexOrderPlacesItemsWithoutReorderingObjects(t *testing.T) {
+	for _, direction := range []string{"row", "row-reverse"} {
+		t.Run(direction, func(t *testing.T) {
+			a, b, c := flexTestItem("a", 30), flexTestItem("b", 50), flexTestItem("c", 20)
+			a.Style.Flex.Order, b.Style.Flex.Order = 2, -1
+			root := flexTestRoot(40, a, b, c)
+			root.Style.Direction, root.Style.Gap = direction, 10
+			v := NewView(func() []Node { return []Node{root} })
+			c2 := software.NewCanvas()
+			c2.SetPadded(false)
+			c2.SetContent(v)
+			if err := v.BindCanvas(c2); err != nil {
+				t.Fatal(err)
+			}
+			c2.Resize(fyne.NewSize(200, 40))
+			c2.Capture()
+			if err := v.Error(); err != nil {
+				t.Fatal(err)
+			}
+			// Visual sequence b, c, a; ties and objects keep source order.
+			if direction == "row" {
+				flexTestFrame(t, v, "b", 0, 0, 50, 40)
+				flexTestFrame(t, v, "c", 60, 0, 20, 40)
+				flexTestFrame(t, v, "a", 90, 0, 30, 40)
+			} else {
+				flexTestFrame(t, v, "b", 150, 0, 50, 40)
+				flexTestFrame(t, v, "c", 120, 0, 20, 40)
+				flexTestFrame(t, v, "a", 80, 0, 30, 40)
+			}
+			snapshot, err := v.Snapshot()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if children := snapshot.Roots[0].Children; children[0].Object != v.Object("a") || children[2].Object != v.Object("c") {
+				t.Fatal("order changed native object order")
+			}
+		})
+	}
+	root := flexTestRoot(40, flexTestItem("a", 30))
+	root.Style.Flex.Order = 1
+	if err := validateFlexTree([]Node{root}); err == nil {
+		t.Fatal("accepted order on the flex root, which is not a flex item")
+	}
+	legacy := Node{ID: "legacy", Kind: "container", Style: Style{Flex: &FlexStyle{Order: 1}}}
+	if err := validateFlexTree([]Node{legacy}); err == nil {
+		t.Fatal("accepted order without a responsive flex root")
+	}
+}

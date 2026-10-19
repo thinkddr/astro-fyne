@@ -239,6 +239,7 @@ function style(
     borderStyle: "BorderStyle",
     appearance: "Appearance",
     margin: "MarginSet",
+    order: "Order",
   };
   if (bitmap) {
     for (const dimension of ["width", "height"] as const) {
@@ -571,6 +572,16 @@ function style(
               `${node.id}: CSS ${property} is unsupported in responsive flex.`,
             );
           flex[flexField] = val.value;
+        } else if (flexField === "Order") {
+          if (
+            typeof val.value !== "number" ||
+            !Number.isInteger(val.value) ||
+            Math.abs(val.value) > 2 ** 31 - 1
+          )
+            throw new Error(
+              `${node.id}: CSS order requires a 32-bit integer literal.`,
+            );
+          flex.Order = val.value;
         } else if (["Grow", "Shrink"].includes(flexField)) {
           if (typeof val.value !== "number")
             throw new Error(
