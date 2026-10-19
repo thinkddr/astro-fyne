@@ -2,6 +2,7 @@
 // Copyright 2026 Astro Fyne contributors.
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { evaluateCSSSupports } from "./javascript-css-supports.ts";
 const cssPackage = "css-tree";
 const css = await import(cssPackage);
 const asciiLower = (value: string) =>
@@ -32,8 +33,10 @@ export async function compileJavascriptCSS(
   try {
     ast = css.parse(text, {
       positions: true,
-      onParseError(error: Error) {
-        throw error;
+      onParseError(error: Error, fallback: any) {
+        // Condition parsing first tries a declaration before a parenthesized
+        // boolean group. A null fallback is lookahead, not recovered raw CSS.
+        if (fallback !== null) throw error;
       },
     });
   } catch (error) {
@@ -144,7 +147,11 @@ export async function compileJavascriptCSS(
       return { parts, specificity: score };
     });
   }
-  async function rules(children: any[], layer: string | null = null) {
+  async function rules(
+    children: any[],
+    layer: string | null = null,
+    grouped = false,
+  ) {
     for (const node of children) {
       if (result.length > 100000) throw new Error("CSS rules exceed 100000");
       if (node.type === "Rule") {
@@ -176,6 +183,23 @@ export async function compileJavascriptCSS(
           declarations,
           layer,
         });
+      } else if (
+        node.type === "Atrule" &&
+        asciiLower(node.name) === "supports"
+      ) {
+        importsAllowed = false;
+        if (!node.block || node.prelude?.children?.length !== 1)
+          throw new Error(
+            "CSS @supports syntax requires a native feature-query adapter",
+          );
+        if (
+          evaluateCSSSupports(
+            node.prelude.children[0],
+            css.generate,
+            css.ident.decode,
+          )
+        )
+          await rules(node.block.children, layer, true);
       } else if (node.type === "Atrule" && asciiLower(node.name) === "layer") {
         if (layer) throw new Error("Nested CSS layers require an adapter");
         const names = node.prelude
@@ -188,10 +212,11 @@ export async function compileJavascriptCSS(
             throw new Error("CSS layer blocks require one name");
           const name = names[0] ?? `${file}:anonymous:${++anonymous}`;
           result.push({ layers: [name] });
-          await rules(node.block.children, name);
+          importsAllowed = false;
+          await rules(node.block.children, name, true);
         } else result.push({ layers: names });
       } else if (node.type === "Atrule" && asciiLower(node.name) === "import") {
-        if (!importsAllowed || layer)
+        if (!importsAllowed || layer || grouped)
           throw new Error("CSS @import must precede style rules");
         const prelude = node.prelude?.children;
         if (
