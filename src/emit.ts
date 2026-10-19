@@ -223,6 +223,8 @@ function style(
     "Basis",
     "MinWidth",
     "MinHeight",
+    "MaxWidth",
+    "MaxHeight",
     "WidthPercent",
     "HeightPercent",
   ]);
@@ -232,6 +234,8 @@ function style(
     flexBasis: "Basis",
     minWidth: "MinWidth",
     minHeight: "MinHeight",
+    maxWidth: "MaxWidth",
+    maxHeight: "MaxHeight",
     justifyContent: "JustifyContent",
     alignItems: "AlignItems",
     alignSelf: "AlignSelf",
@@ -628,12 +632,11 @@ function style(
             );
           flex[flexField] = result;
         } else {
-          const result = pixels(val.value, property);
-          if (["MinWidth", "MinHeight"].includes(flexField) && result !== 0)
-            throw new Error(
-              `${node.id}: CSS ${property} requires explicit zero in responsive flex.`,
-            );
-          flex[flexField] = result;
+          if (val.value === "none" && flexField.startsWith("Max")) {
+            delete flex[flexField];
+            continue;
+          }
+          flex[flexField] = pixels(val.value, property);
         }
         continue;
       }

@@ -820,7 +820,8 @@ test("responsive flex rejects unsupported units, intrinsic sizing and formatting
     "flexGrow:'1'",
     "flexShrink:-1",
     "flexShrink:1e100",
-    "minWidth:1",
+    "minWidth:'-1px'",
+    "maxWidth:'50%'",
     "minHeight:'auto'",
     "boxSizing:'content-box'",
     "width:'50%'",
@@ -1052,4 +1053,22 @@ test("responsive margins apply shorthand and longhands in source order", async (
   expect(first).not.toContain("MarginLeft");
   expect(second).toContain("MarginRight: 3");
   expect(second).not.toContain("MarginSet");
+});
+
+test("responsive minima and maxima keep pixel limits and drop none", async () => {
+  const source =
+    await program(`export function Page() { return <div id="root" style={{display:'flex',width:'100%',height:100,boxSizing:'border-box'}}>
+      <div id="item" style={{flexBasis:20,minWidth:12,minHeight:'4px',maxWidth:80,maxHeight:30,boxSizing:'border-box'}}/>
+      <div id="open" style={{flexBasis:20,minWidth:0,minHeight:0,boxSizing:'border-box',maxWidth:'none'}}/>
+    </div>; }`);
+  const go = emitGo(source, options);
+  const item = go.slice(go.indexOf('"item"'), go.indexOf('"open"'));
+  for (const field of [
+    "MinWidth: webui.FlexValue(12)",
+    "MinHeight: webui.FlexValue(4)",
+    "MaxWidth: webui.FlexValue(80)",
+    "MaxHeight: webui.FlexValue(30)",
+  ])
+    expect(item).toContain(field);
+  expect(go.slice(go.indexOf('"open"'))).not.toContain("MaxWidth");
 });

@@ -8,7 +8,7 @@ bindings and navigation keep source order. Reversal changes their main-axis
 coordinates inside the content box; padding sides and cross-axis alignment remain
 physical and unchanged.
 
-Use a full-width, fixed-height root and explicit pixel bases, zero minima and
+Use a full-width, fixed-height root and explicit pixel bases, pixel minima and
 border-box sizing. Uniform solid borders and asymmetric padding are supported.
 RTL, vertical writing, wrapping, auto/negative margins and per-side borders
 remain unsupported. The JavaScript DOM adapter uses its separate legacy layout

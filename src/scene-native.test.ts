@@ -475,3 +475,28 @@ test("responsive scene margins survive both generators and stay off the root", a
     "margins apply only to flex items",
   );
 });
+
+test("responsive scene limits survive both generators and stay off the root", async () => {
+  const document = responsive();
+  Object.assign(document.roots[0]!.children[0]!.sourceStyle!.flex, {
+    minWidth: 12,
+    maxHeight: 30,
+  });
+  expect(emitNativeScene(document, nativeOptions).code).toContain(
+    "MaxHeight:webui.FlexValue(30)",
+  );
+  const web = emitWebScene(document, { name: "Limits" });
+  expect(web.preact).toMatch(/maxHeight"?:\s*30/);
+  const entry = join(directory, "Limits.tsx");
+  await writeFile(entry, web.preact);
+  const go = emitGo(await compile(entry), {
+    name: "Recompiled",
+    packageName: "generated",
+  });
+  expect(go).toContain("MinWidth: webui.FlexValue(12)");
+  expect(go).toContain("MaxHeight: webui.FlexValue(30)");
+  document.roots[0]!.sourceStyle!.flex.maxWidth = 100;
+  expect(() => emitWebScene(document, { name: "Invalid" })).toThrow(
+    "the root cannot declare nonzero minima or maxima",
+  );
+});
