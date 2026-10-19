@@ -3,6 +3,10 @@
 
 # Portable native motion
 
+For automatic conversion of supported source CSS without manual target bindings,
+see [CSS height animations](css-height-animations.md). The explicit motion API
+below also supports geometry owned directly by a host.
+
 `github.com/thinkddr/astro-fyne/native/motion` samples numeric keyframes and moves
 real Fyne objects. The clip metadata and playback state can be serialized without
 exporting a Go callback. This package establishes a bounded geometry contract;

@@ -2,10 +2,18 @@
 // Copyright 2026 Astro Fyne contributors.
 
 import { createDocument } from "./javascript-dom.js";
-import { javascriptHostJSON, javascriptUTF8Bytes } from "./javascript-data.ts";
+import {
+  javascriptHostJSON,
+  javascriptUTF8Bytes,
+  validateJavascriptAnimationState,
+} from "./javascript-data.ts";
 
 /** Recorded host boundaries let replay rebuild closures and module state. */
 export function createRuntime(host, archive) {
+  const animated = archive.schema === 2,
+    restoredAnimation = animated
+      ? validateJavascriptAnimationState(archive.animation)
+      : null;
   const dom = createDocument(),
     queue = [],
     events = [],
@@ -221,6 +229,7 @@ export function createRuntime(host, archive) {
       const dispatch = (event) => {
         const prevented = dom.dispatch(event);
         drain();
+        if (animated) dom.snapshot();
         return prevented;
       };
       try {
@@ -232,21 +241,33 @@ export function createRuntime(host, archive) {
           dom.root,
         );
         drain();
+        if (animated) dom.snapshot();
       } catch (error) {
         failed = true;
         throw error;
       }
-      return {
+      const api = {
         snapshot: dom.snapshot,
         flush: drain,
         replay(event) {
           if (!replaying) throw new Error("Replay is already complete");
+          if (animated) {
+            if (
+              typeof event.timeMs !== "number" ||
+              !Number.isFinite(event.timeMs) ||
+              event.timeMs < dom.animationState().timeMs ||
+              event.timeMs > restoredAnimation.timeMs
+            )
+              throw new Error("Invalid animation event replay time");
+            dom.advanceAnimations(event.timeMs);
+          }
           dispatch(event);
           events.push(event);
         },
         finishReplay() {
           if (cursor !== stored.length)
             throw new Error("JavaScript replay left unconsumed host results");
+          if (animated) dom.restoreAnimationState(restoredAnimation);
           if (
             archive.frame &&
             JSON.stringify(dom.snapshot()) !== JSON.stringify(archive.frame)
@@ -264,7 +285,15 @@ export function createRuntime(host, archive) {
           dispatching = true;
           try {
             const prevented = dispatch(event);
-            events.push(JSON.parse(json(event)));
+            events.push(
+              JSON.parse(
+                json(
+                  animated
+                    ? { ...event, timeMs: dom.animationState().timeMs }
+                    : event,
+                ),
+              ),
+            );
             return prevented;
           } catch (error) {
             failed = true;
@@ -281,6 +310,7 @@ export function createRuntime(host, archive) {
             events: [...events],
             journal: [...journal],
             frame: dom.snapshot(),
+            ...(animated ? { animation: dom.animationState() } : {}),
           };
         },
         dispose() {
@@ -289,6 +319,33 @@ export function createRuntime(host, archive) {
           failed = true;
         },
       };
+      if (animated)
+        Object.assign(api, {
+          animationState: dom.animationState,
+          advanceAnimations(timeMs) {
+            if (replaying || failed || dispatching || queue.length)
+              throw new Error(
+                "Animation ticks require a valid settled program",
+              );
+            dom.advanceAnimations(timeMs);
+            dom.snapshot();
+          },
+          pauseAnimations() {
+            if (replaying || failed || dispatching || queue.length)
+              throw new Error(
+                "Animation controls require a valid settled program",
+              );
+            dom.pauseAnimations();
+          },
+          playAnimations() {
+            if (replaying || failed || dispatching || queue.length)
+              throw new Error(
+                "Animation controls require a valid settled program",
+              );
+            dom.playAnimations();
+          },
+        });
+      return api;
     },
   };
 }

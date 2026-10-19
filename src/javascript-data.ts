@@ -1,6 +1,31 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 
+import type { JavascriptAnimationState } from "./javascript-types.ts";
+
+export function validateJavascriptAnimationState(
+  value: unknown,
+): JavascriptAnimationState {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("JavaScript animation state requires an object");
+  const state = value as Record<string, unknown>;
+  if (
+    Object.keys(state).length !== 3 ||
+    state.schema !== 1 ||
+    typeof state.timeMs !== "number" ||
+    !Number.isFinite(state.timeMs) ||
+    state.timeMs < 0 ||
+    state.timeMs > 1e12 ||
+    !["running", "paused", "finished"].includes(state.playState as string)
+  )
+    throw new Error("Invalid JavaScript animation state");
+  return {
+    schema: 1,
+    timeMs: state.timeMs,
+    playState: state.playState as JavascriptAnimationState["playState"],
+  };
+}
+
 export function validJavascriptText(text: string): string {
   for (let i = 0; i < text.length; i++) {
     const unit = text.charCodeAt(i);

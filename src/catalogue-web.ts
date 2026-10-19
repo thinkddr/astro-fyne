@@ -3,6 +3,7 @@
 
 import type { CatalogueSpec } from "./catalogue-types.ts";
 import type { JavascriptArchive } from "./javascript-types.ts";
+import { validateJavascriptAnimationState } from "./javascript-data.ts";
 
 export interface CatalogueJavascriptHandle {
   exportJavascript(): JavascriptArchive;
@@ -126,10 +127,11 @@ function validateCheckpoint(value: unknown, prototype: JavascriptArchive) {
       "events",
       "journal",
     ],
-    ["stylesheets", "frame"],
+    ["stylesheets", "frame", "animation"],
   );
   if (
-    archive.schema !== 1 ||
+    ![1, 2].includes(archive.schema as number) ||
+    archive.schema !== prototype.schema ||
     archive.kind !== "astro-fyne-javascript" ||
     !archive.props ||
     typeof archive.props !== "object" ||
@@ -141,6 +143,9 @@ function validateCheckpoint(value: unknown, prototype: JavascriptArchive) {
     (archive.frame !== undefined && !Array.isArray(archive.frame))
   )
     fail("a checkpoint requires a complete JavaScript archive");
+  if (archive.schema === 2) validateJavascriptAnimationState(archive.animation);
+  else if (Object.hasOwn(archive, "animation"))
+    fail("schema 1 forbids animation state");
   if (
     archive.code !== prototype.code ||
     archive.codeHash !== prototype.codeHash ||

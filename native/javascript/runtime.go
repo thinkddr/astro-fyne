@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand/v2"
 	"strings"
 	"time"
@@ -30,9 +31,10 @@ type Stylesheet struct {
 	Text string `json:"text"`
 }
 type Event struct {
-	Node  string  `json:"node"`
-	Type  string  `json:"type"`
-	Value *string `json:"value,omitempty"`
+	Node   string   `json:"node"`
+	Type   string   `json:"type"`
+	Value  *string  `json:"value,omitempty"`
+	TimeMS *float64 `json:"timeMs,omitempty"`
 }
 type JournalEntry struct {
 	Kind  string  `json:"kind"`
@@ -69,12 +71,24 @@ type Archive struct {
 	// Raw frame JSON retains empty strings/arrays and field order for replay validation.
 	Frame json.RawMessage `json:"frame,omitempty"`
 
-	Stylesheets []Stylesheet `json:"stylesheets,omitempty"`
+	Stylesheets []Stylesheet    `json:"stylesheets,omitempty"`
+	Animation   *AnimationState `json:"animation,omitempty"`
 }
 
 func Validate(archive Archive) error {
-	if archive.Schema != 1 || archive.Kind != "astro-fyne-javascript" || len(archive.Code) == 0 || len(archive.Code) > 64*1024*1024 {
+	if (archive.Schema != 1 && archive.Schema != 2) || archive.Kind != "astro-fyne-javascript" || len(archive.Code) == 0 || len(archive.Code) > 64*1024*1024 {
 		return errors.New("javascript: invalid program archive")
+	}
+	if archive.Schema == 1 && archive.Animation != nil {
+		return errors.New("javascript: schema 1 forbids animation state")
+	}
+	if archive.Schema == 2 {
+		if archive.Animation == nil {
+			return errors.New("javascript: schema 2 requires animation state")
+		}
+		if err := validateAnimationState(*archive.Animation); err != nil {
+			return err
+		}
 	}
 	digest := sha256.Sum256([]byte(archive.Code))
 	if hex.EncodeToString(digest[:]) != archive.CodeHash {
@@ -129,9 +143,19 @@ func Validate(archive Archive) error {
 		}
 		seen[name] = true
 	}
+	previousTime := float64(0)
 	for _, event := range archive.Events {
 		if event.Node == "" || (event.Type != "click" && event.Type != "input" && event.Type != "change") {
 			return errors.New("javascript: invalid history event")
+		}
+		if archive.Schema == 1 && event.TimeMS != nil {
+			return errors.New("javascript: schema 1 forbids event timeMs")
+		}
+		if archive.Schema == 2 {
+			if event.TimeMS == nil || math.IsNaN(*event.TimeMS) || math.IsInf(*event.TimeMS, 0) || *event.TimeMS < previousTime || *event.TimeMS > archive.Animation.TimeMS {
+				return errors.New("javascript: event timeMs must be nondecreasing and within animation time")
+			}
+			previousTime = *event.TimeMS
 		}
 	}
 	for _, entry := range archive.Journal {
@@ -153,21 +177,35 @@ func Validate(archive Archive) error {
 // Widget uses Fyne's event goroutine. Goja is never called from concurrent UI work.
 type Widget struct {
 	*webui.View
-	vm      *goja.Runtime
-	api     *goja.Object
-	fault   error
-	budget  time.Duration
-	archive Archive
+	vm              *goja.Runtime
+	api             *goja.Object
+	fault           error
+	budget          time.Duration
+	archive         Archive
+	options         Options
+	animationAnchor time.Time
+	animationTime   float64
+	animationLast   time.Time
+	scheduler       *animationScheduler
+	closed          bool
 }
 
 func New(archive Archive, actions webui.Actions, backends ...webui.Backend) (*Widget, error) {
+	return NewWithOptions(archive, actions, Options{}, backends...)
+}
+
+// NewWithOptions configures clock ownership without changing the portable program.
+func NewWithOptions(archive Archive, actions webui.Actions, options Options, backends ...webui.Backend) (*Widget, error) {
 	if err := Validate(archive); err != nil {
 		return nil, err
 	}
 	if err := webui.Require(actions, archive.Actions); err != nil {
 		return nil, err
 	}
-	w := &Widget{vm: goja.New(), budget: 500 * time.Millisecond, archive: archive}
+	if options.Clock == nil {
+		options.Clock = ClockFunc(time.Now)
+	}
+	w := &Widget{vm: goja.New(), budget: 500 * time.Millisecond, archive: archive, options: options}
 	w.vm.SetMaxCallStackSize(512)
 	w.vm.SetPromiseRejectionTracker(func(_ *goja.Promise, operation goja.PromiseRejectionOperation) {
 		if operation == goja.PromiseRejectionReject {
@@ -280,6 +318,18 @@ func New(archive Archive, actions webui.Actions, backends ...webui.Backend) (*Wi
 	if err = w.Error(); err != nil {
 		return nil, err
 	}
+	if archive.Schema == 2 {
+		state, stateErr := w.AnimationState()
+		if stateErr != nil {
+			return nil, stateErr
+		}
+		if state != *archive.Animation {
+			return nil, errors.New("javascript: restored animation state differs from its archive")
+		}
+		if err = w.anchorAnimations(state); err != nil {
+			return nil, err
+		}
+	}
 	return w, nil
 }
 
@@ -295,6 +345,9 @@ func (w *Widget) limited(run func() error) error {
 	return run()
 }
 func (w *Widget) call(name string, args ...goja.Value) (goja.Value, error) {
+	if w.closed {
+		return nil, errors.New("javascript: widget is closed")
+	}
 	var result goja.Value
 	err := w.limited(func() error {
 		function, ok := goja.AssertFunction(w.api.Get(name))
@@ -337,13 +390,28 @@ func (w *Widget) decode(value goja.Value, target any) error {
 	return json.Unmarshal([]byte(encoded.String()), target)
 }
 func (w *Widget) dispatch(node, kind string, value *string) {
+	if w.closed {
+		return
+	}
+	if w.archive.Schema == 2 && !w.options.ManualAnimations {
+		if err := w.TickAnimations(); err != nil {
+			w.animationFault(err)
+			return
+		}
+	}
 	_, w.fault = w.callJSON("dispatch", Event{Node: node, Type: kind, Value: value})
 	if w.fault == nil {
 		_, w.fault = w.call("flush")
 	}
 	w.Refresh()
+	if w.fault != nil {
+		w.stopAnimations()
+	}
 }
 func (w *Widget) ExportJavascript() (Archive, error) {
+	if w.closed {
+		return Archive{}, errors.New("javascript: widget is closed")
+	}
 	// Reuse the scene/state transport's validation of the existing native frame.
 	if _, err := webui.ExportProgram(`{"actions":[]}`, w.archive.CodeHash, webui.Scope{}, webui.Scope{}, w.View); err != nil {
 		return Archive{}, err
@@ -359,8 +427,29 @@ func (w *Widget) ExportJavascript() (Archive, error) {
 	if err = Validate(archive); err != nil {
 		return Archive{}, err
 	}
+	if archive.Schema != w.archive.Schema {
+		return Archive{}, errors.New("javascript: export changed its animation schema")
+	}
+	if archive.Schema == 2 {
+		state, err := w.AnimationState()
+		if err != nil {
+			return Archive{}, err
+		}
+		if *archive.Animation != state {
+			return Archive{}, errors.New("javascript: export differs from the committed animation state")
+		}
+	}
 	return archive, nil
 }
 
-// Close runs Preact effect cleanups. Call on Fyne's event goroutine before disposal.
-func (w *Widget) Close() error { _, err := w.call("dispose"); return err }
+// Close stops scheduling and runs Preact effect cleanups on Fyne's event goroutine.
+func (w *Widget) Close() error {
+	if w.closed {
+		return nil
+	}
+	w.stopAnimations()
+	_, err := w.call("dispose")
+	w.closed = true
+	w.api, w.vm, w.options.Clock = nil, nil, nil
+	return err
+}
