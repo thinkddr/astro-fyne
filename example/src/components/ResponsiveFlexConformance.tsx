@@ -61,6 +61,7 @@ export function ResponsiveFlexConformance() {
           id="justify-start-2"
           style={{
             boxSizing: "border-box",
+            margin: 4,
             minWidth: 0,
             minHeight: 0,
             flexBasis: 48,
@@ -405,7 +406,6 @@ export function ResponsiveFlexConformance() {
           id="grow-shrink-1"
           style={{
             boxSizing: "border-box",
-            margin: 2,
             minWidth: 0,
             minHeight: 0,
             flexBasis: 96,
