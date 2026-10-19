@@ -10,7 +10,7 @@ physical and unchanged.
 
 Use a full-width, fixed-height root and explicit pixel bases, zero minima and
 border-box sizing. Uniform solid borders and asymmetric padding are supported.
-RTL, vertical writing, wrapping, `order`, nonzero/auto margins and per-side borders
+RTL, vertical writing, wrapping, nonzero/auto margins and per-side borders
 remain unsupported. The JavaScript DOM adapter uses its separate legacy layout
 path and continues to reject reverse directions.
 

@@ -21,6 +21,7 @@ export interface SceneFlex {
   borderStyle?: string;
   appearance?: string;
   marginSet?: boolean;
+  order?: number;
 }
 const numeric = [
   "grow",
@@ -57,7 +58,7 @@ export function validateSceneFlex(value: unknown, path: string): SceneFlex {
   const source = sceneJSONRecord(value, path);
   sceneJSONFields(
     source,
-    [...numeric, ...booleans, ...Object.keys(choices)],
+    [...numeric, ...booleans, ...Object.keys(choices), "order"],
     path,
   );
   const result: SceneFlex = {};
@@ -67,6 +68,16 @@ export function validateSceneFlex(value: unknown, path: string): SceneFlex {
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
       fail(`${path}.${key}`, "expected a finite nonnegative declaration");
     result[key] = value;
+  }
+  if (source.order !== undefined) {
+    if (
+      typeof source.order !== "number" ||
+      !Number.isInteger(source.order) ||
+      source.order < -(2 ** 31) ||
+      source.order > 2 ** 31 - 1
+    )
+      fail(`${path}.order`, "expected a 32-bit integer");
+    result.order = source.order;
   }
   for (const key of booleans) {
     if (source[key] === undefined) continue;
@@ -135,6 +146,7 @@ export function validateResponsiveScene(document: SceneDocument): void {
         );
     }
     if (!parent) {
+      if (f.order) fail(path, "order applies only to flex items");
       if (
         node.kind !== "container" ||
         s.display !== "flex" ||
@@ -284,6 +296,7 @@ export function sourceStyleCSS(
   ] as const)
     if (f[key]) css[key] = f[key]!;
   if (f.marginSet) css.margin = 0;
+  if (f.order) css.order = f.order;
   if (s.fontFamily)
     Object.assign(css, {
       fontFamily: s.fontFamily,

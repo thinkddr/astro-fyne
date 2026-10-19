@@ -432,3 +432,23 @@ test("reverse responsive scene directions survive both generators and keep colum
     }
   }
 });
+
+test("responsive scene order survives both generators and stays off the root", async () => {
+  const document = responsive();
+  document.roots[0]!.children[0]!.sourceStyle!.flex.order = -3;
+  expect(emitNativeScene(document, nativeOptions).code).toContain("Order:-3");
+  const web = emitWebScene(document, { name: "Ordered" });
+  expect(web.preact).toMatch(/order"?:\s*-3/);
+  const entry = join(directory, "Ordered.tsx");
+  await writeFile(entry, web.preact);
+  expect(
+    emitGo(await compile(entry), {
+      name: "Recompiled",
+      packageName: "generated",
+    }),
+  ).toContain("Order: -3");
+  document.roots[0]!.sourceStyle!.flex.order = 1;
+  expect(() => emitWebScene(document, { name: "Invalid" })).toThrow(
+    "order applies only to flex items",
+  );
+});

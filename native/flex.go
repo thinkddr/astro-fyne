@@ -4,8 +4,10 @@
 package webui
 
 import (
+	"cmp"
 	"fmt"
 	"math"
+	"slices"
 
 	"fyne.io/fyne/v2"
 )
@@ -15,7 +17,9 @@ import (
 // from auto. Dimensions and bases use border-box CSS pixels.
 //
 // The tree requires a width:100% root with fixed height, pixel item bases and min0.
-// Intrinsic sizing, wrap/order, RTL, nonzero margins/minima, percentage bases
+// Order is an integer; ties keep source order. Fyne object, focus and paint
+// order stay in source order (items never overlap in this profile).
+// Intrinsic sizing, wrap, RTL, nonzero margins/minima, percentage bases
 // and max constraints are unsupported. Text/control/bitmap leaves need explicit styles.
 type FlexStyle struct {
 	Grow           *float32 `json:"grow,omitempty"`
@@ -34,6 +38,7 @@ type FlexStyle struct {
 	BorderStyle    string   `json:"borderStyle,omitempty"`
 	Appearance     string   `json:"appearance,omitempty"`
 	MarginSet      bool     `json:"marginSet,omitempty"`
+	Order          int      `json:"order,omitempty"`
 }
 
 // FlexValue preserves presence for numeric CSS declarations, including zero.
@@ -69,6 +74,10 @@ func validateFlexStyle(id string, style Style) error {
 			return fmt.Errorf("webui: nonfinite or negative flex declaration on %q", id)
 		}
 	}
+	// Browsers clamp CSS integers; keep order where no clamping can differ.
+	if f.Order < math.MinInt32 || f.Order > math.MaxInt32 {
+		return fmt.Errorf("webui: flex order on %q is outside the 32-bit CSS integer range", id)
+	}
 	if !finite(horizontalDecoration(style)) || !finite(verticalDecoration(style)) {
 		return fmt.Errorf("webui: overflowing flex padding or border on %q", id)
 	}
@@ -97,7 +106,7 @@ func validateFlexTree(nodes []Node) error {
 				f := node.Style.Flex
 				if f != nil && (f.Grow != nil || f.Shrink != nil || f.Basis != nil || f.MinWidth != nil || f.MinHeight != nil ||
 					f.WidthPercent != nil || f.HeightPercent != nil || f.JustifyContent != "" || f.AlignItems != "" ||
-					f.AlignSelf != "" || f.BoxSizing != "" || f.BorderStyle != "" || f.Appearance != "" || f.MarginSet) {
+					f.AlignSelf != "" || f.BoxSizing != "" || f.BorderStyle != "" || f.Appearance != "" || f.MarginSet || f.Order != 0) {
 					return fmt.Errorf("webui: flex declarations on %q require a supported responsive flex root", node.ID)
 				}
 				if err := checkLegacy(node.Children); err != nil {
@@ -202,6 +211,9 @@ func validateFlexTree(nodes []Node) error {
 		if parent == nil {
 			if f.WidthPercent == nil || *f.WidthPercent != 100 || !f.HeightSet || s.Height <= 0 || f.HeightPercent != nil {
 				return fail("root requires width:100% and a positive definite pixel height")
+			}
+			if f.Order != 0 {
+				return fail("order applies only to flex items")
 			}
 		} else {
 			if f.Basis == nil || f.MinWidth == nil || f.MinHeight == nil {
@@ -492,8 +504,15 @@ func flexFrames(children []*element, parent Style, content fyne.Size, origin fyn
 			offset = free
 		}
 	}
+	// Main-axis placement follows order-modified document order.
+	sequence := make([]int, len(children))
+	for i := range sequence {
+		sequence[i] = i
+	}
+	slices.SortStableFunc(sequence, func(a, b int) int { return cmp.Compare(children[a].style.Flex.Order, children[b].style.Flex.Order) })
 	frames := make([]flexFrame, len(children))
-	for i, child := range children {
+	for _, i := range sequence {
+		child := children[i]
 		s, f := child.style, child.style.Flex
 		crossSize, crossSet, percent := s.Width, f.WidthSet, f.WidthPercent
 		crossFloor := horizontalDecoration(s)

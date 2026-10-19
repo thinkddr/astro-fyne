@@ -172,6 +172,9 @@ factors remain zero. Sizes and spacing use numbers or `px`, not the prototype ma
 14px `rem` assumption. A dimension of zero remains distinct from an omitted dimension.
 
 Supported main axes are `row`, `row-reverse`, `column` and `column-reverse`, with one equal `gap` between items. Source and object order remain unchanged. This contract requires LTR horizontal writing.
+Items may declare an integer `order` (32-bit range); main-axis placement follows order-modified
+document order, with ties in source order. Fyne objects, focus traversal and paint keep source
+order, which matches the browser here because items never overlap. The root cannot declare `order`.
 `justifyContent` accepts `flex-start`, `flex-end`, `center`, `space-between`,
 `space-around` and `space-evenly`. `alignItems` and `alignSelf` accept `flex-start`,
 `flex-end`, `center` and `stretch`; `alignSelf: "auto"` inherits the container's setting.
@@ -206,7 +209,7 @@ and zero padding, border and radius. The responsive bitmap corpus uses the sourc
 natural 16×16 size and scale 1; it does not certify image interpolation at another size or scale.
 
 This mode does not implement text or control intrinsic sizes, automatic/content/percentage
-bases, automatic minima, nonzero/auto margins, wrapping, RTL/vertical writing, `order`, baseline alignment,
+bases, automatic minima, nonzero/auto margins, wrapping, RTL/vertical writing, baseline alignment,
 min/max constraints, the CSS cascade, external stylesheets or arbitrary percentage sizing.
 Unsupported declarations or tree shapes fail explicitly. Measured profiles keep their
 existing exact-viewport restriction.
