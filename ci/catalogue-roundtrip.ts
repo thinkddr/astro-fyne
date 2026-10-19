@@ -320,12 +320,15 @@ if (mode === "prepare") {
     "src/javascript-css-runtime.js",
     "native/javascript/runtime.go",
     "native/javascript/nodes.go",
+    "native/fontresource/validate.go",
+    "native/fontresource/validate_test.go",
     "native/go.mod",
     "native/go.sum",
     "package.json",
     "bun.lock",
     ".github/workflows/ci.yml",
     "example/public/fonts/NotoSans-Regular.ttf",
+    "example/public/fonts/NotoSans-Bold.ttf",
     "example/public/fonts/LICENSE-NotoSans.txt",
     ...(await readdir(join(root, "native/catalog")))
       .filter((file) => file.endsWith(".go"))
