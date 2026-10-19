@@ -404,6 +404,13 @@ func (v *View) applyLayout(measurements map[string]Style, scene bool) error {
 	if len(measurements) == 0 {
 		return fmt.Errorf("webui: a measurement profile must not be empty")
 	}
+	if !v.responsive {
+		if err := validateLegacyText(v.nodes, measurements, v.backend); err != nil {
+			v.err = err
+			return err
+		}
+	}
+	previousMeasurements, previousState, previousScene := v.measurements, v.measurementState, v.sceneLayout
 	v.measurements = make(map[string]Style, len(measurements))
 	for id, style := range measurements {
 		v.measurements[id] = style
@@ -414,7 +421,12 @@ func (v *View) applyLayout(measurements map[string]Style, scene bool) error {
 		v.measurementState = frameState(v.nodes, true)
 	}
 	v.Refresh()
-	return errors.Join(v.err, v.canvasErr)
+	err := errors.Join(v.err, v.canvasErr)
+	var admissionError *legacyTextAdmissionError
+	if errors.As(err, &admissionError) {
+		v.measurements, v.measurementState, v.sceneLayout = previousMeasurements, previousState, previousScene
+	}
+	return err
 }
 
 // ClearMeasurements returns to source layout and removes capture certification.
@@ -504,6 +516,17 @@ func (v *View) reconcile() {
 			}
 		}
 	}
+	if !responsive {
+		if len(v.measurements) > 0 && profileError == nil {
+			for id, style := range v.measurements {
+				legacyStyles[id] = style
+			}
+		}
+		if err := validateLegacyText(nodes, legacyStyles, backend); err != nil {
+			v.err = err
+			return
+		}
+	}
 	// Save sibling order before updates: an index change alone does not mean a DOM move.
 	previousRoots := append([]*element(nil), v.roots...)
 	previousChildren := make(map[*element][]*element, len(v.elements))
@@ -568,7 +591,7 @@ func (v *View) reconcile() {
 			if measured, ok := v.measurements[n.ID]; ok && profileError == nil {
 				style = measured
 			}
-			if !v.responsive && !style.Measured {
+			if !v.responsive {
 				e.style = legacyStyles[n.ID]
 			} else {
 				e.style = resolveStyle(n, style, inherited, v.backend, v.responsive)

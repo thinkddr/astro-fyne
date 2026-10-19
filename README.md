@@ -203,6 +203,9 @@ See the runnable [native demo](native/cmd/astro-fyne-demo/main.go) and
 faces are supported. Font licenses remain your responsibility; the included Noto Sans files
 retain their [SIL Open Font License](example/public/fonts/LICENSE-NotoSans.txt).
 
+Host backends can opt into [native text admission](docs/native-text-admission.md)
+to check resolved text before a legacy or Goja view commits its native frame.
+
 ## Convert Fyne to Astro + Preact
 
 Export a supported, already laid out Fyne tree with the Go `reverse.Export` API and save the

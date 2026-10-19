@@ -153,6 +153,7 @@ GOMAXPROCS=2 go test -count=1 -p=2 -race ./... || task_native_test_status=$?
 # pages only after the native tests have retained the actual frames and scenes.
 if [[ "$task_native_test_status" -eq 0 ]]; then
   cd ..
+  bash ci/text-admission.sh
   bun capture/motion-catalogue.ts artifacts/motion-catalogue/native.json artifacts/motion-catalogue
   while IFS= read -r task_flex_case; do
     bun src/cli.ts reverse --scene "artifacts/responsive-flex/$task_flex_case/scene.json" --out "example/src/pages/flex-reverse/$task_flex_case" --name FlexReverse --public-dir example/public
