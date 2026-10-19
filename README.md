@@ -205,6 +205,8 @@ retain their [SIL Open Font License](example/public/fonts/LICENSE-NotoSans.txt).
 
 Host backends can opt into [native text admission](docs/native-text-admission.md)
 to check resolved text before a legacy or Goja view commits its native frame.
+The [nominal font backend](native/fontbackend/README.md) binds that check to
+private copies of explicit font resources for the documented static text profile.
 
 ## Convert Fyne to Astro + Preact
 
