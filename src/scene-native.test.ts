@@ -277,7 +277,7 @@ test("responsive metadata is versioned and validates declarations before generat
       s.roots[0]!.sourceStyle!.radius = 2;
     },
     (s) => {
-      s.roots[0]!.children[0]!.sourceStyle!.flex.minWidth = 1;
+      s.roots[0]!.children[0]!.sourceStyle!.flex.minWidth = -1;
     },
     (s) => {
       s.roots[0]!.children[0]!.sourceStyle!.flex.basis = undefined;
