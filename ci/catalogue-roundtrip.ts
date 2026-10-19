@@ -221,6 +221,11 @@ if (mode === "prepare") {
   });
   await retainedBytes(native, spec);
   await writeFile(join(native, "catalogue_probe_test.go"), driver);
+  await command(
+    "format-generated-driver",
+    ["gofmt", "-w", "catalogue_probe_test.go"],
+    native,
+  );
   const moduleLocks = await Promise.all(
     ["go.mod", "go.sum"].map((file) => readFile(join(root, "native", file))),
   );
