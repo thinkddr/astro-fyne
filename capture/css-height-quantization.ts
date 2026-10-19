@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Browser, Page } from "playwright";
+import type { Browser, BrowserContextOptions, Page } from "playwright";
 
 const chromiumSourceCommit = "971a7443b0c9b0a9b2860529b33331b76077ec62";
 const viewport = { width: 320, height: 240 };
@@ -15,7 +15,7 @@ const elementIds = [
   "quantization-sibling-1",
   "quantization-sibling-2",
 ];
-type ProbeCase = {
+export type ProbeCase = {
   id: string;
   height: string;
   animation?: { from: string; to: string; easing: string };
@@ -259,15 +259,26 @@ async function observe(page: Page, timeMs: number, animated: boolean) {
   );
 }
 
-/** Observe browser behavior without choosing a converter quantization rule. */
-export async function captureCSSHeightQuantization(
+export interface HeightProbeContext {
+  id: string;
+  options: BrowserContextOptions;
+}
+
+/** Keep source bytes and browser observations independent of converter math. */
+export async function observeCSSHeightCases(
   browser: Browser,
-  out: string,
-): Promise<void> {
-  const directory = join(out, "css-height-quantization");
+  directory: string,
+  probeCases: ProbeCase[],
+  contexts: HeightProbeContext[],
+) {
   await mkdir(directory, { recursive: true });
+  assert.ok(probeCases.length > 0 && contexts.length > 0);
+  assert.equal(
+    new Set(probeCases.map((item) => item.id)).size,
+    probeCases.length,
+  );
   const sources = [];
-  for (const item of cases) {
+  for (const item of probeCases) {
     assert.match(item.id, /^[a-z0-9-]+$/);
     assert.ok(item.times.length > 0);
     let previous = -1;
@@ -295,15 +306,12 @@ export async function captureCSSHeightQuantization(
     });
   }
   const observations = [];
-  for (const deviceScaleFactor of [1, 2]) {
-    const context = await browser.newContext({
-      viewport,
-      deviceScaleFactor,
-      colorScheme: "light",
-      reducedMotion: "no-preference",
-    });
+  assert.equal(new Set(contexts.map((item) => item.id)).size, contexts.length);
+  for (const profile of contexts) {
+    assert.match(profile.id, /^[a-z0-9-]+$/);
+    const context = await browser.newContext(profile.options);
     try {
-      for (const item of cases) {
+      for (const item of probeCases) {
         const page = await context.newPage();
         const errors: string[] = [];
         page.on("pageerror", (error) => errors.push(error.message));
@@ -317,7 +325,7 @@ export async function captureCSSHeightQuantization(
             finiteObservation(value);
             assert.ok(value.devicePixelRatio > 0);
             assert.ok(value.visualViewport && value.visualViewport.scale > 0);
-            const file = `${item.id}-dpr${deviceScaleFactor}-${index}.png`;
+            const file = `${item.id}-${profile.id}-${index}.png`;
             const png = await page.screenshot({ path: join(directory, file) });
             assert.ok(png.byteLength >= 24);
             assert.ok(
@@ -340,7 +348,9 @@ export async function captureCSSHeightQuantization(
           assert.deepEqual(errors, []);
           observations.push({
             id: item.id,
-            requestedDeviceScaleFactor: deviceScaleFactor,
+            context: profile.id,
+            requestedDeviceScaleFactor:
+              profile.options.deviceScaleFactor ?? null,
             samples,
           });
         } finally {
@@ -351,7 +361,30 @@ export async function captureCSSHeightQuantization(
       await context.close();
     }
   }
-  assert.equal(observations.length, cases.length * 2);
+  assert.equal(observations.length, probeCases.length * contexts.length);
+  return { sources, observations };
+}
+
+/** Observe browser behavior without choosing a converter quantization rule. */
+export async function captureCSSHeightQuantization(
+  browser: Browser,
+  out: string,
+): Promise<void> {
+  const directory = join(out, "css-height-quantization");
+  const { sources, observations } = await observeCSSHeightCases(
+    browser,
+    directory,
+    cases,
+    [1, 2].map((deviceScaleFactor) => ({
+      id: `dpr${deviceScaleFactor}`,
+      options: {
+        viewport,
+        deviceScaleFactor,
+        colorScheme: "light",
+        reducedMotion: "no-preference",
+      },
+    })),
+  );
   const module = await readFile(new URL(import.meta.url));
   await writeFile(
     join(directory, "observations.json"),
@@ -385,4 +418,7 @@ export async function captureCSSHeightQuantization(
       2,
     ) + "\n",
   );
+  const { captureCSSHeightScaleOracle } =
+    await import("./css-height-scale-oracle.ts");
+  await captureCSSHeightScaleOracle(out);
 }
