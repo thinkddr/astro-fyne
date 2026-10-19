@@ -114,11 +114,18 @@ go list -m -json all > "$task_evidence/original-native-modules.jsonl"
 ASTRO_FYNE_TYPOGRAPHY_ARTIFACTS="$task_evidence/original-native" ASTRO_FYNE_TEXT_VARIANT="$task_production_variant" ASTRO_FYNE_TEXT_ORIGIN=nearest \
   GOMAXPROCS=2 go test -count=1 -p=1 -run '^TestTypographyProbeSoftwareCanvasEvidence$' ./generated
 GOMAXPROCS=2 go test -json -count=1 -p=1 -race ./fontresource > "$task_evidence/original-font-coverage.jsonl"
+GOMAXPROCS=2 go test -c -race -p=1 -o "$task_evidence/font-backend-original.test" ./fontbackend
+go version -m "$task_evidence/font-backend-original.test" > "$task_evidence/font-backend-build-info.txt"
+(
+  cd fontbackend
+  GOMAXPROCS=2 go tool test2json -p github.com/thinkddr/astro-fyne/native/fontbackend -t "$task_evidence/font-backend-original.test" -test.v=test2json -test.count=1
+) > "$task_evidence/original-font-backend.jsonl"
 go mod edit -modfile="$task_modfile" -replace="github.com/go-text/typesetting=$task_checkout"
 ASTRO_FYNE_TYPOGRAPHY_ARTIFACTS="$task_evidence/candidate-native" ASTRO_FYNE_TEXT_VARIANT=fork-fractional-candidate ASTRO_FYNE_TEXT_ORIGIN=nearest \
   GOMAXPROCS=2 go test -mod=mod -modfile="$task_modfile" -count=1 -p=1 -run '^TestTypographyProbeSoftwareCanvasEvidence$' ./generated
 GOMAXPROCS=2 go test -json -mod=mod -modfile="$task_modfile" -count=1 -p=1 -race -run '^TestCoverageBuildContract$' ./fontresource > "$task_evidence/replaced-font-coverage.jsonl"
-GOMAXPROCS=2 go test -mod=mod -modfile="$task_modfile" -count=1 -p=2 -race -skip '^TestStaticFace' ./... > "$task_evidence/native-tests.log"
+GOMAXPROCS=2 go test -json -mod=mod -modfile="$task_modfile" -count=1 -p=1 -race -run '^TestFontBackendBuildContract$' ./fontbackend > "$task_evidence/replaced-font-backend.jsonl"
+GOMAXPROCS=2 go test -mod=mod -modfile="$task_modfile" -count=1 -p=2 -race -skip '^(TestStaticFace|TestNominalBackend)' ./... > "$task_evidence/native-tests.log"
 go list -mod=mod -modfile="$task_modfile" -m -json all > "$task_evidence/patched-native-modules.jsonl"
 cp "$task_modfile" "$task_evidence/patched-native.mod"
 cp "$task_temporary/native.sum" "$task_evidence/patched-native.sum"
@@ -132,6 +139,9 @@ replaced = [json.loads(line) for line in replaced_path.read_text().splitlines()]
 source = pathlib.Path('fontresource/coverage_test.go').read_text()
 names = re.findall(r'^func (TestStaticFace\w+)\(t \*testing.T\)', source, re.M)
 assert len(names) == 8 and len(set(names)) == 8
+backend_source = '\n'.join(path.read_text() for path in sorted(pathlib.Path('fontbackend').glob('*_test.go')))
+backend_names = re.findall(r'^func (TestNominalBackend\w+)\(t \*testing.T\)', backend_source, re.M)
+assert backend_names and len(backend_names) == len(set(backend_names))
 for events in [original, replaced]:
     assert not any(e.get('Action') in ['fail', 'skip'] for e in events)
     assert any(e.get('Action') == 'pass' and e.get('Test') == 'TestCoverageBuildContract' for e in events)
@@ -144,8 +154,12 @@ assert any('unqualified parser build rejected' in e.get('Output', '') for e in r
     'originalParser': 'github.com/go-text/typesetting@v0.3.4',
     'originalCoverageTestsPassed': names,
     'originalCoveragePassedCases': sorted({e['Test'] for e in original if e.get('Action') == 'pass' and e.get('Test', '').split('/')[0] in names}),
-    'patchedNativeSuiteSkipPattern': '^TestStaticFace',
-    'patchedNativeSuiteExcludedTests': names,
+    'patchedNativeSuiteSkipPattern': '^(TestStaticFace|TestNominalBackend)',
+    'patchedNativeSuiteExcludedTests': names + backend_names,
+    'patchedNativeSuiteExclusionsByPackage': {
+        'github.com/thinkddr/astro-fyne/native/fontresource': names,
+        'github.com/thinkddr/astro-fyne/native/fontbackend': backend_names,
+    },
     'patchedConstructorRejectionTest': 'TestCoverageBuildContract',
     'patchedConstructorRejected': True,
     'originalTraceHash': hashlib.sha256(original_path.read_bytes()).hexdigest(),
@@ -157,6 +171,48 @@ assert any('unqualified parser build rejected' in e.get('Output', '') for e in r
     'patchedModfileHash': hashlib.sha256((root/'patched-native.mod').read_bytes()).hexdigest(),
     'patchedSumHash': hashlib.sha256((root/'patched-native.sum').read_bytes()).hexdigest(),
     'pixelPerfectVerified': False,
+}, indent=2) + '\n')
+PY
+python3 - "$task_evidence" <<'PY'
+import hashlib, json, pathlib, re, shutil, subprocess, sys
+root = pathlib.Path(sys.argv[1])
+sources = sorted(pathlib.Path('fontbackend').glob('*.go'))
+source = '\n'.join(path.read_text() for path in sources if path.name.endswith('_test.go'))
+names = re.findall(r'^func (TestNominalBackend\w+)\(t \*testing.T\)', source, re.M)
+assert names and len(names) == len(set(names))
+traces = {}
+for kind in ['original', 'replaced']:
+    events = [json.loads(line) for line in (root/f'{kind}-font-backend.jsonl').read_text().splitlines()]
+    assert not any(event.get('Action') in ['fail', 'skip'] for event in events)
+    assert any(event.get('Action') == 'pass' and event.get('Test') == 'TestFontBackendBuildContract' for event in events)
+    assert sum(event.get('Action') == 'pass' and event.get('Test') is None and event.get('Package') == 'github.com/thinkddr/astro-fyne/native/fontbackend' for event in events) == 1
+    traces[kind] = events
+assert all(sum(event.get('Action') == 'pass' and event.get('Test') == name for event in traces['original']) == 1 for name in names)
+assert any('qualified nominal backend build admitted' in event.get('Output', '') for event in traces['original'])
+assert any('unqualified nominal backend build rejected' in event.get('Output', '') for event in traces['replaced'])
+assert not any(event.get('Test', '').split('/')[0] in names for event in traces['replaced'])
+bindings = []
+for path in [*sources, pathlib.Path('fontbackend/README.md'), pathlib.Path('view.go'), pathlib.Path('backend.go'), pathlib.Path('controls.go'), pathlib.Path('text_admission.go'), pathlib.Path('go.mod'), pathlib.Path('go.sum')]:
+    data = path.read_bytes()
+    relative = 'native/' + path.as_posix()
+    assert data == subprocess.check_output(['git', 'show', 'HEAD:' + relative]), relative
+    target = root/'font-backend-inputs'/relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(path, target)
+    bindings.append({'source': relative, 'file': str(target.relative_to(root)), 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)})
+for name in ['font-backend-original.test', 'font-backend-build-info.txt', 'go-version.txt', 'original-font-backend.jsonl', 'replaced-font-backend.jsonl', 'font-coverage-variants.json', 'fractional-text.sh', 'original-native-modules.jsonl', 'patched-native-modules.jsonl', 'patched-native.mod', 'patched-native.sum', 'native-tests.log']:
+    data = (root/name).read_bytes()
+    bindings.append({'file': name, 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)})
+(root/'font-backend-variants.json').write_text(json.dumps({
+    'schema': 1, 'accepted': True, 'diagnosticOnly': True,
+    'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+    'tree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),
+    'originalOnlyTests': names,
+    'originalPassedCases': sorted({event['Test'] for event in traces['original'] if event.get('Action') == 'pass' and event.get('Test')}),
+    'patchedNativeSuiteSkipPattern': '^(TestStaticFace|TestNominalBackend)',
+    'actualOriginalConstructorAdmitted': True, 'actualReplacedConstructorRejected': True,
+    'bindings': bindings, 'pixelPerfectVerified': False,
+    'scope': 'Nominal native font admission under an identified parser; no browser, shaping, fallback or raster certification',
 }, indent=2) + '\n')
 PY
 for task_scale in 1 2; do

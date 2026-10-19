@@ -93,6 +93,47 @@ copy that either CLI direction can consume. Source paths remain metadata and
 cannot redirect generated files. Resource licenses remain attached to each
 resource; generated wrapper code uses Apache-2.0.
 
+### Native nominal font admission
+
+A registered JavaScript factory can use the catalogue's existing licensed font
+bindings with `fontbackend.New`. The adapter owns private copies of the exact
+resources used for text checks and native painting. It supports the static text
+profile in the [font backend guide](../native/fontbackend/README.md), including
+explicit `nowrap`, exact faces and diagnostics for editors or unsupported text.
+
+```go
+var backend *fontbackend.Backend
+err := registry.RegisterFactory("Counter", func(input catalog.Instance) (fyne.Widget, error) {
+    if backend == nil {
+        prepared, err := fontbackend.New(input.Backend.Fonts)
+        if err != nil {
+            return nil, err
+        }
+        backend = prepared
+    }
+    var archive javascript.Archive
+    if err := json.Unmarshal([]byte(input.Component.Payload), &archive); err != nil {
+        return nil, err
+    }
+    return javascript.New(archive, input.Actions, backend)
+})
+```
+
+The example uses `encoding/json`, `fyne.io/fyne/v2` and the runtime packages
+`native/catalog`, `native/fontbackend` and `native/javascript` under
+`github.com/thinkddr/astro-fyne`. `Counter` must be a JavaScript component whose
+declared fonts and styles satisfy the adapter profile. The factory also receives
+an island's selected checkpoint when restoring that island. Construct instances
+on the Fyne event goroutine. The factory reuses one backend, keeping the stable
+font-resource identities shared across its widgets and islands.
+
+This opt-in is a host binding: register the factory again after parsing, cloning
+or updating a catalogue. Both CLI directions continue to preserve the font
+bytes, licenses and CSS through the existing catalogue format. They do not
+serialize or activate this adapter in browser output. Nominal glyph admission
+does not certify shaping, prevent every renderer fallback or establish pixel
+equivalence.
+
 ## Components and independent islands
 
 A `Component` contains a stable ID, a supported kind, exact JSON payload text,
