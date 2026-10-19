@@ -65,6 +65,18 @@ and bundles it; Goja parses the completed program before any artifacts are writt
 The executed tree receives further native adapter validation. Reports preserve source
 digests and `pixelPerfectVerified: false`; generation is not visual certification.
 
+Build tools in this checkout can call `prepareJavascriptBundle(source, selected,
+props, actions, stylesheets)` from `src/javascript.ts`. It returns `{ archive,
+inputPaths }`; `bundleJavascript` keeps returning only the unchanged archive.
+The sorted, unique absolute paths record direct Astro/module/CSS reads, including
+local CSS imports, processed-script dependencies, runtime sources and Preact's
+license. Virtual script labels are excluded. Pass `inputPaths` to
+`applyArtifacts` as `protectedInputs` to guard those files across output aliases.
+Callers add other inputs they read, such as props or font manifests. This list
+is not a trace of Bun's internal package/configuration reads, and it is not
+serialized into the portable archive. Preparation does not write output or
+execute the source component.
+
 ## Continue in Astro and return to Go
 
 After committing editor values and clearing focus, save
