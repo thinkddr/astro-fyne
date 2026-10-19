@@ -13,7 +13,7 @@ errors. Universal 1:1 conversion is the project goal, not a capability of this r
 
 [Compatibility](COMPATIBILITY.md) · [Native integration](docs/native-runtime.md) ·
 [Reverse conversion](docs/reverse-conversion.md) · [Visual verification](docs/visual-verification.md) ·
-[Image enlargement verification](docs/image-enlargement.md)
+[Image enlargement verification](docs/image-enlargement.md) · [CLI guide](docs/cli.md)
 
 The source compiler lowers supported logic into Go with native state and widgets.
 Nullable property/index chains such as `profile?.details.name ?? "Guest"` retain
@@ -45,12 +45,28 @@ The compiler is currently installed from this repository; there is no published 
 git clone https://github.com/thinkddr/astro-fyne.git
 cd astro-fyne
 bun install --frozen-lockfile
+bun link
 bun run to-fyne
 bun run check
 ```
 
 The default configuration converts `example/src/pages/index.astro` into
 `native/generated/counter.gen.go`. Its report is written beside the Go file.
+
+The linked CLI also works from your own project directory:
+
+```sh
+astro-fyne to-fyne src/App.tsx
+astro-fyne to-web App.program.json
+```
+
+The source shortcut uses the native Goja route, includes supported CSS imports
+and defaults to `native/generated`. The inverse shortcut detects exported
+JavaScript programs, declarative programs and native scenes; `App.program.json`
+defaults to `src/pages/app`. Override destinations with `--out`, names with
+`--name`, and verify either direction with `--check`. Keep the linked checkout
+and ensure Bun's binary directory is on `PATH`. See the
+[CLI guide](docs/cli.md) for native export, CSS and complete examples.
 
 Open the web example:
 
@@ -225,17 +241,21 @@ or `to-fyne --program`. Native execution remains generated Go. See the
 ## Commands
 
 All conversion commands support `--help`. `bun run astro-fyne --help` lists the complete interface.
+After `bun link`, use `astro-fyne` directly from any project directory. The
+`bun run` aliases below work inside this checkout.
 
-| Command                                     | Use                                                     |
-| ------------------------------------------- | ------------------------------------------------------- |
-| `bun run to-fyne`                           | Generate native Go; alias of `generate`                 |
-| `bun run to-web --scene … --out … --name …` | Generate Astro + Preact; alias of `reverse`             |
-| `bun run check`                             | Verify generated native files without writing           |
-| `bun run watch`                             | Regenerate native files after source edits              |
-| `bun run analyze`                           | Print the source manifest as JSON                       |
-| `bun run dev`                               | Start the example Astro development server              |
-| `bun run demo:scene`                        | Export the included native scene for reverse conversion |
-| `bun run demo:native`                       | Run the generated desktop example                       |
+| Command                                     | Use                                                       |
+| ------------------------------------------- | --------------------------------------------------------- |
+| `astro-fyne to-fyne src/App.tsx`            | Generate a native Goja widget with supported imported CSS |
+| `astro-fyne to-web App.program.json`        | Detect and convert a saved program or native scene        |
+| `bun run to-fyne`                           | Generate native Go; alias of `generate`                   |
+| `bun run to-web --scene … --out … --name …` | Generate Astro + Preact; alias of `reverse`               |
+| `bun run check`                             | Verify generated native files without writing             |
+| `bun run watch`                             | Regenerate native files after source edits                |
+| `bun run analyze`                           | Print the source manifest as JSON                         |
+| `bun run dev`                               | Start the example Astro development server                |
+| `bun run demo:scene`                        | Export the included native scene for reverse conversion   |
+| `bun run demo:native`                       | Run the generated desktop example                         |
 
 Forward source commands default to `astro-fyne.json`. Use `--config PATH`, `--entry NAME` and,
 for a single measured entry, `--measurements PATH`. Reverse output is checked with

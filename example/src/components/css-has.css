@@ -1,0 +1,88 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 Astro Fyne contributors. */
+/* These authored selectors must survive both conversion directions verbatim. */
+.has-case {
+  padding-left: 2px;
+  background-color: #e5e7eb;
+}
+#has-desc:has(.flag) {
+  padding-left: 7px;
+}
+#has-child:has(> .flag) {
+  padding-left: 9px;
+}
+#has-adjacent:has(+ .flag) {
+  padding-left: 11px;
+}
+#has-reverse:has(+ .flag) {
+  padding-left: 41px;
+}
+#has-general:has(~ .flag) {
+  padding-left: 13px;
+}
+#has-no-follow:has(~ .flag) {
+  padding-left: 43px;
+}
+#has-chain:has(> .branch + .branch > .flag) {
+  padding-left: 15px;
+}
+#has-branch-search:has(> .branch > .flag) {
+  padding-left: 39px;
+}
+#has-sibling-chain:has(+ .branch > .flag) {
+  padding-left: 47px;
+}
+#has-sibling-search:has(~ .branch > .flag) {
+  padding-left: 49px;
+}
+#has-anchor:has(.outside .flag) {
+  padding-left: 45px;
+}
+#has-functional:has(:is(.outside .flag)) {
+  padding-left: 37px;
+}
+#has-list:has(> .absent, > .flag) {
+  padding-left: 17px;
+}
+#has-not:not(:has(> .flag)) {
+  padding-left: 19px;
+}
+#has-is:is(:has(> .flag), .never) {
+  padding-left: 21px;
+}
+#has-where:where(:has(> .flag)) {
+  padding-left: 23px;
+}
+#has-and:has(> .flag):has(> .second) {
+  padding-left: 25px;
+}
+.has-specificity:has(.flag, #never-present) {
+  padding-left: 17px;
+}
+#has-specificity {
+  padding-left: 3px;
+}
+.has-is-specificity:is(:has(.flag), #never-present) {
+  padding-left: 19px;
+}
+#has-is-specificity {
+  padding-left: 4px;
+}
+.has-where-specificity:where(:has(.flag), #never-present) {
+  padding-left: 21px;
+}
+#has-where-specificity {
+  padding-left: 5px;
+}
+#has-checked:has(> input:checked) {
+  padding-left: 29px;
+}
+#has-disabled:has(> button:disabled) {
+  padding-left: 31px;
+}
+#has-move:has(> .flag) {
+  padding-left: 33px;
+}
+#has-move-desc:has(.flag) {
+  padding-left: 35px;
+}

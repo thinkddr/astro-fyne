@@ -20,6 +20,7 @@ import {
   usageError,
   wantsHelp,
 } from "./cli-help.js";
+import { normalizeConversionArgs } from "./cli-shortcuts.ts";
 
 interface Entry {
   name: string;
@@ -317,7 +318,7 @@ async function treeFingerprint(root: string): Promise<string> {
 }
 
 export async function main(args = process.argv.slice(2)): Promise<void> {
-  const argv = [...args];
+  let argv = [...args];
   const name = argv.shift();
   if (!name || name === "--help" || name === "-h" || name === "help") {
     if (name === "help" && argv.length > 1)
@@ -337,6 +338,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     process.stdout.write(helpText(command));
     return;
   }
+  argv = await normalizeConversionArgs(command, argv);
   if (argv.includes("--javascript")) {
     if (!["generate", "check", "reverse"].includes(command))
       throw usageError(

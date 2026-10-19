@@ -50,6 +50,33 @@ test("CSS supports groups preserve the Tailwind guard, cascade layers and live s
     },
   );
 });
+test("CSS feature groups retain live relative selectors and their specificity", async () => {
+  await withCSS(
+    `@layer base,active;
+     @layer base {.card {color:green;padding:2px}}
+     @layer active {
+       @supports (display:flex) and (not (color:astro-fyne-invalid)) {
+         .card:has(> .ready, #never) {color:red;padding-left:7px}
+         .card:has(> .ready) {color:blue}
+       }
+       @supports (display:astro-fyne-invalid) {.card:hover {position:absolute}}
+     }`,
+    ({ document, root, snapshot }) => {
+      const card = document.createElement("section");
+      card.className = "card";
+      const child = document.createElement("span");
+      card.appendChild(child);
+      root.appendChild(card);
+      expect(snapshot()[0].style.color).toBe("green");
+      child.className = "ready";
+      expect(snapshot()[0].style.color).toBe("red");
+      expect(snapshot()[0].style.paddingLeft).toBe("7px");
+      child.className = "";
+      expect(snapshot()[0].style.color).toBe("green");
+      expect(snapshot()[0].style.paddingLeft).toBe("2px");
+    },
+  );
+});
 test("CSS supports diagnoses unknown probes, mixed operators, active unsupported styles and nested imports", async () => {
   for (const source of [
     "@supports (transform:rotate(1deg)){.probe{color:red}}",
@@ -126,6 +153,347 @@ test("CSS variables inherit computed values and selectors follow live DOM state"
       expect(snapshot()[0].children[1].style.backgroundColor).toBe("yellow");
     },
   );
+});
+test("CSS :has starts relative paths at the subject and skips text siblings", async () => {
+  await withCSS(
+    `.subject:has(.target){color:red}.subject:has(>.target){background:blue}.subject:has(+.target){padding-left:3px}.subject:has(~.target){padding-right:4px}.subject:has(>.branch>.target){padding-top:5px}.subject:has(>.missing,.target){padding-bottom:6px}.subject:has(.subject){width:99px}`,
+    ({ document, root, snapshot }) => {
+      const subject = document.createElement("section");
+      subject.className = "subject target";
+      const branch = document.createElement("div");
+      branch.className = "branch";
+      const target = document.createElement("span");
+      target.className = "target";
+      branch.appendChild(target);
+      subject.appendChild(branch);
+      root.appendChild(subject);
+      root.appendChild(document.createTextNode("between elements"));
+      const peer = document.createElement("div");
+      peer.className = "target";
+      root.appendChild(peer);
+      const empty = document.createElement("section");
+      empty.className = "subject";
+      root.appendChild(empty);
+      expect(snapshot()[0].style).toEqual({
+        color: "red",
+        paddingLeft: "3px",
+        paddingRight: "4px",
+        paddingTop: "5px",
+        paddingBottom: "6px",
+      });
+      expect(snapshot().at(-1).style).toEqual({});
+      peer.remove();
+      expect(snapshot()[0].style).toEqual({
+        color: "red",
+        paddingTop: "5px",
+        paddingBottom: "6px",
+      });
+      const direct = document.createElement("span");
+      direct.className = "target";
+      subject.appendChild(direct);
+      expect(snapshot()[0].style.backgroundColor).toBe("blue");
+      expect(snapshot()[0].uid).toBe(subject.uid);
+    },
+  );
+});
+test("CSS :has retains alternative paths through mixed descendant and sibling chains", async () => {
+  await withCSS(
+    `.subject:has(.branch>.lead+.target){color:red}.subject:has(>.branch~.branch>.target){background:blue}`,
+    ({ document, root, snapshot }) => {
+      const subject = document.createElement("section");
+      subject.className = "subject";
+      root.appendChild(subject);
+      const branches = [0, 1].map(() => {
+        const branch = document.createElement("div");
+        branch.className = "branch";
+        const lead = document.createElement("span");
+        lead.className = "lead";
+        const target = document.createElement("span");
+        branch.appendChild(lead);
+        branch.appendChild(document.createTextNode("gap"));
+        branch.appendChild(target);
+        subject.appendChild(branch);
+        return { branch, lead, target };
+      });
+      branches[1]!.target.className = "target";
+      expect(snapshot()[0].style).toEqual({
+        color: "red",
+        backgroundColor: "blue",
+      });
+      branches[1]!.lead.remove();
+      expect(snapshot()[0].style).toEqual({ backgroundColor: "blue" });
+      branches[0]!.target.className = "target";
+      expect(snapshot()[0].style.color).toBe("red");
+      subject.insertBefore(branches[1]!.branch, branches[0]!.branch);
+      expect(snapshot()[0].style.backgroundColor).toBe("blue");
+    },
+  );
+});
+test("CSS :has keeps the anchor while functional arguments use their own selector context", async () => {
+  await withCSS(
+    `.subject:has(.outside .target){color:red}.subject:has(:is(.outside .target)){background:blue}.subject:has(+.peer>.lead+.target){padding-left:6px}.subject:has(~.later>.target){padding-right:7px}`,
+    ({ document, root, snapshot }) => {
+      root.className = "outside";
+      const subject = document.createElement("section");
+      subject.className = "subject";
+      const target = document.createElement("span");
+      target.className = "target";
+      subject.appendChild(target);
+      root.appendChild(subject);
+      const peer = document.createElement("div");
+      peer.className = "peer";
+      const lead = document.createElement("span");
+      lead.className = "lead";
+      peer.appendChild(lead);
+      const peerTarget = document.createElement("span");
+      peerTarget.className = "target";
+      peer.appendChild(peerTarget);
+      root.appendChild(peer);
+      const later = document.createElement("div");
+      later.className = "later";
+      const laterTarget = document.createElement("span");
+      laterTarget.className = "target";
+      later.appendChild(laterTarget);
+      root.appendChild(later);
+      expect(snapshot()[0].style).toEqual({
+        backgroundColor: "blue",
+        paddingLeft: "6px",
+        paddingRight: "7px",
+      });
+      expect(snapshot()[1].style).toEqual({});
+      subject.removeChild(target);
+      expect(snapshot()[0].style).toEqual({
+        paddingLeft: "6px",
+        paddingRight: "7px",
+      });
+      root.insertBefore(later, peer);
+      expect(snapshot()[0].style).toEqual({ paddingRight: "7px" });
+    },
+  );
+});
+test("CSS :has follows checked, disabled, class and reparenting changes", async () => {
+  await withCSS(
+    `.panel:has(>input:checked){--fill:blue;background:var(--fill)}.panel:has(>input:disabled){padding:5px}.panel:not(:has(>.error)){color:green}.panel:is(:has(>.error),.other){color:red}.panel:where(:has(>.error)){border-width:3px}`,
+    ({ document, root, snapshot }) => {
+      const panel = document.createElement("section");
+      panel.className = "panel";
+      const input = document.createElement("input");
+      input.setAttribute("type", "checkbox");
+      const message = document.createElement("span");
+      panel.appendChild(input);
+      panel.appendChild(message);
+      root.appendChild(panel);
+      expect(snapshot()[0].style).toEqual({ color: "green" });
+      input.checked = true;
+      expect(snapshot()[0].style.backgroundColor).toBe("blue");
+      input.disabled = true;
+      expect(snapshot()[0].style.paddingTop).toBe("5px");
+      message.className = "error";
+      expect(snapshot()[0].style.color).toBe("red");
+      expect(snapshot()[0].style.borderWidth).toBe("3px");
+      root.appendChild(message);
+      expect(snapshot()[0].style.color).toBe("green");
+      expect(snapshot()[0].style.borderWidth).toBeUndefined();
+      input.remove();
+      expect(snapshot()[0].style).toEqual({ color: "green" });
+      expect(snapshot()[0].uid).toBe(panel.uid);
+    },
+  );
+});
+test("CSS :has specificity uses the full argument list including unmatched branches", async () => {
+  await withCSS(
+    `.subject:has(.hit,#unmatched){color:red}.subject:has(:where(#unmatched),.hit){background:red}:where(.subject:has(#unmatched,.hit)){padding-left:7px}.subject:not(:has(#unmatched)){padding-right:8px}.subject:has(>.hit .deep,#missing){padding-top:9px}.subject.matched{color:blue;background:blue;padding-top:2px}.subject{padding-left:2px}#node{padding-right:3px}`,
+    ({ document, root, snapshot }) => {
+      const subject = document.createElement("section");
+      subject.id = "node";
+      subject.className = "subject matched";
+      const hit = document.createElement("div");
+      hit.className = "hit";
+      const deep = document.createElement("span");
+      deep.className = "deep";
+      hit.appendChild(deep);
+      subject.appendChild(hit);
+      root.appendChild(subject);
+      expect(snapshot()[0].style).toEqual({
+        color: "red",
+        backgroundColor: "blue",
+        paddingLeft: "2px",
+        paddingRight: "8px",
+        paddingTop: "9px",
+      });
+      hit.className = "miss";
+      expect(snapshot()[0].style).toEqual({
+        color: "blue",
+        backgroundColor: "blue",
+        paddingLeft: "2px",
+        paddingRight: "8px",
+        paddingTop: "2px",
+      });
+    },
+  );
+});
+test("CSS :has compounds require each relation and distinguish negation from existence", async () => {
+  await withCSS(
+    `.subject:has(.a):has(.b){color:red}.subject:has(.a,.b){background:blue}.subject:not(:has(.a)){padding-left:4px}.subject:has(:not(.a)){padding-right:5px}`,
+    ({ document, root, snapshot }) => {
+      const subject = document.createElement("section");
+      subject.className = "subject";
+      const a = document.createElement("span");
+      a.className = "a";
+      subject.appendChild(a);
+      root.appendChild(subject);
+      expect(snapshot()[0].style).toEqual({ backgroundColor: "blue" });
+      const b = document.createElement("span");
+      b.className = "b";
+      subject.appendChild(b);
+      expect(snapshot()[0].style).toEqual({
+        color: "red",
+        backgroundColor: "blue",
+        paddingRight: "5px",
+      });
+      a.remove();
+      expect(snapshot()[0].style).toEqual({
+        backgroundColor: "blue",
+        paddingLeft: "4px",
+        paddingRight: "5px",
+      });
+      b.remove();
+      expect(snapshot()[0].style).toEqual({ paddingLeft: "4px" });
+    },
+  );
+});
+test("CSS escaped star classes and IDs keep specificity in :has arguments", async () => {
+  await withCSS(
+    String.raw`.subject:has(.hit,#\*){color:red}.subject.other{color:blue}.\*{background:red}div{background:blue}#\*{padding-left:5px}.other{padding-left:2px}*{padding-right:1px}div{padding-right:2px}`,
+    ({ document, root, snapshot }) => {
+      const subject = document.createElement("div");
+      subject.id = "*";
+      subject.className = "subject other *";
+      const hit = document.createElement("span");
+      hit.className = "hit";
+      subject.appendChild(hit);
+      root.appendChild(subject);
+      expect(snapshot()[0].style).toEqual({
+        color: "red",
+        backgroundColor: "red",
+        paddingLeft: "5px",
+        paddingRight: "2px",
+      });
+    },
+  );
+});
+test("CSS :has rejects nested relations through every functional selector", async () => {
+  for (const selector of [
+    ".a:has(.b:has(.c))",
+    ".a:has(:is(.b,:has(.c)))",
+    ".a:has(:where(:not(:has(.c))))",
+    ".a:not(:has(.b:where(:has(.c))))",
+  ])
+    await expect(withCSS(`${selector}{color:red}`, () => {})).rejects.toThrow(
+      "CSS :has() cannot contain another :has()",
+    );
+});
+test("CSS escaped star type names are literal and retain type specificity", async () => {
+  await withCSS(
+    String.raw`\*{color:red}*{color:blue}:not(\*){background:red}*{background:blue}.subject:has(\*){padding-left:9px}div.subject{padding-right:2px}.subject:has(\*,*){padding-right:3px}`,
+    ({ document, root, snapshot }) => {
+      const subject = document.createElement("div");
+      subject.className = "subject";
+      subject.appendChild(document.createElement("span"));
+      root.appendChild(subject);
+      expect(snapshot()[0].style).toEqual({
+        color: "blue",
+        backgroundColor: "red",
+        paddingRight: "3px",
+      });
+    },
+  );
+});
+test("CSS escaped numeric IDs and leading BOM names remain valid relative selectors", async () => {
+  await withCSS(
+    String.raw`.subject:has(>#\31 23){color:red}#\-1{padding-left:3px}#\31 23{background:blue}` +
+      `.subject:has(>#\ufeff123){padding-right:4px}`,
+    ({ document, root, snapshot }) => {
+      const subject = document.createElement("section");
+      subject.id = "-1";
+      subject.className = "subject";
+      const numeric = document.createElement("span");
+      numeric.id = "123";
+      subject.appendChild(numeric);
+      const bom = document.createElement("span");
+      bom.id = "\ufeff123";
+      subject.appendChild(bom);
+      root.appendChild(subject);
+      expect(snapshot()[0].style).toEqual({
+        color: "red",
+        paddingLeft: "3px",
+        paddingRight: "4px",
+      });
+      expect(snapshot()[0].children[0].style.backgroundColor).toBe("blue");
+    },
+  );
+});
+test("CSS empty :is and :where arguments match nothing inside and outside :has", async () => {
+  await withCSS(
+    `.subject:is(){color:red}.subject:where(){background:blue}.subject:has(:is()){padding-left:5px}.subject:has(:where()){padding-right:6px}.subject:has(:is(),>.hit){padding-top:7px}.subject:has(:where(),>.hit){padding-bottom:8px}`,
+    ({ document, root, snapshot }) => {
+      const subject = document.createElement("section");
+      subject.className = "subject";
+      const hit = document.createElement("span");
+      hit.className = "hit";
+      subject.appendChild(hit);
+      root.appendChild(subject);
+      expect(snapshot()[0].style).toEqual({
+        paddingTop: "7px",
+        paddingBottom: "8px",
+      });
+      hit.remove();
+      expect(snapshot()[0].style).toEqual({});
+    },
+  );
+});
+test("CSS :has diagnoses unsupported or malformed arguments without installing rules", async () => {
+  for (const selector of [
+    ".a:has()",
+    ".a:has(>)",
+    ".a:has(>+.b)",
+    ".a:has(.b>)",
+    ".a:has(.b,,.c)",
+    ".a:has(>.b,>)",
+    ".a:has(::before)",
+    ".a:has(:is(.b,::before))",
+    ".a:has(:hover)",
+    ".a:has(.b||.c)",
+    ".a:has(ns|div)",
+    ".a:has(&)",
+    ".a:has(.hit*)",
+    ".a:has(>**)",
+    ".a:has(:checked*)",
+    ".hit*",
+    ".a:is(.hit*)",
+    ".a:not(.hit*)",
+    ".a:where(.hit*)",
+    ".a:not()",
+    ".a:has(:not())",
+    ".a:has(:is(.b,:not()))",
+    ".a:has(:where(:not()))",
+    ".a:not(:is(.b,:not()))",
+    "#123",
+    "#-1",
+    ".a:has(#123)",
+    ".a:has(>#-1)",
+    ".a:is(#123)",
+    ".a:not(#-1)",
+    ".a:has(:where(#123))",
+  ]) {
+    let installed = false;
+    await expect(
+      withCSS(`${selector}{color:red}`, () => {
+        installed = true;
+      }),
+    ).rejects.toThrow(/CSS/);
+    expect(installed).toBe(false);
+  }
 });
 test("CSS class and attribute tokens use HTML ASCII whitespace", async () => {
   await withCSS(
