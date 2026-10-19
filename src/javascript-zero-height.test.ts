@@ -6,8 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compileJavascriptCSS } from "./javascript-css.ts";
 import { generateJavascript } from "./javascript-cli.ts";
+import { bundleJavascript } from "./javascript.ts";
 import { prepareJavascriptDOM } from "./javascript-managed-dom.ts";
-import type { JavascriptFrame } from "./javascript-types.ts";
+import type { JavascriptFrame, JavascriptFactory } from "./javascript-types.ts";
 const { createDocument } = await import(
   new URL("./javascript-dom.js", import.meta.url).href
 );
@@ -119,8 +120,8 @@ test("zero endpoint admission rejects decorated targets before a later zero samp
   }
 });
 
-test("unsupported zero source is diagnosed before either CLI direction writes artifacts", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "afy-zero-cli-"));
+test("unsupported source zero frames are diagnosed when the bundled component mounts", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "afy-zero-mount-"));
   try {
     await writeFile(join(directory, "style.css"), "#panel{height:0}");
     for (const [index, source] of [
@@ -130,10 +131,51 @@ test("unsupported zero source is diagnosed before either CLI direction writes ar
     ].entries()) {
       const path = join(directory, `Panel${index}.tsx`);
       await writeFile(path, source);
+      const archive = await bundleJavascript(path),
+        factory: JavascriptFactory = eval(`(${archive.code})`);
+      expect(() => {
+        const api = factory(() => {
+          throw new Error("Unexpected host effect");
+        }, archive);
+        try {
+          api.flush();
+          api.snapshot();
+        } finally {
+          api.dispose();
+        }
+      }).toThrow(/zero height/);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("unsupported retained zero frames are diagnosed before either CLI direction writes artifacts", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "afy-zero-cli-"));
+  try {
+    const path = join(directory, "Panel.tsx");
+    await writeFile(path, "export default function Panel(){return <section/>}");
+    const initial = await bundleJavascript(path);
+    for (const [index, frame] of [
+      { uid: "panel", tag: "section", style: { height: 0 } },
+      { uid: "panel", tag: "button", css: true, style: { height: "0px" } },
+      {
+        uid: "panel",
+        tag: "section",
+        css: true,
+        style: { height: "0px" },
+        children: [{ uid: "text", tag: "#text", text: "Overflow" }],
+      },
+    ].entries()) {
       for (const direction of ["native", "web"] as const) {
         const out = join(directory, `out-${index}-${direction}`);
         await expect(
-          generateJavascript({ source: path, out, name: "Panel", direction }),
+          generateJavascript({
+            archive: { ...initial, frame: [frame] },
+            out,
+            name: "Panel",
+            direction,
+          }),
         ).rejects.toThrow(/zero height/);
         await expect(stat(out)).rejects.toThrow();
       }

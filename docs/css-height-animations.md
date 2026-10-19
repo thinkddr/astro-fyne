@@ -101,6 +101,11 @@ existing diagnostics. Custom backend defaults must preserve the empty,
 undecorated, auto-width zero-height profile; incompatible defaults are rejected
 before replacing the committed native tree.
 
+Source generation bundles code without executing the component. Runtime-only
+DOM restrictions are diagnosed when mounting or updating it. When a supplied
+archive already contains a frame, both CLI directions validate that frame before
+writing output.
+
 JavaScript archives preserve height declaration presence through the native and
 generated browser routes. Frozen native scenes preserve the measured zero box.
 Preserving source block-flow layout through the scene schema remains diagnosed;

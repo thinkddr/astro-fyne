@@ -182,6 +182,7 @@ import Harness from "./Harness.tsx";
     "native/javascript/nodes.go",
     "native/javascript/zero_height_test.go",
     "src/javascript-data.ts",
+    "src/javascript-cli.ts",
     "src/javascript-dom.js",
     "src/javascript-managed-dom.ts",
     "src/javascript-css-height.ts",
