@@ -34,6 +34,12 @@ The same route now accepts [Astro source files](docs/astro-javascript.md), inclu
 synchronous frontmatter, nested components/default and named slots, hydrated Preact islands and
 processed scripts. CI compares their native continuation with the original Astro page.
 
+Reusable [component catalogues](docs/catalogue.md) package widgets, exact CSS source,
+licensed fonts/resources, themes, source layouts and independent island checkpoints.
+The same CLI generates a native registry or an Astro/Preact library from its JSON export.
+[Portable motion](docs/motion.md) provides native Go controllers and a matching browser
+adapter for explicit numeric keyframes, clocks and target bindings.
+
 ## Get started
 
 Install [Bun](https://bun.sh/docs/installation) and the Go version declared in
@@ -62,7 +68,7 @@ astro-fyne to-web App.program.json
 
 The source shortcut uses the native Goja route, includes supported CSS imports
 and defaults to `native/generated`. The inverse shortcut detects exported
-JavaScript programs, declarative programs and native scenes; `App.program.json`
+JavaScript programs, declarative programs, catalogues and native scenes; `App.program.json`
 defaults to `src/pages/app`. Override destinations with `--out`, names with
 `--name`, and verify either direction with `--check`. Keep the linked checkout
 and ensure Bun's binary directory is on `PATH`. See the

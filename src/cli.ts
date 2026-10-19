@@ -339,6 +339,20 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     return;
   }
   argv = await normalizeConversionArgs(command, argv);
+  if (argv.includes("--catalogue")) {
+    if (!["generate", "check", "reverse"].includes(command))
+      throw usageError(
+        "Catalogues support to-fyne, to-web and check.",
+        command,
+      );
+    const { catalogueMain } = await import("./catalogue-cli.ts");
+    await catalogueMain(
+      argv,
+      command === "reverse" ? "web" : "native",
+      command === "check",
+    );
+    return;
+  }
   if (argv.includes("--javascript")) {
     if (!["generate", "check", "reverse"].includes(command))
       throw usageError(

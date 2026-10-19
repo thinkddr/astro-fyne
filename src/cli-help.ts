@@ -53,7 +53,7 @@ Examples:
 
 Run "bun run astro-fyne <command> --help" for options and examples.
 Source file shortcuts use JavaScript execution in pure-Go Goja with native Fyne controls.
-Exported JSON selects its existing JavaScript, portable program or scene route.
+Exported JSON selects its existing JavaScript, portable program, catalogue or scene route.
 Configured generation also offers declarative Go lowering.
 Both modes use native Fyne widgets and documented platform contracts. Generated output alone
 does not certify visual equivalence; compare browser and native captures.
@@ -64,9 +64,9 @@ does not certify visual equivalence; compare browser and native captures.
 Usage: bun run to-web <exported.json> [options]
 
 File shortcut:
-  Detects JavaScript archives, portable programs and schema 1/2 scenes from JSON.
+  Detects JavaScript archives, portable programs, catalogues and schema 1/2 scenes from JSON.
   Defaults: --out src/pages/<file-name>, --name <FileName>.
-  Strips .program, .javascript and .scene filename suffixes.
+  Strips .program, .javascript, .scene and .catalogue filename suffixes.
   Override either default with --out or --name. --check never writes output.
   Put the input immediately after the command; do not combine it with input flags.
 
@@ -74,6 +74,7 @@ Explicit forms (all existing options remain available):
   bun run to-web --scene <file> --out <directory> --name <Name> [options]
 
 Inputs and explicit output options:
+  --catalogue <file>       Exported catalogue of widgets, themes, layouts, CSS/fonts and islands.
   --scene <file>           Fyne scene JSON exported by the native scene API.
   --program <file>         Portable generated program, used instead of --scene.
   --javascript            Use a bundled JavaScript archive or --source component.
@@ -111,11 +112,16 @@ File shortcut:
   bun run ${command === "generate" ? "to-fyne" : "check"} App.program.json
   Astro/TSX/JSX/TS/JS files use the JavaScript adapter in pure-Go Goja with
   native Fyne controls. This does not translate arbitrary JavaScript into Go.
-  Exported JSON selects JavaScript, portable program or schema 1/2 scene input.
+  Exported JSON selects JavaScript, portable program, catalogue or schema 1/2 scene input.
   Defaults: --out native/generated, --name <FileName> in PascalCase.
   Override either default with --out or --name; --check never writes output.
   Put the input immediately after the command; do not combine it with input flags.
   Go source requires a native scene/program JSON export first.
+
+Catalogue input:
+  bun run ${command === "generate" ? "to-fyne" : "check"} widgets.catalogue.json
+  --catalogue <file>       Generate native constructors and a registry from a portable catalogue.
+  See docs/catalogue.md for both directions and explicit host dependencies.
 
 Native scene input:
   bun run ${command === "generate" ? "to-fyne" : "check"} --scene <file> --out <directory> --name <Name> [options]

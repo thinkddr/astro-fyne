@@ -48,6 +48,35 @@ uses its default export. All paths are relative to your current directory unless
 absolute. The source compiler's configuration paths remain relative to the
 configuration file.
 
+## Convert a component catalogue
+
+Export a native `catalog.Registry` with `Marshal()`, then use either direction:
+
+```sh
+astro-fyne to-web Widgets.catalogue.json --out src/components/widgets --name Widgets --public-dir public
+astro-fyne to-fyne Widgets.catalogue.json --out native/generated --name Widgets
+astro-fyne to-fyne Widgets.catalogue.json --out native/generated --name Widgets --check
+```
+
+Use `--actions-module ./actions.ts` for web components that declare host actions.
+For catalogues this path is relative to the generated `Widgets.catalogue.tsx`;
+the converter adjusts imports in nested generated components. Native callbacks
+remain explicit when constructing a widget or island.
+
+Native output provides `NewWidgetsCatalogue()`, a registry with generated scene
+and program factories plus the Goja JavaScript constructor. Web output provides
+`Widgets.catalogue.tsx`, named component exports, a `WidgetsIsland` component,
+matching font declarations and an Astro page mounting declared islands.
+
+The generated browser module's `exportCatalogue` helper collects mounted
+JavaScript island handles into another portable catalogue. Save that JSON and
+pass it to `to-fyne` to continue those independent checkpoints in native widgets.
+
+Both directions retain the exact input JSON, CSS and resource/license bytes in
+content-addressed sidecars. Use the reported `archiveFile` as input for another
+conversion. Themes/layouts remain explicit host dependencies. Motion definitions
+retain their target/clock contracts. See [catalogues and embedded styles/fonts](catalogue.md).
+
 ## Include CSS
 
 Local CSS imported by a source component is included automatically. Add a
