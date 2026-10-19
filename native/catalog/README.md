@@ -52,6 +52,13 @@ matching weight/style, checked tables and a successful native font parse. Font
 families are explicit aliases; styles are not synthesized. Resource getters and
 font resources return copies.
 
+Static font bytes are checked by the shared `native/fontresource` package. The
+catalogue still validates face descriptors, licenses, hashes and resource limits.
+The shared validator can serve a future portable JavaScript font envelope without
+an import cycle; automatic CSS `@font-face` discovery remains unsupported. The
+pinned parser may ignore malformed optional `loca`/`glyf` outline tables; a
+successful parse does not certify every outline or glyph coverage.
+
 CSS source paths are metadata. Relative imports such as `../styles/main.css`,
 Unicode paths, a byte order mark and original line endings survive transport.
 Paths never select an output destination. A JavaScript component's CSS references

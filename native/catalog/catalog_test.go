@@ -244,6 +244,46 @@ func TestCatalogueThemesAreIndependentAndFontsMustMatchActualFaces(t *testing.T)
 	}
 }
 
+func TestCatalogueRetainsFontAdmissionAndDiagnostics(t *testing.T) {
+	resourceError := `catalog: invalid, duplicate or changed resource "fonts/NotoSans-Regular.ttf"`
+	bindingError := `catalog: invalid, conflicting or missing font binding "regular"`
+	for _, scenario := range []struct {
+		name string
+		change func(*Spec)
+		want string
+	}{
+		{"actual-weight", func(s *Spec) { s.FontFaces[0].Weight = 700 }, `catalog: font "regular": declared font weight/style does not match actual face`},
+		{"actual-style", func(s *Spec) { s.FontFaces[0].Style = "italic" }, `catalog: font "regular": declared font weight/style does not match actual face`},
+		{"unsupported-weight", func(s *Spec) { s.FontFaces[0].Weight = 500 }, bindingError},
+		{"unsupported-style", func(s *Spec) { s.FontFaces[0].Style = "oblique" }, bindingError},
+		{"wrong-media", func(s *Spec) { s.Resources[0].MediaType = "application/octet-stream" }, bindingError},
+		{"missing-license", func(s *Spec) { s.Resources[0].License = "" }, resourceError},
+		{"blank-license", func(s *Spec) { s.Resources[0].License = " \r\n\t" }, resourceError},
+		{"invalid-license-utf8", func(s *Spec) { s.Resources[0].License = string([]byte{0xff}) }, resourceError},
+		{"changed-digest", func(s *Spec) { s.Resources[0].Content[0] ^= 0xff }, resourceError},
+		{"font-format", func(s *Spec) {
+			s.Resources[0].Content = []byte("not a font")
+			s.Resources[0].Hash = digest(s.Resources[0].Content)
+			s.FontFaces[0].Hash = s.Resources[0].Hash
+		}, `catalog: font "regular": only static single-face TrueType resources are supported`},
+		{"resource-limit", func(s *Spec) {
+			data := make([]byte, 20*1024*1024+1)
+			copy(data, s.Resources[0].Content)
+			s.Resources[0].Content = data
+			s.Resources[0].Hash = digest(data)
+			s.FontFaces[0].Hash = s.Resources[0].Hash
+		}, resourceError},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			spec := fontFixture(t)
+			scenario.change(&spec)
+			if _, err := New(spec); err == nil || err.Error() != scenario.want {
+				t.Fatalf("catalogue font admission changed: got %v, want %q", err, scenario.want)
+			}
+		})
+	}
+}
+
 func TestCatalogueRejectsOpaqueGoLayoutsAndRetainsPortableMotion(t *testing.T) {
 	spec := fixture(t)
 	spec.Layouts[0].Native = layout.NewVBoxLayout()
