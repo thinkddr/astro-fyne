@@ -134,7 +134,9 @@ test("unsupported source zero frames are diagnosed when the bundled component mo
       const archive = await bundleJavascript(path),
         factory: JavascriptFactory = eval(`(${archive.code})`);
       expect(() => {
-        const api = factory(() => {
+        const api = factory((kind) => {
+          if (kind === "random") return 0.25;
+          if (kind === "now") return 1000;
           throw new Error("Unexpected host effect");
         }, archive);
         try {
