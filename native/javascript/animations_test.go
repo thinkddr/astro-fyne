@@ -251,6 +251,11 @@ func TestAnimationFrameFailurePreservesObjectsAndStopsExport(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer w.Close()
+	window := test.NewWindow(w)
+	defer window.Close()
+	window.SetPadded(false)
+	window.Resize(fyne.NewSize(200, 300))
+	animationFrame(t, w, 20)
 	panel := w.Object("panel")
 	position, size := panel.Position(), panel.Size()
 	if err = w.AdvanceAnimations(500); err == nil || !strings.Contains(err.Error(), "unsupported") {

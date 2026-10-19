@@ -22,6 +22,8 @@ function mount(
 ): JavascriptAPI {
   const factory = eval("(" + archive.code + ")");
   const api = factory((kind: string, name: string, args: string) => {
+    if (kind === "now") return 1000;
+    if (kind === "random") return 0.25;
     if (kind !== "action") throw new Error("Unexpected host boundary");
     calls.push([name, ...JSON.parse(args)]);
     return null;
@@ -244,6 +246,38 @@ test("CSS height compiler diagnoses unsupported grammar instead of dropping moti
     await expect(documentCSS(css, () => {})).rejects.toThrow(
       /CSS height|adapter/,
     );
+});
+test("animation shorthand gives iteration and timing keywords precedence over matching keyframe names", async () => {
+  for (const keyword of ["infinite", "step-start", "step-end"]) {
+    const namedFrames = frames.replace("grow", keyword);
+    await expect(
+      documentCSS(
+        `#panel{height:20px;animation:${keyword} 1s}#sibling{height:24px}` +
+          namedFrames,
+        () => {},
+      ),
+    ).rejects.toThrow(
+      keyword === "infinite" ? /infinite repetition/ : /timing/,
+    );
+    await documentCSS(
+      `#panel{height:20px;animation-name:${keyword};animation-duration:1s;animation-timing-function:linear;animation-fill-mode:both}#sibling{height:24px}` +
+        namedFrames,
+      (doc) => {
+        doc.snapshot();
+        doc.advanceAnimations(500);
+        expect(doc.snapshot()[0].children[0].style.height).toBe("60px");
+      },
+    );
+    await documentCSS(
+      `#panel{height:20px;animation:1s linear ${keyword === "infinite" ? "2 " : ""}${keyword} both}#sibling{height:24px}` +
+        namedFrames,
+      (doc) => {
+        doc.snapshot();
+        doc.advanceAnimations(500);
+        expect(doc.snapshot()[0].children[0].style.height).toBe("60px");
+      },
+    );
+  }
 });
 test("CSS height runtime rejects incompatible layout and target changes before exporting another frame", async () => {
   for (const extra of [

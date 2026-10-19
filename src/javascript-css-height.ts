@@ -196,17 +196,21 @@ export function compileHeightAnimation(
       assign("animation-timing-function", node);
     else {
       const value = identifier(node, css, at).toLowerCase();
-      const key = Object.hasOwn(easings, value)
-        ? "animation-timing-function"
-        : ["normal", "reverse", "alternate", "alternate-reverse"].includes(
-              value,
-            )
-          ? "animation-direction"
-          : ["none", "backwards", "forwards", "both"].includes(value)
-            ? "animation-fill-mode"
-            : ["running", "paused"].includes(value)
-              ? "animation-play-state"
-              : "animation-name";
+      const key =
+        value === "infinite"
+          ? "animation-iteration-count"
+          : Object.hasOwn(easings, value) ||
+              ["step-start", "step-end"].includes(value)
+            ? "animation-timing-function"
+            : ["normal", "reverse", "alternate", "alternate-reverse"].includes(
+                  value,
+                )
+              ? "animation-direction"
+              : ["none", "backwards", "forwards", "both"].includes(value)
+                ? "animation-fill-mode"
+                : ["running", "paused"].includes(value)
+                  ? "animation-play-state"
+                  : "animation-name";
       assign(set.has(key) ? "animation-name" : key, node);
     }
   }

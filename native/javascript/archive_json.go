@@ -27,8 +27,11 @@ func archiveObject(data []byte, names ...string) (map[string]json.RawMessage, er
 			return nil, err
 		}
 		name, ok := key.(string)
-		if !ok || !allowed[name] || fields[name] != nil {
-			return nil, fmt.Errorf("javascript: unknown or repeated JSON field %q", key)
+		if !ok || !allowed[name] {
+			return nil, fmt.Errorf("javascript: unknown field %q", key)
+		}
+		if fields[name] != nil {
+			return nil, fmt.Errorf("javascript: repeated JSON field %q", key)
 		}
 		var value json.RawMessage
 		if err = decoder.Decode(&value); err != nil {
