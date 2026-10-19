@@ -140,5 +140,19 @@ are not certified by the integer-frame gate, and no guessed rounding or nonzero
 tolerance is substituted for an exact result. General `pixelPerfectVerified`
 remains false; this adapter does not establish universal animation or CSS parity.
 
+The same hosted gate also retains a browser-only scale oracle. Separate default
+and `--force-device-scale-factor=2` browser processes each capture an unemulated
+`viewport: null` baseline and contexts requesting DPR 1 and 2. The report records
+the actual browser ELF hash, version, kernel/CDP arguments and supplied launch
+options before and after capture. Authored static, linear and eased cases cover
+half-pixel boundaries, fractional siblings and positive heights below 1/64px,
+with exact CSS/HTML bytes, full bounds, animation times and PNG hashes. Requested
+DPR does not establish internal layout zoom: Chromium's
+[screen metrics emulator](https://github.com/chromium/chromium/blob/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/frame/screen_metrics_emulator.cc#L132-L140)
+preserves the original process scale for its compositor parameters while exposing
+the requested scale separately. The oracle selects no native quantization or
+paint rule. Internal layout zoom and native handling of zero used heights remain
+unverified.
+
 Timing follows [CSS Animations](https://www.w3.org/TR/css-animations-1/) and
 [Web Animations](https://www.w3.org/TR/web-animations-1/).

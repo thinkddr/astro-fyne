@@ -264,6 +264,8 @@ export default function HeightHarness(){const [mounted,setMounted]=useState(true
     "ci/css-height-roundtrip.ts",
     "capture/css-height-roundtrip.ts",
     "capture/css-height-quantization.ts",
+    "capture/css-height-scale-oracle.ts",
+    "capture/browser-provenance.ts",
     "example/src/components/JavascriptCSSHeight.tsx",
     "example/src/components/javascript-css-height.css",
     "example/src/pages/css-height-original.astro",
