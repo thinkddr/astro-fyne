@@ -175,7 +175,7 @@ async function retainedCSS(
   for (const sheet of manifest.stylesheets) {
     expect(expected.has(sheet.path)).toBe(true);
     expect(await readFile(join(out, sheet.file), "utf8")).toBe(
-      expected.get(sheet.path),
+      expected.get(sheet.path)!,
     );
   }
   return manifest;
