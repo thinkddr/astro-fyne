@@ -1040,8 +1040,8 @@ test("responsive margins apply shorthand and longhands in source order", async (
       <div id="second" style={{flexBasis:20,minWidth:0,minHeight:0,boxSizing:'border-box',marginRight:3}}/>
     </div>; }`);
   const go = emitGo(source, options);
-  const first = go.slice(go.indexOf('ID: "first"'), go.indexOf('ID: "second"'));
-  const second = go.slice(go.indexOf('ID: "second"'));
+  const first = go.slice(go.indexOf('"first"'), go.indexOf('"second"'));
+  const second = go.slice(go.indexOf('"second"'));
   for (const field of [
     "MarginSet: true",
     "MarginTop: 6",
