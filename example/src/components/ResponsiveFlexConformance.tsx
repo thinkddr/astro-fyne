@@ -225,6 +225,7 @@ export function ResponsiveFlexConformance() {
           id="justify-between-1"
           style={{
             boxSizing: "border-box",
+            order: 3,
             minWidth: 0,
             minHeight: 0,
             flexBasis: 48,
@@ -476,6 +477,7 @@ export function ResponsiveFlexConformance() {
           id="align-self-end"
           style={{
             boxSizing: "border-box",
+            order: -2,
             minWidth: 0,
             minHeight: 0,
             flexBasis: 48,
