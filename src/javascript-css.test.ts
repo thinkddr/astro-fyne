@@ -25,13 +25,16 @@ test("CSS supports groups preserve the Tailwind guard, cascade layers and live s
   await withCSS(
     `@layer a,b;
      @layer a {
-       @supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline)) {
+       @supports (((display:flex)) and (not (color:astro-fyne-invalid))) or ((-moz-orient:inline)) {
          .probe {color:red!important;padding:3px}
          @supports (display:flex) and (color:red) {.probe[data-mode=alt]{color:blue!important}}
        }
      }
      @layer b {.probe{color:green!important}}
      @supports not (display:astro-fyne-invalid) {.probe{background-color:yellow}}
+     @supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline)) {
+       .probe:hover{position:absolute}
+     }
      @supports (display:astro-fyne-invalid) {.probe:hover{position:absolute}}
      @supports (display:astro-fyne-invalid) or (color:red) {.probe{padding-left:7px}}`,
     ({ document, root, snapshot }) => {

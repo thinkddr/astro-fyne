@@ -12,7 +12,7 @@ export const cssSupportsProfile: readonly (readonly [string, boolean])[] = [
   ["display:astro-fyne-invalid", false],
   ["color:red", true],
   ["color:astro-fyne-invalid", false],
-  ["-webkit-hyphens:none", true],
+  ["-webkit-hyphens:none", false],
   ["margin-trim:inline", false],
   ["-moz-orient:inline", false],
 ];
