@@ -157,7 +157,7 @@ try {
                 css.marginRight,
                 css.marginBottom,
                 css.marginLeft,
-              ].some((v) => v !== "0px") ||
+              ].some((v) => !/^\d+px$/.test(v)) ||
               css.transform !== "none" ||
               css.boxShadow !== "none" ||
               css.backgroundImage !== "none" ||

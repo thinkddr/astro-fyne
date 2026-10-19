@@ -298,6 +298,8 @@ export function ResponsiveFlexConformance() {
           id="justify-around-2"
           style={{
             boxSizing: "border-box",
+            marginLeft: 4,
+            marginRight: 2,
             minWidth: 0,
             minHeight: 0,
             flexBasis: 48,
@@ -403,6 +405,7 @@ export function ResponsiveFlexConformance() {
           id="grow-shrink-1"
           style={{
             boxSizing: "border-box",
+            margin: 2,
             minWidth: 0,
             minHeight: 0,
             flexBasis: 96,
@@ -512,6 +515,8 @@ export function ResponsiveFlexConformance() {
           id="stretch-auto"
           style={{
             boxSizing: "border-box",
+            marginTop: 3,
+            marginBottom: 5,
             minWidth: 0,
             minHeight: 0,
             flexBasis: 48,
