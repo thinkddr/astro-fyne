@@ -143,13 +143,14 @@ temporary input file. Use it from a Bun build tool in the converter checkout:
 import { prepareCatalogueSource } from "./src/catalogue-cli.ts";
 import { applyArtifacts } from "./src/artifacts.ts";
 
+const protectedInputs = ["src/App.astro", "font-faces.json"];
 const plan = await prepareCatalogueSource(catalogueJSON, {
   out: "native/generated",
   name: "Widgets",
   direction: "native",
-  protectedInputs: ["src/App.astro", "font-faces.json"],
+  protectedInputs,
 });
-await applyArtifacts(plan.artifacts, { check: false });
+await applyArtifacts(plan.artifacts, { check: false, protectedInputs });
 ```
 
 `catalogueJSON` must satisfy the existing catalogue format. Preparation validates
@@ -164,6 +165,15 @@ whole plan. This is a lexical path check; the artifact writer keeps its existing
 symlink and ownership checks. Pass `{ check: true }` to `applyArtifacts` to verify
 the destination without writing. The file API continues to protect its own
 catalogue input automatically.
+
+Build tools can also pass `protectedInputs` to `applyArtifacts`. This optional
+writer guard snapshots the paths before async work and checks lexical and
+canonical identities, including input symlinks and output directory aliases.
+Protected inputs must already exist and resolve; missing or dangling paths
+reject the plan before staging. A matching destination is rejected even in
+check mode when its bytes already match. Other ownership and destination rules
+stay unchanged. This protects exact paths, not directory descendants, inode
+aliases or concurrent filesystem changes.
 
 ## Components and independent islands
 

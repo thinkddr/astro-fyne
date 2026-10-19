@@ -73,6 +73,15 @@ async function destination(artifact: Artifact): Promise<string> {
   return resolve(canonicalParent, basename(path));
 }
 
+async function destinationIdentity(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return resolve(await canonicalDirectory(dirname(path)), basename(path));
+  }
+}
+
 export function generatedJSON(saved: Uint8Array): boolean {
   try {
     return (
@@ -92,12 +101,30 @@ export function generatedText(header: string): (saved: Uint8Array) => boolean {
 /** Validate destinations and stage files before replacing generated outputs. */
 export async function applyArtifacts(
   artifacts: Artifact[],
-  options: { check: boolean },
+  options: { check: boolean; protectedInputs?: readonly string[] },
 ): Promise<void> {
+  const inputs = (options.protectedInputs ?? []).map((path) => resolve(path)),
+    protectedPaths = new Set(inputs);
+  for (const input of inputs) {
+    try {
+      protectedPaths.add(await realpath(input));
+    } catch (error) {
+      throw new Error(`Protected input could not be resolved: ${input}`, {
+        cause: error,
+      });
+    }
+  }
   const paths = new Set<string>();
   const pending: { path: string; content: Buffer; temporary?: string }[] = [];
   for (const artifact of artifacts) {
     const path = await destination(artifact);
+    if (
+      protectedPaths.size &&
+      (protectedPaths.has(resolve(artifact.path)) ||
+        protectedPaths.has(path) ||
+        protectedPaths.has(await destinationIdentity(path)))
+    )
+      throw new Error(`Output cannot replace a protected input: ${path}`);
     if (paths.has(path)) throw new Error(`Duplicate output: ${path}`);
     paths.add(path);
     let saved: Buffer | undefined;
