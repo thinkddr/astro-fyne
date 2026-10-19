@@ -2199,16 +2199,19 @@ try {
         })),
       cssSupportsProfile,
     );
+    await writeFile(
+      join(evidence, "css-supports-browser.json"),
+      JSON.stringify(supportResults, null, 2) + "\n",
+    );
+    console.log(
+      "Observed CSS supports profile: " + JSON.stringify(supportResults),
+    );
     for (const item of supportResults)
       assert.equal(
         item.actual,
         item.expected,
         `CSS capability differs: ${item.declaration}`,
       );
-    await writeFile(
-      join(evidence, "css-supports-browser.json"),
-      JSON.stringify(supportResults, null, 2) + "\n",
-    );
   }
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(server.url.href);

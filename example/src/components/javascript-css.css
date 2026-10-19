@@ -28,7 +28,7 @@
   padding-left: 2px;
   padding: 3px 5px;
 }
-@supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or
+@supports (((display: flex)) and (not (color: astro-fyne-invalid))) or
   ((-moz-orient: inline)) {
   #css-supports-group {
     color: #123456;
@@ -50,6 +50,13 @@
   }
 }
 @supports (display: astro-fyne-invalid) {
+  #css-supports-group {
+    position: absolute;
+  }
+}
+/* Tailwind's compatibility guard is false in the pinned Chromium profile. */
+@supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or
+  ((-moz-orient: inline)) {
   #css-supports-group {
     position: absolute;
   }
