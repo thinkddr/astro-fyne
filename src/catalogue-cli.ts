@@ -45,6 +45,10 @@ export interface CatalogueOptions {
   actionsModule?: string;
   check?: boolean;
 }
+export type CatalogueSourceOptions = Omit<CatalogueOptions, "catalogue"> & {
+  /** Resolved lexical paths that generated artifacts must not replace. */
+  protectedInputs?: readonly string[];
+};
 function formattedGo(source: string) {
   const result = spawnSync("gofmt", [], {
     input: source,
@@ -87,8 +91,7 @@ function hasLabelReference(nodes: SceneNode[]): boolean {
   );
 }
 
-/** Prepare the complete library before touching the destination. */
-export async function prepareCatalogue(options: CatalogueOptions) {
+function validateOptions(options: Omit<CatalogueOptions, "catalogue">) {
   if (
     !/^[A-Z][A-Za-z0-9_]*$/.test(options.name) ||
     !/^[A-Za-z][A-Za-z0-9_]*$/.test(options.packageName ?? "generated")
@@ -103,13 +106,40 @@ export async function prepareCatalogue(options: CatalogueOptions) {
     throw new Error(
       "Use --package for native catalogues and --actions-module/--public-dir for web catalogues",
     );
+}
+
+/** Prepare the complete library before touching the destination. */
+export async function prepareCatalogue(options: CatalogueOptions) {
+  validateOptions(options);
   const input = resolve(options.catalogue),
     output = resolve(options.out);
   const source = new TextDecoder("utf-8", {
-      fatal: true,
-      ignoreBOM: true,
-    }).decode(await readFile(input)),
-    spec = await parseCatalogue(source);
+    fatal: true,
+    ignoreBOM: true,
+  }).decode(await readFile(input));
+  return prepareCatalogueArtifacts(source, options, output, new Set([input]));
+}
+
+/** Prepare exact catalogue text without creating an input file. */
+export async function prepareCatalogueSource(
+  source: string,
+  options: CatalogueSourceOptions,
+) {
+  validateOptions(options);
+  const output = resolve(options.out),
+    protectedInputs = new Set(
+      (options.protectedInputs ?? []).map((input) => resolve(input)),
+    );
+  return prepareCatalogueArtifacts(source, options, output, protectedInputs);
+}
+
+async function prepareCatalogueArtifacts(
+  source: string,
+  options: Omit<CatalogueOptions, "catalogue">,
+  output: string,
+  protectedInputs: ReadonlySet<string>,
+) {
+  const spec = await parseCatalogue(source);
   if (options.direction === "web" && spec.islands.length > 1) {
     const declared = new Set(spec.islands.map((island) => island.component));
     for (const component of spec.components)
@@ -437,7 +467,7 @@ export function ${options.name}Island({id,actions,handleRef}:${options.name}Isla
     content: JSON.stringify(report, null, 2) + "\n",
     isOwned: generatedJSON,
   });
-  if (artifacts.some((artifact) => resolve(artifact.path) === input))
+  if (artifacts.some((artifact) => protectedInputs.has(resolve(artifact.path))))
     throw new Error("Catalogue output cannot replace its input");
   // Multiple declarative components share the same generated helper and assets.
   const unique = new Map<string, Artifact>();
