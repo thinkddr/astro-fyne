@@ -49,9 +49,10 @@ export function ResponsiveReverseFlexConformance({
         <div
           id="row-flex-start-1"
           style={{
-            minWidth: 0,
+            minWidth: 36,
             minHeight: 0,
             boxSizing: "border-box",
+            maxHeight: 8,
             flexGrow: 0,
             flexShrink: 0,
             flexBasis: 30,
@@ -529,9 +530,10 @@ export function ResponsiveReverseFlexConformance({
         <div
           id="column-flex-end-2"
           style={{
-            minWidth: 0,
+            minWidth: 60,
             minHeight: 0,
             boxSizing: "border-box",
+            maxHeight: 20,
             flexGrow: 0,
             flexShrink: 0,
             flexBasis: 28,
