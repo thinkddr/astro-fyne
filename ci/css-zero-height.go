@@ -40,7 +40,7 @@ func TestGeneratedCSSZeroHeight(t *testing.T) {
 	defer app.Quit()
 	app.Settings().SetTheme(theme.LightTheme())
 	out, mode := os.Getenv("ASTRO_FYNE_ZERO_OUTPUT"), os.Getenv("ASTRO_FYNE_ZERO_MODE")
-	if out == "" || mode != "source" && mode != "return" {
+	if out == "" || mode != "initialize" && mode != "source" && mode != "return" {
 		t.Fatal("missing zero-height output or mode")
 	}
 	check := func(err error) {
@@ -54,7 +54,9 @@ func TestGeneratedCSSZeroHeight(t *testing.T) {
 		check(os.WriteFile(filepath.Join(out, name), append(data, '\n'), 0644))
 	}
 	input := "source.javascript.json"
-	if mode == "return" {
+	if mode == "initialize" {
+		input = "cold-source.javascript.json"
+	} else if mode == "return" {
 		input = "browser-checkpoint.javascript.json"
 	}
 	data, err := os.ReadFile(filepath.Join(out, input))
@@ -65,11 +67,38 @@ func TestGeneratedCSSZeroHeight(t *testing.T) {
 	if !reflect.DeepEqual(expected, embedded) {
 		t.Fatal("generated constructor did not embed the exact input archive")
 	}
+	if mode == "initialize" {
+		w, err := newZeroProbe()
+		check(err)
+		defer func() { check(w.Close()) }()
+		state, err := w.AnimationState()
+		check(err)
+		if state.TimeMS != 0 || state.PlayState != "running" {
+			t.Fatalf("initialization changed the zero clock: %+v", state)
+		}
+		archive, err := w.ExportJavascript()
+		check(err)
+		if len(archive.Journal) == 0 || len(archive.Frame) == 0 {
+			t.Fatal("initialization did not retain its actual journal and frame")
+		}
+		write("source.javascript.json", archive)
+		write("native-initialize.json", map[string]any{"schema": 1, "actualGeneratedConstructor": true, "constructor": zeroProbeConstructor, "inputFile": input, "outputFile": "source.javascript.json", "archive": archive})
+		return
+	}
 	profiles := []any{}
 	for _, scale := range []float32{1, 2} {
 		w, err := newZeroProbe()
 		check(err)
 		defer func() { check(w.Close()) }()
+		initial, err := w.ExportJavascript()
+		check(err)
+		initialData, err := json.Marshal(initial)
+		check(err)
+		var restored any
+		check(json.Unmarshal(initialData, &restored))
+		if !reflect.DeepEqual(expected, restored) {
+			t.Fatal("generated continuation changed the full input checkpoint")
+		}
 		canvas := software.NewCanvas()
 		canvas.SetPadded(false)
 		canvas.SetScale(scale)

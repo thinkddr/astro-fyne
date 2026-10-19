@@ -38,7 +38,7 @@ async function execute(
   context: Context,
   directory: string,
   name: string,
-  mode: "source" | "return",
+  mode: "initialize" | "source" | "return",
 ) {
   const { root, out, command, retain } = context,
     evidence = join(out, "zero-height"),
@@ -98,14 +98,53 @@ func newZeroProbe()(*js.Widget,error){return New${name}WithOptions(nil,nil,js.Op
 export async function prepareCSSZeroHeight(context: Context) {
   const { root, out, retain } = context,
     evidence = join(out, "zero-height"),
+    initial = join(
+      root,
+      "native/.program-roundtrip/css-zero-height-initialize",
+    ),
     native = join(root, "native/.program-roundtrip/css-zero-height"),
     web = join(root, "example/src/pages/css-zero-height-roundtrip");
   await mkdir(evidence, { recursive: true });
-  const archive = await bundleJavascript(
+  const cold = await bundleJavascript(
     join(root, "example/src/components/JavascriptCSSZeroHeight.tsx"),
   );
-  assert.equal(archive.schema, 2);
-  await json(join(evidence, "source.javascript.json"), archive);
+  assert.equal(cold.schema, 2);
+  assert.deepEqual(cold.journal, []);
+  assert.equal(cold.frame, undefined);
+  await json(join(evidence, "cold-source.javascript.json"), cold);
+  await generateJavascript({
+    archive: cold,
+    out: initial,
+    name: "InitialZeroHeight",
+    direction: "native",
+    packageName: "zeroprobe",
+  });
+  await execute(context, initial, "InitialZeroHeight", "initialize");
+  const archive = await validateJavascriptArchive(
+      JSON.parse(
+        await readFile(join(evidence, "source.javascript.json"), "utf8"),
+      ),
+    ),
+    initialized = JSON.parse(
+      await readFile(join(evidence, "native-initialize.json"), "utf8"),
+    );
+  assert.equal(initialized.actualGeneratedConstructor, true);
+  assert.equal(initialized.constructor, "NewInitialZeroHeightWithOptions");
+  assert.equal(initialized.inputFile, "cold-source.javascript.json");
+  assert.equal(initialized.outputFile, "source.javascript.json");
+  assert.deepEqual(initialized.archive, archive);
+  assert.ok(archive.journal.length > 0, "initialization journal is empty");
+  assert.ok(archive.frame?.length, "initialization frame is empty");
+  assert.deepEqual(archive, {
+    ...cold,
+    journal: archive.journal,
+    frame: archive.frame,
+  });
+  assert.deepEqual(archive.animation, {
+    schema: 1,
+    timeMs: 0,
+    playState: "running",
+  });
   await generateJavascript({
     archive,
     out: native,
@@ -139,6 +178,7 @@ export async function prepareCSSZeroHeight(context: Context) {
     });
   for (const [index, sheet] of archive.stylesheets!.entries())
     for (const [directory, name] of [
+      [initial, "InitialZeroHeight"],
       [native, "ZeroHeight"],
       [web, "ZeroHeight"],
       [web, "RestoredZeroHeight"],
@@ -180,9 +220,12 @@ import Harness from "./Harness.tsx";
     "native/view.go",
     "native/zero_height_test.go",
     "native/javascript/nodes.go",
+    "native/javascript/runtime.go",
     "native/javascript/zero_height_test.go",
     "src/javascript-data.ts",
+    "src/javascript.ts",
     "src/javascript-cli.ts",
+    "src/javascript-runtime.js",
     "src/javascript-dom.js",
     "src/javascript-managed-dom.ts",
     "src/javascript-css-height.ts",
@@ -198,6 +241,19 @@ import Harness from "./Harness.tsx";
   ];
   await json(join(evidence, "prepare.json"), {
     schema: 1,
+    initialization: {
+      constructor: initialized.constructor,
+      files: await Promise.all(
+        [
+          "cold-source.javascript.json",
+          "source.javascript.json",
+          "native-initialize.json",
+        ].map(async (file) => ({
+          file,
+          sha256: hash(await readFile(join(evidence, file))),
+        })),
+      ),
+    },
     inputs: await Promise.all(
       inputs.map(async (path) => {
         const bytes = await readFile(join(root, path)),
@@ -223,10 +279,18 @@ export async function verifyCSSZeroHeight(context: Context) {
       file.sha256,
       `zero implementation changed after build: ${file.path}`,
     );
-  const binary = JSON.parse(
-    await readFile(join(evidence, "source-binary.json"), "utf8"),
-  );
-  assert.equal(hash(await readFile(join(root, binary.path))), binary.sha256);
+  for (const file of input.initialization.files)
+    assert.equal(
+      hash(await readFile(join(evidence, file.file))),
+      file.sha256,
+      `zero initialization changed after build: ${file.file}`,
+    );
+  for (const mode of ["initialize", "source"]) {
+    const binary = JSON.parse(
+      await readFile(join(evidence, `${mode}-binary.json`), "utf8"),
+    );
+    assert.equal(hash(await readFile(join(root, binary.path))), binary.sha256);
+  }
   await captureCSSZeroHeight("http://127.0.0.1:4321", evidence);
   const archive = await validateJavascriptArchive(
     JSON.parse(
@@ -246,6 +310,9 @@ export async function verifyCSSZeroHeight(context: Context) {
   await execute(context, native, "ReturnedZeroHeight", "return");
   const source = JSON.parse(
       await readFile(join(evidence, "native-source.json"), "utf8"),
+    ),
+    initialized = JSON.parse(
+      await readFile(join(evidence, "native-initialize.json"), "utf8"),
     ),
     returned = JSON.parse(
       await readFile(join(evidence, "native-return.json"), "utf8"),
@@ -276,7 +343,12 @@ export async function verifyCSSZeroHeight(context: Context) {
   }
   await json(join(evidence, "roundtrip.json"), {
     schema: 1,
-    actualGeneratedConstructors: [source.constructor, returned.constructor],
+    actualGeneratedConstructors: [
+      initialized.constructor,
+      source.constructor,
+      returned.constructor,
+    ],
+    sharedNativeInitializationJournal: true,
     browserCheckpointAtZero: true,
     stableNativeAndBrowserIdentities: true,
     restorationContinuesAtZero: true,

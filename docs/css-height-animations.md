@@ -156,13 +156,19 @@ paused browser checkpoint back through the CLI, and continues it in native code.
 It checks object identity, independent timelines, controlled automatic clocks,
 capture consistency, invalid seeks, CSS source bytes and unmount cleanup.
 
-The zero-height extension retains separate source and return executables and runs
-their actual generated constructors at DPR 1 and 2. It compares authored CSS,
-native and generated browser frames through expansion and collapse, with a
-static zero-height sibling and a paused checkpoint exported at zero. The browser
+The zero-height extension retains separate initialization, source and return
+executables. Its actual generated initialization constructor exports a checkpoint
+at manual time zero, including Preact's real initialization journal and frame.
+Both native source DPR profiles and the generated browser replay that same
+checkpoint; full archive comparisons establish continuation parity, rather than
+equality between independent cold initialization journals. Source and return
+constructors run at DPR 1 and 2. The gate compares authored CSS, native and
+generated browser frames through expansion and collapse, with a static
+zero-height sibling and a paused checkpoint exported at zero. The browser
 checkpoint generates a fresh native constructor which continues the timeline.
-Full managed checkpoints, snapshots, node identities, exact RGBA comparisons,
-original CSS bytes and browser process provenance are retained under
+Cold input and initialized archives, full managed checkpoints, snapshots, node
+identities, exact RGBA comparisons, original CSS bytes and browser process
+provenance are retained under
 `artifacts/css-height-roundtrip/zero-height/`. Existing height samples and image
 comparisons remain separate.
 

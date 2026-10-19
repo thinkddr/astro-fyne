@@ -166,6 +166,29 @@ export async function captureCSSZeroHeight(base: string, out: string) {
         await readFile(join(out, "native-checkpoint.javascript.json"), "utf8"),
       ),
     );
+  const initialized = JSON.parse(
+    await readFile(join(out, "native-initialize.json"), "utf8"),
+  );
+  assert.equal(initialized.actualGeneratedConstructor, true);
+  assert.equal(initialized.constructor, "NewInitialZeroHeightWithOptions");
+  assert.equal(initialized.inputFile, "cold-source.javascript.json");
+  assert.equal(initialized.outputFile, "source.javascript.json");
+  assert.deepEqual(initialized.archive, source);
+  assert.ok(source.journal.length > 0);
+  assert.ok(source.frame?.length);
+  assert.deepEqual(source.animation, {
+    schema: 1,
+    timeMs: 0,
+    playState: "running",
+  });
+  for (const profile of evidence.profiles) {
+    assert.equal(profile.samples[0]?.timeMs, 0);
+    assert.deepEqual(
+      profile.samples[0]!.archive,
+      source,
+      "native source profile changed its initialization checkpoint",
+    );
+  }
   const browser = await chromium.launch({ headless: true }),
     errors: string[] = [],
     comparisons: unknown[] = [],
@@ -214,6 +237,11 @@ export async function captureCSSZeroHeight(base: string, out: string) {
           true,
         );
         await committed(generated, 0);
+        assert.deepEqual(
+          await generated.evaluate(() => window.afyZero.export()),
+          source,
+          "managed browser changed its initialization checkpoint",
+        );
         await retainObjects(generated);
         assert.equal(profile.samples.length, 8);
         let firstSource: Buffer | undefined, firstManaged: Buffer | undefined;
@@ -367,6 +395,14 @@ export async function captureCSSZeroHeight(base: string, out: string) {
       pixelPerfectVerified: false,
       universalCSSVerified: false,
       actualGeneratedConstructor: true,
+      initializationConstructor: initialized.constructor,
+      sharedNativeInitializationJournal: true,
+      initializationCheckpoint: {
+        file: "source.javascript.json",
+        sha256: createHash("sha256")
+          .update(await readFile(join(out, "source.javascript.json")))
+          .digest("hex"),
+      },
       fullManagedCheckpointsRetained: true,
       browserProvenance: await Promise.all(
         (
