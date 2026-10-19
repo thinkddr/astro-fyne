@@ -18,11 +18,13 @@ export async function normalizeConversionArgs(
   const options = args.slice(1);
   if (
     options.some((arg) =>
-      ["--source", "--program", "--scene", "--config"].includes(arg),
+      ["--source", "--program", "--scene", "--catalogue", "--config"].includes(
+        arg,
+      ),
     )
   )
     throw usageError(
-      "Use one positional input or an explicit --source, --program, --scene or --config.",
+      "Use one positional input or an explicit --source, --program, --scene, --catalogue or --config.",
       command,
     );
   for (let index = 0; index < options.length; index++) {
@@ -57,6 +59,8 @@ export async function normalizeConversionArgs(
         "--program",
         input,
       ];
+    else if (record?.kind === "astro-fyne-catalogue")
+      route = ["--catalogue", input];
     else if (record?.kind === "astro-fyne-program")
       route = ["--program", input];
     else if (
@@ -68,7 +72,7 @@ export async function normalizeConversionArgs(
       route = ["--scene", input];
     else
       throw usageError(
-        "JSON input must be an exported Astro Fyne JavaScript program, portable program or schema 1/2 scene.",
+        "JSON input must be an exported Astro Fyne JavaScript program, portable program, catalogue or schema 1/2 scene.",
         command,
       );
     if (
@@ -90,7 +94,7 @@ export async function normalizeConversionArgs(
       command,
     );
   const stem = basename(input, extname(input)).replace(
-    /\.(?:program|javascript|scene)$/i,
+    /\.(?:program|javascript|scene|catalogue)$/i,
     "",
   );
   const words = stem.match(/[A-Za-z0-9]+/g) ?? [];

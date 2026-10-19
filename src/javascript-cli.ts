@@ -16,6 +16,7 @@ import { bundleJavascript, validateJavascriptArchive } from "./javascript.ts";
 import type { JavascriptArchive } from "./javascript-types.ts";
 
 interface Options {
+  archive?: JavascriptArchive;
   source?: string;
   program?: string;
   out: string;
@@ -37,37 +38,42 @@ const literal = (value: unknown) =>
     .replaceAll("\u2029", "\\u2029")
     .replaceAll("\ufeff", "\\ufeff");
 
-export async function generateJavascript(options: Options) {
+export async function prepareJavascript(options: Options) {
   if (
     !/^[A-Z][A-Za-z0-9_]*$/.test(options.name) ||
     !/^[A-Za-z][A-Za-z0-9_]*$/.test(options.packageName ?? "generated")
   )
     throw new Error("JavaScript widget name/package must be Go identifiers");
-  if (!!options.source === !!options.program)
+  if (
+    [options.source, options.program, options.archive].filter(Boolean)
+      .length !== 1
+  )
     throw new Error(
-      "JavaScript mode requires exactly one --source or --program",
+      "JavaScript mode requires exactly one source or program archive",
     );
   if (
-    options.program &&
+    (options.program || options.archive) &&
     (options.props || options.selected || options.actions || options.stylesheet)
   )
     throw new Error("Program input already declares props, export and actions");
-  const archive = options.program
-    ? await validateJavascriptArchive(
-        await readCLIJSON(resolve(options.program), "JavaScript program"),
-      )
-    : await bundleJavascript(
-        options.source!,
-        options.selected,
-        options.props
-          ? ((await readCLIJSON(
-              resolve(options.props),
-              "JavaScript props",
-            )) as Record<string, unknown>)
-          : {},
-        options.actions ?? [],
-        options.stylesheet ? [resolve(options.stylesheet)] : [],
-      );
+  const archive = options.archive
+    ? await validateJavascriptArchive(options.archive)
+    : options.program
+      ? await validateJavascriptArchive(
+          await readCLIJSON(resolve(options.program), "JavaScript program"),
+        )
+      : await bundleJavascript(
+          options.source!,
+          options.selected,
+          options.props
+            ? ((await readCLIJSON(
+                resolve(options.props),
+                "JavaScript props",
+              )) as Record<string, unknown>)
+            : {},
+          options.actions ?? [],
+          options.stylesheet ? [resolve(options.stylesheet)] : [],
+        );
   const output = resolve(options.out),
     artifacts: Artifact[] = [];
   const text = (
@@ -242,6 +248,11 @@ export default ${options.name};\n`,
     )
   )
     throw new Error("JavaScript output cannot replace source inputs");
+  return { archive, artifacts };
+}
+
+export async function generateJavascript(options: Options) {
+  const { archive, artifacts } = await prepareJavascript(options);
   await applyArtifacts(artifacts, { check: options.check ?? false });
   process.stdout.write(
     `${options.check ? "Checked" : "Generated"} ${options.name}: JavaScript → ${options.direction === "native" ? "native Fyne (Goja)" : "Astro + Preact"}.\n`,
