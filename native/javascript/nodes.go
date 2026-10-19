@@ -13,8 +13,8 @@ import (
 
 func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 	count := 0
-	var walk func([]Frame, int) ([]webui.Node, error)
-	walk = func(frames []Frame, depth int) ([]webui.Node, error) {
+	var walk func([]Frame, int, string) ([]webui.Node, error)
+	walk = func(frames []Frame, depth int, parentUID string) ([]webui.Node, error) {
 		if depth > 100 {
 			return nil, fmt.Errorf("javascript: native tree exceeds its depth limit")
 		}
@@ -23,6 +23,13 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 			count++
 			if count > 100000 {
 				return nil, fmt.Errorf("javascript: native tree exceeds its node limit")
+			}
+			for _, binding := range frame.Events {
+				switch binding {
+				case "clicktrue", "clickfalse", "inputtrue", "inputfalse", "changetrue", "changefalse":
+				default:
+					return nil, fmt.Errorf("javascript: unsupported event binding %q", binding)
+				}
 			}
 			node := webui.Node{ID: frame.Attrs["id"], Identity: "javascript/" + frame.UID}
 			if node.ID == "" {
@@ -120,20 +127,22 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 					}
 				}
 			} else {
-				node.Children, err = walk(frame.Children, depth+1)
+				node.Children, err = walk(frame.Children, depth+1, frame.UID)
 				if err != nil {
 					return nil, err
 				}
 			}
-			// Clicks on native controls bubble through their virtual DOM ancestors.
-			if node.Kind == "button" || node.Kind == "link" {
-				node.OnTap = func() { w.dispatch(frame.UID, "click", nil) }
-			}
 			if node.Kind == "checkbox" {
 				node.OnChecked = func(bool) { w.dispatch(frame.UID, "click", nil) }
-			}
-			if frame.Tag == "label" && node.LabelFor != "" {
-				node.OnTap = func() { w.dispatch(frame.UID, "click", nil) }
+			} else if frame.Tag == "#text" && parentUID == "" {
+				node.OnTap = func() { w.Tapped(nil) }
+			} else {
+				uid := frame.UID
+				if frame.Tag == "#text" {
+					uid = parentUID
+				}
+				// Entry points dispatch once; the virtual DOM owns propagation.
+				node.OnTap = func() { w.dispatch(uid, "click", nil) }
 			}
 			if node.Kind == "input" || node.Kind == "textarea" {
 				node.OnChange = func(value string) { w.dispatch(frame.UID, "input", &value) }
@@ -143,7 +152,7 @@ func (w *Widget) nodes(frames []Frame) ([]webui.Node, error) {
 		}
 		return nodes, nil
 	}
-	return walk(frames, 0)
+	return walk(frames, 0, "")
 }
 
 func asciiLower(value string) string {

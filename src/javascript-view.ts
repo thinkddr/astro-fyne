@@ -167,7 +167,15 @@ export function createJavascriptComponent(
       const generation = ctx.generation;
       try {
         if (!wrapper.current) throw new Error("Missing JavaScript DOM wrapper");
-        ctx.dom ??= new ManagedJavascriptDOM(wrapper.current, dispatch);
+        ctx.dom ??= new ManagedJavascriptDOM(
+          wrapper.current,
+          dispatch,
+          (error) => {
+            ctx.error = error;
+            if (ctx.frame !== undefined) cancelAnimationFrame(ctx.frame);
+            ctx.frame = undefined;
+          },
+        );
         ctx.dom.commit(frames);
         ctx.dirty = ctx.generation !== generation;
         ctx.mounted = true;
@@ -195,6 +203,7 @@ export function createJavascriptComponent(
     );
     useImperativeHandle(input.handle, () => ({
       exportJavascript() {
+        ctx.dom?.validate();
         if (!ctx.mounted || ctx.dirty || ctx.error)
           throw new Error("Export requires a valid committed JavaScript frame");
         if (

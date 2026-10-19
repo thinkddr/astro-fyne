@@ -150,10 +150,14 @@ Listener identity includes event type, callback and capture flag. Boolean/option
 their DOM behavior. Assigning a direct handler to `null` removes its listener slot; assigning
 it again appends a new slot. A direct handler returning `false` cancels a cancelable event;
 ordinary listener returns are ignored. Abort signals still need a native adapter.
-Real native pointer entry points currently come from supported controls and associated
-labels. Their virtual events can bubble through ancestor listeners; direct background
-clicks on containers or plain text still need a pointer adapter. Programmatic event
-dispatch tests do not establish native pointer activation for those elements.
+Physical clicks enter through native containers, plain text, supported controls and
+associated labels. A listener-free child keeps its own event target; capture and bubbling
+run once through the virtual DOM. Raw text inside a container targets its parent element.
+Adding or removing listeners and moving a retained element preserve its native object.
+The generated browser uses one delegated click entry with exact DOM-object ownership.
+The pointer gate compares actual Chromium coordinate clicks with Fyne `test.TapCanvas`
+through native → Astro → native continuation. It checks event traces, cancellation,
+disabled blockers and retained objects; it does not certify control geometry or pixels.
 HTML element and attribute names use ASCII case folding. Supported controls retain
 boolean `disabled` presence, dirty input values, reflected checkbox/button values and
 text/checkbox value-mode transitions. Textareas retain child-text defaults and normalized
@@ -199,8 +203,17 @@ value, click preactivation and cancellation, input/change ordering, disabled beh
 Space activation and associated plain-text labels. Native refreshes retain the control
 and suppress programmatic callbacks; archives reject visual/source checked-state divergence.
 Checkbox styling and image/geometry certification require a native checkbox style adapter.
-Physical clicks currently enter through native buttons, links, checkboxes and associated labels; direct clicks on other text,
-container backgrounds or editor surfaces need a pointer adapter.
+Editor clicks keep native focus/caret handling before dispatch. Custom editor backends
+must use the shared native editor when click routing is required: an opaque interactive
+render tree can intercept the target. Physical clicks on top-level text, blank wrapper
+backgrounds and foreign real DOM nodes require a virtual-root pointer adapter and fault
+the mounted instance. Its next export rejects; retained content does not acquire an
+invented target UID.
+Uncanceled labels targeting enabled text inputs, textareas or buttons diagnose the missing
+native focus/activation adapter. Disabled or missing/non-labelable targets have no default
+activation; canceled labels and associated checkboxes retain their supported behavior.
+Rich interactive descendants, pointer down/up, coordinates, buttons/modifiers, double
+clicks, dragging and pointer capture still require adapters.
 Links require `preventDefault()` and a named platform action for navigation.
 Native keyboard/pointer event payloads beyond this
 profile need adapters. Focus/caret/selection and pending editor values are excluded

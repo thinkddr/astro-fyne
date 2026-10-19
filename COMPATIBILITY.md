@@ -21,6 +21,14 @@ click cancellation, disabled behavior and input/change events across continuatio
 styling and measured rendering profiles remain diagnosed; functional state tests do not
 certify their pixels.
 
+The JavaScript pointer profile routes supported container, plain-text and editor clicks
+through the same virtual dispatch as controls. Actual Chromium coordinate clicks and
+Fyne canvas hit testing compare capture/bubble traces, disabled blockers, cancellation,
+listener changes and retained objects across native → web → native continuation.
+Clicks on blank wrapper targets or top-level text fault the instance; opaque interactive
+editor backends are diagnosed before mounting. General pointer events and pixel
+equivalence remain pending.
+
 The JavaScript DOM adapter also preserves ASCII HTML names, reflected boolean/control
 attributes, dirty editor values, text/checkbox type transitions and textarea child-text
 defaults. These behavior checks do not certify control rendering.

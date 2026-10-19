@@ -496,10 +496,6 @@ func (v *View) reconcile() {
 			}
 		}
 	}
-	v.err = profileError
-	v.nodes = nodes
-	v.responsive = responsive
-	v.backend = backend
 	// Save sibling order before updates: an index change alone does not mean a DOM move.
 	previousRoots := append([]*element(nil), v.roots...)
 	previousChildren := make(map[*element][]*element, len(v.elements))
@@ -514,9 +510,9 @@ func (v *View) reconcile() {
 		}
 	}
 	retained := make(map[*element]bool, len(ids))
-	var build func([]Node, Style) []*element
-	build = func(nodes []Node, inherited Style) []*element {
-		out := make([]*element, 0, len(nodes))
+	prepared := make(map[string]*element, len(ids))
+	var prepare func([]Node) error
+	prepare = func(nodes []Node) error {
 		for _, n := range nodes {
 			var e *element
 			if n.Identity != "" {
@@ -527,25 +523,52 @@ func (v *View) reconcile() {
 					e = nil
 				}
 			}
-			if e == nil || e.node.Kind != n.Kind || e.node.ListGroup != n.ListGroup || retained[e] {
-				e = newElement(v, n)
+			if e == nil || e.node.Kind != n.Kind || e.node.ListGroup != n.ListGroup || retained[e] ||
+				(n.Kind == "container" || n.Kind == "text") && (e.node.OnTap == nil) != (n.OnTap == nil) {
+				e = newElement(v, n, backend)
+			}
+			if n.OnTap != nil && (n.Kind == "input" || n.Kind == "textarea") {
+				if _, supported := e.input.(*primitiveEditor); !supported {
+					return fmt.Errorf("webui: pointer input %q requires the shared NewEditor factory; opaque editor drawing can intercept clicks", n.ID)
+				}
 			}
 			retained[e] = true
+			prepared[n.ID] = e
+			if err := prepare(n.Children); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := prepare(nodes); err != nil {
+		v.err = err
+		return
+	}
+	v.err = profileError
+	v.nodes = nodes
+	v.responsive = responsive
+	v.backend = backend
+	var build func([]Node, Style, *element) []*element
+	build = func(nodes []Node, inherited Style, parent *element) []*element {
+		out := make([]*element, 0, len(nodes))
+		for _, n := range nodes {
+			e := prepared[n.ID]
 			e.node = n
+			e.parent = parent
 			e.label = n.AccessibleLabel
 			style := n.Style
 			if measured, ok := v.measurements[n.ID]; ok && profileError == nil {
 				style = measured
 			}
 			e.style = resolveStyle(n, style, inherited, v.backend, v.responsive)
-			e.children = build(n.Children, e.style)
+			e.children = build(n.Children, e.style, e)
 			current[n.ID] = e
 			e.update()
 			out = append(out, e)
 		}
 		return out
 	}
-	v.roots = build(nodes, Style{})
+	v.roots = build(nodes, Style{}, nil)
 	v.clearMovedFocus(previousRoots, previousChildren, previousGroups)
 	visible := make(map[*element]bool, len(current))
 	var visibility func([]*element, bool)
@@ -818,6 +841,7 @@ type element struct {
 	label                 string
 	style                 Style
 	children              []*element
+	parent                *element
 	object                fyne.CanvasObject
 	input                 Editor
 	renderer              *elementRenderer
@@ -828,14 +852,14 @@ type element struct {
 	localValueInitialized bool
 }
 
-func newElement(v *View, n Node) *element {
+func newElement(v *View, n Node, backend Backend) *element {
 	e := &element{view: v, node: n}
 	switch n.Kind {
 	case "checkbox":
 		w := &checkboxWidget{element: e}
 		w.ExtendBaseWidget(w)
 		w.OnChanged = func(checked bool) {
-			if e.suppressChange || e.node.Disabled {
+			if e.suppressChange || !e.pointerAttached() {
 				return
 			}
 			if e.node.OnChecked != nil {
@@ -854,7 +878,7 @@ func newElement(v *View, n Node) *element {
 		w := &actionWidget{element: e}
 		w.ExtendBaseWidget(w)
 		w.onTap = func() {
-			if e.node.Disabled {
+			if !e.pointerAttached() {
 				return
 			}
 			if e.node.OnTap != nil {
@@ -872,7 +896,7 @@ func newElement(v *View, n Node) *element {
 	case "input", "textarea":
 		w := &inputWidget{element: e, committedValue: n.Value}
 		w.ExtendBaseWidget(w)
-		e.input = v.backend.Editor(n.Kind == "textarea", v.backend.Defaults(n), func(value string) {
+		e.input = backend.Editor(n.Kind == "textarea", backend.Defaults(n), func(value string) {
 			if e.suppressChange || e.node.Disabled {
 				return
 			}
@@ -886,9 +910,15 @@ func newElement(v *View, n Node) *element {
 		})
 		e.object = w
 	default:
-		w := &plainWidget{element: e}
-		w.ExtendBaseWidget(w)
-		e.object = w
+		if n.OnTap != nil && (n.Kind == "container" || n.Kind == "text") {
+			w := &pointerWidget{plainWidget: plainWidget{element: e}}
+			w.ExtendBaseWidget(w)
+			e.object = w
+		} else {
+			w := &plainWidget{element: e}
+			w.ExtendBaseWidget(w)
+			e.object = w
+		}
 	}
 	return e
 }
@@ -1109,6 +1139,30 @@ type plainWidget struct {
 	element *element
 }
 
+type pointerWidget struct {
+	plainWidget
+}
+
+func (e *element) pointerAttached() bool {
+	if e.node.Disabled || e.view.owner == nil || !e.view.owner.Visible() {
+		return false
+	}
+	for current := e; current != nil; current = current.parent {
+		if current.view != e.view || e.view.elements[current.node.ID] != current ||
+			current.style.Display == "none" || !current.object.Visible() {
+			return false
+		}
+	}
+	return true
+}
+
+func (w *pointerWidget) Tapped(*fyne.PointEvent) {
+	if w.element.pointerAttached() && w.element.node.OnTap != nil {
+		w.element.node.OnTap()
+		w.element.view.refreshAfterEvent()
+	}
+}
+
 type checkboxWidget struct {
 	widget.Check
 	element *element
@@ -1116,6 +1170,9 @@ type checkboxWidget struct {
 
 func (w *checkboxWidget) AccessibilityLabel() string { return w.element.label }
 func (w *checkboxWidget) Tapped(event *fyne.PointEvent) {
+	if !w.element.pointerAttached() {
+		return
+	}
 	if event != nil {
 		w.Check.Tapped(event)
 	} else if !w.Disabled() {
@@ -1130,7 +1187,7 @@ type labelWidget struct {
 
 func (w *labelWidget) CreateRenderer() fyne.WidgetRenderer { return newElementRenderer(w.element) }
 func (w *labelWidget) Tapped(*fyne.PointEvent) {
-	if w.element.node.OnTap != nil {
+	if w.element.pointerAttached() && w.element.node.OnTap != nil {
 		w.element.node.OnTap()
 		if w.element.view.autoRefreshEvents {
 			w.element.view.Refresh()
@@ -1248,7 +1305,7 @@ func (w *inputWidget) AccessibilityLabel() string {
 }
 func (w *inputWidget) AccessibilityRole() fyne.AccessibleRole { return fyne.AccessibleRoleText }
 func (w *inputWidget) Tapped(event *fyne.PointEvent) {
-	if w.element.node.Disabled {
+	if !w.element.pointerAttached() {
 		return
 	}
 	c := w.element.view.boundCanvas
@@ -1258,7 +1315,7 @@ func (w *inputWidget) Tapped(event *fyne.PointEvent) {
 	if c != nil {
 		c.Focus(w)
 	}
-	if w.element.view.responsive && (w.element.node.Disabled || w.element.view.elements[w.element.node.ID] != w.element) {
+	if !w.element.pointerAttached() {
 		// The preceding field's blur handler can remove/disable this target.
 		// Fyne assigns it after that callback, so revalidate the focus owner.
 		if c != nil && c.Focused() == w {
@@ -1274,6 +1331,10 @@ func (w *inputWidget) Tapped(event *fyne.PointEvent) {
 			local.Position = local.Position.Subtract(fyne.NewPos(style.PaddingLeft+style.BorderWidth, style.PaddingTop+style.BorderWidth))
 			pointer.Tapped(&local)
 		}
+	}
+	if w.element.pointerAttached() && w.element.node.OnTap != nil {
+		w.element.node.OnTap()
+		w.element.view.refreshAfterEvent()
 	}
 }
 
