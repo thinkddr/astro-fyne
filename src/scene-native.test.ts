@@ -452,3 +452,26 @@ test("responsive scene order survives both generators and stays off the root", a
     "order applies only to flex items",
   );
 });
+
+test("responsive scene margins survive both generators and stay off the root", async () => {
+  const document = responsive();
+  const flex = document.roots[0]!.children[0]!.sourceStyle!.flex;
+  Object.assign(flex, { marginTop: 2, marginLeft: 5 });
+  expect(emitNativeScene(document, nativeOptions).code).toContain(
+    "MarginLeft:5",
+  );
+  const web = emitWebScene(document, { name: "Margins" });
+  expect(web.preact).toMatch(/marginLeft"?:\s*5/);
+  const entry = join(directory, "Margins.tsx");
+  await writeFile(entry, web.preact);
+  const go = emitGo(await compile(entry), {
+    name: "Recompiled",
+    packageName: "generated",
+  });
+  expect(go).toContain("MarginTop: 2");
+  expect(go).toContain("MarginLeft: 5");
+  document.roots[0]!.sourceStyle!.flex.marginTop = 1;
+  expect(() => emitWebScene(document, { name: "Invalid" })).toThrow(
+    "margins apply only to flex items",
+  );
+});

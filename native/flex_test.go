@@ -450,3 +450,47 @@ func TestFlexOrderPlacesItemsWithoutReorderingObjects(t *testing.T) {
 		t.Fatal("accepted order without a responsive flex root")
 	}
 }
+
+func TestFlexMarginsReduceFreeSpaceAndOffsetBothAxes(t *testing.T) {
+	for _, direction := range []string{"row", "row-reverse"} {
+		t.Run(direction, func(t *testing.T) {
+			a, b := flexTestItem("a", 30), flexTestItem("b", 50)
+			a.Style.Flex.MarginLeft, a.Style.Flex.MarginRight = 5, 7
+			a.Style.Flex.MarginTop, a.Style.Flex.MarginBottom = 4, 6
+			b.Style.Height, b.Style.Flex.HeightSet, b.Style.Flex.AlignSelf = 20, true, "center"
+			b.Style.Flex.Grow, b.Style.Flex.MarginTop = FlexValue(1), 2
+			root := flexTestRoot(60, a, b)
+			root.Style.Direction, root.Style.Gap = direction, 10
+			v := NewView(func() []Node { return []Node{root} })
+			canvas := software.NewCanvas()
+			canvas.SetPadded(false)
+			canvas.SetContent(v)
+			if err := v.BindCanvas(canvas); err != nil {
+				t.Fatal(err)
+			}
+			canvas.Resize(fyne.NewSize(200, 60))
+			canvas.Capture()
+			if err := v.Error(); err != nil {
+				t.Fatal(err)
+			}
+			// b grows into 200-10-(5+7) minus a's 30; stretch subtracts a's cross margins.
+			if direction == "row" {
+				flexTestFrame(t, v, "a", 5, 4, 30, 50)
+				flexTestFrame(t, v, "b", 52, 21, 148, 20)
+			} else {
+				flexTestFrame(t, v, "a", 163, 4, 30, 50)
+				flexTestFrame(t, v, "b", 0, 21, 148, 20)
+			}
+		})
+	}
+	root := flexTestRoot(40, flexTestItem("a", 30))
+	root.Style.Flex.MarginTop = 1
+	if err := validateFlexTree([]Node{root}); err == nil {
+		t.Fatal("accepted a margin on the flex root")
+	}
+	item := flexTestItem("a", 30)
+	item.Style.Flex.MarginLeft = -1
+	if err := validateFlexStyle("a", item.Style); err == nil {
+		t.Fatal("accepted a negative margin")
+	}
+}

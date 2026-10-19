@@ -305,7 +305,7 @@ test("responsive controls require declared resets and supported semantic control
   expect(() => emitGo(button, options)).toThrow("type=button");
   for (const [property, before, after] of [
     ["appearance", "'none'", "'auto'"],
-    ["margin", "0", "1"],
+    ["margin", "0", "-1"],
     ["margin", "0", "'auto'"],
   ]) {
     const invalid = await program(
@@ -833,7 +833,8 @@ test("responsive flex rejects unsupported units, intrinsic sizing and formatting
     "flexDirection:'diagonal'",
     "direction:'rtl'",
     "writingMode:'vertical-rl'",
-    "marginLeft:1",
+    "marginLeft:-1",
+    "marginTop:'1rem'",
     "borderLeftWidth:1",
     "flex:1",
     "order:1.5",
@@ -1030,4 +1031,25 @@ test("responsive reverse directions retain declarations and source child order",
   expect(() => emitGo(legacy, options)).toThrow(
     "supported responsive reverse direction",
   );
+});
+
+test("responsive margins apply shorthand and longhands in source order", async () => {
+  const source =
+    await program(`export function Page() { return <div id="root" style={{display:'flex',width:'100%',height:100,boxSizing:'border-box'}}>
+      <div id="first" style={{flexBasis:20,minWidth:0,minHeight:0,boxSizing:'border-box',margin:4,marginLeft:'0px',marginTop:6}}/>
+      <div id="second" style={{flexBasis:20,minWidth:0,minHeight:0,boxSizing:'border-box',marginRight:3}}/>
+    </div>; }`);
+  const go = emitGo(source, options);
+  const first = go.slice(go.indexOf('ID: "first"'), go.indexOf('ID: "second"'));
+  const second = go.slice(go.indexOf('ID: "second"'));
+  for (const field of [
+    "MarginSet: true",
+    "MarginTop: 6",
+    "MarginRight: 4",
+    "MarginBottom: 4",
+  ])
+    expect(first).toContain(field);
+  expect(first).not.toContain("MarginLeft");
+  expect(second).toContain("MarginRight: 3");
+  expect(second).not.toContain("MarginSet");
 });

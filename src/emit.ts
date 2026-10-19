@@ -239,6 +239,10 @@ function style(
     borderStyle: "BorderStyle",
     appearance: "Appearance",
     margin: "MarginSet",
+    marginTop: "MarginTop",
+    marginRight: "MarginRight",
+    marginBottom: "MarginBottom",
+    marginLeft: "MarginLeft",
     order: "Order",
   };
   if (bitmap) {
@@ -496,6 +500,7 @@ function style(
       whiteSpace: "WhiteSpace",
       flexDirection: "Direction",
     };
+    const marginSides = new Set<string>();
     for (const [property, val] of Object.entries(node.attrs.style.entries)) {
       if (property.startsWith("--")) {
         if (!rootTokens || !Object.hasOwn(rootTokens, property))
@@ -542,6 +547,30 @@ function style(
       const flexField = Object.hasOwn(flexProperties, property)
         ? flexProperties[property]
         : undefined;
+      if (flexField?.startsWith("Margin")) {
+        // Declarations apply in source order, like the browser's style updates.
+        const margin =
+          val.kind === "literal" &&
+          (typeof val.value === "number" || typeof val.value === "string")
+            ? val.value === "0"
+              ? 0
+              : pixels(val.value, property)
+            : NaN;
+        if (!(margin >= 0))
+          throw new Error(
+            `${node.id}: CSS ${property} requires a nonnegative number or px literal.`,
+          );
+        const sides =
+          flexField === "MarginSet"
+            ? ["Top", "Right", "Bottom", "Left"]
+            : [flexField.slice("Margin".length)];
+        for (const side of sides) {
+          if (margin) flex["Margin" + side] = margin;
+          else delete flex["Margin" + side];
+          marginSides.add(side);
+        }
+        continue;
+      }
       if (flexField === "Order") {
         // JSX writes a negative order as unary minus over a literal.
         const negative = val.kind === "unary" && val.op === "-";
@@ -599,19 +628,12 @@ function style(
             );
           flex[flexField] = result;
         } else {
-          if (flexField === "MarginSet" && val.value === "0") {
-            flex.MarginSet = true;
-            continue;
-          }
           const result = pixels(val.value, property);
-          if (
-            ["MinWidth", "MinHeight", "MarginSet"].includes(flexField) &&
-            result !== 0
-          )
+          if (["MinWidth", "MinHeight"].includes(flexField) && result !== 0)
             throw new Error(
               `${node.id}: CSS ${property} requires explicit zero in responsive flex.`,
             );
-          flex[flexField] = flexField === "MarginSet" ? true : result;
+          flex[flexField] = result;
         }
         continue;
       }
@@ -779,6 +801,7 @@ function style(
         );
       }
     }
+    if (marginSides.size === 4) flex.MarginSet = true;
   }
   if (
     responsive &&
