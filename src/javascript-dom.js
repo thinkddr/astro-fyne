@@ -623,8 +623,14 @@ export function createDocument() {
       !payload.defaultPrevented
     ) {
       const control = find((node) => node.id === target.attrs.for);
-      if (control && checkboxInput(control) && !control.disabled)
-        dispatch({ node: control.uid, type: "click" });
+      if (control && !control.disabled) {
+        if (checkboxInput(control))
+          dispatch({ node: control.uid, type: "click" });
+        else if (["input", "textarea", "button"].includes(control.localName))
+          throw new Error(
+            `Label activation for <${control.localName}> requires a native focus/activation adapter or preventDefault()`,
+          );
+      }
     }
     if (
       target.localName === "a" &&

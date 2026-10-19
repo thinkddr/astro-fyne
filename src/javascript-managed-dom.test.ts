@@ -120,3 +120,33 @@ test("frame data requires explicit text, typed control state and supported event
     ]),
   ).not.toThrow();
 });
+
+test("container click bindings retain listener-free physical descendants", () => {
+  const frames: JavascriptFrame[] = [
+    {
+      uid: "parent",
+      tag: "div",
+      events: ["clicktrue", "clickfalse"],
+      children: [
+        {
+          uid: "child",
+          tag: "span",
+          children: [{ uid: "text", tag: "#text", text: "Click target" }],
+        },
+      ],
+    },
+  ];
+  const plan = prepareJavascriptDOM(frames);
+  expect(plan.get("parent")!.frame.events).toEqual(["clicktrue", "clickfalse"]);
+  expect(plan.get("child")!.frame.events).toBeUndefined();
+  for (const event of [
+    "click",
+    "pointerdownfalse",
+    "focusfalse",
+    "wheelfalse",
+    "CLICKtrue",
+  ])
+    expect(() =>
+      prepareJavascriptDOM([{ uid: "bad", tag: "div", events: [event] }]),
+    ).toThrow("unsupported event binding");
+});

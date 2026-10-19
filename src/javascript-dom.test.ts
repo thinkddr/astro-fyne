@@ -450,3 +450,124 @@ test("only event property return false cancels checkbox activation", () => {
     expect(calls).toEqual(property ? [] : ["input", "change"]);
   }
 });
+
+test("uncanceled labels diagnose enabled control activation instead of losing it", () => {
+  for (const tag of ["input", "textarea", "button"]) {
+    const { document, root, dispatch } = createDocument();
+    const label = document.createElement("label"),
+      control = document.createElement(tag);
+    control.id = "control";
+    control.value = "retained value";
+    label.setAttribute("for", control.id);
+    root.appendChild(label);
+    root.appendChild(control);
+    const calls: string[] = [];
+    label.addEventListener("click", () => calls.push("label"));
+    root.addEventListener("click", (event: any) =>
+      calls.push(
+        event.target === label ? "bubble" : "unexpected control click",
+      ),
+    );
+    control.addEventListener("click", () =>
+      calls.push("unexpected control activation"),
+    );
+    expect(() => dispatch({ node: label.uid, type: "click" })).toThrow(
+      `Label activation for <${tag}> requires a native focus/activation adapter`,
+    );
+    expect(calls).toEqual(["label", "bubble"]);
+    expect(control.value).toBe("retained value");
+    expect(control.parentNode).toBe(root);
+  }
+});
+
+test("canceling a label keeps its handlers and blocks every associated activation", () => {
+  for (const tag of ["input", "textarea", "button", "checkbox"]) {
+    const { document, root, dispatch } = createDocument();
+    const label = document.createElement("label"),
+      control = document.createElement(tag === "checkbox" ? "input" : tag);
+    if (tag === "checkbox") control.setAttribute("type", "checkbox");
+    control.id = "control";
+    label.setAttribute("for", control.id);
+    root.appendChild(label);
+    root.appendChild(control);
+    const calls: unknown[] = [];
+    label.addEventListener("click", (event: any) => {
+      event.preventDefault();
+      calls.push("label");
+    });
+    root.addEventListener("click", (event: any) =>
+      calls.push(["bubble", event.target === label, event.defaultPrevented]),
+    );
+    for (const type of ["click", "input", "change"])
+      control.addEventListener(type, () =>
+        calls.push("unexpected control event"),
+      );
+    expect(dispatch({ node: label.uid, type: "click" })).toBe(true);
+    expect(calls).toEqual(["label", ["bubble", true, true]]);
+    if (tag === "checkbox") expect(control.checked).toBe(false);
+  }
+});
+
+test("labels do not activate disabled controls or skip a non-labelable first ID match", () => {
+  for (const tag of ["input", "textarea", "button", "checkbox"]) {
+    const { document, root, dispatch } = createDocument();
+    const label = document.createElement("label"),
+      control = document.createElement(tag === "checkbox" ? "input" : tag);
+    if (tag === "checkbox") control.setAttribute("type", "checkbox");
+    control.id = "control";
+    control.disabled = true;
+    label.setAttribute("for", control.id);
+    root.appendChild(label);
+    root.appendChild(control);
+    let activated = 0;
+    control.addEventListener("click", () => activated++);
+    expect(dispatch({ node: label.uid, type: "click" })).toBe(false);
+    expect(activated).toBe(0);
+    if (tag === "checkbox") expect(control.checked).toBe(false);
+  }
+  for (const tag of ["div", "span", "a", "label"]) {
+    const { document, root, dispatch } = createDocument();
+    const label = document.createElement("label"),
+      first = document.createElement(tag),
+      later = document.createElement("input");
+    first.id = later.id = "shared";
+    label.setAttribute("for", "shared");
+    root.appendChild(label);
+    root.appendChild(first);
+    root.appendChild(later);
+    let activated = 0;
+    later.addEventListener("click", () => activated++);
+    expect(dispatch({ node: label.uid, type: "click" })).toBe(false);
+    first.remove();
+    later.remove();
+    expect(dispatch({ node: label.uid, type: "click" })).toBe(false);
+    expect(activated).toBe(0);
+  }
+});
+
+test("label checkbox activation emits one click and its ordered input/change events", () => {
+  const { document, root, dispatch } = createDocument();
+  const label = document.createElement("label"),
+    checkbox = document.createElement("input");
+  checkbox.setAttribute("type", "checkbox");
+  checkbox.id = "check";
+  label.setAttribute("for", checkbox.id);
+  root.appendChild(label);
+  root.appendChild(checkbox);
+  const events: unknown[] = [];
+  for (const type of ["click", "input", "change"])
+    checkbox.addEventListener(type, () =>
+      events.push([type, checkbox.checked]),
+    );
+  expect(dispatch({ node: label.uid, type: "click" })).toBe(false);
+  expect(events).toEqual([
+    ["click", true],
+    ["input", true],
+    ["change", true],
+  ]);
+  events.length = 0;
+  checkbox.addEventListener("click", (event: any) => event.preventDefault());
+  expect(dispatch({ node: label.uid, type: "click" })).toBe(false);
+  expect(events).toEqual([["click", false]]);
+  expect(checkbox.checked).toBe(true);
+});

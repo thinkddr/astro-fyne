@@ -390,7 +390,7 @@ func (w *Widget) decode(value goja.Value, target any) error {
 	return json.Unmarshal([]byte(encoded.String()), target)
 }
 func (w *Widget) dispatch(node, kind string, value *string) {
-	if w.closed {
+	if w.closed || w.fault != nil {
 		return
 	}
 	if w.archive.Schema == 2 && !w.options.ManualAnimations {
@@ -408,6 +408,17 @@ func (w *Widget) dispatch(node, kind string, value *string) {
 		w.stopAnimations()
 	}
 }
+
+// Tapped diagnoses canvas gaps without assigning an invented virtual target.
+func (w *Widget) Tapped(*fyne.PointEvent) {
+	if w.closed || w.fault != nil {
+		return
+	}
+	w.fault = errors.New("javascript: wrapper background requires a virtual-root pointer adapter")
+	w.stopAnimations()
+	w.Refresh()
+}
+
 func (w *Widget) ExportJavascript() (Archive, error) {
 	if w.closed {
 		return Archive{}, errors.New("javascript: widget is closed")

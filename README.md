@@ -25,6 +25,9 @@ and runs real Preact in Goja, a JavaScript engine written in Go, while Fyne rend
 controls. Generated files remain Go and embed the JavaScript program. Its recorded program
 archives continue closures, module state and events through Fyne → Astro → Fyne; CSS and
 browser APIs still require native contracts.
+Supported container, text and editor clicks enter through real native hit testing;
+the [pointer profile](docs/javascript-runtime.md#current-platform-boundary) documents
+remaining target and event limitations.
 
 [CSS migration works in both directions within the documented subset](docs/css-roundtrip.md).
 The guide separates retained stylesheet behavior from exported scene styles;

@@ -203,10 +203,35 @@ type Entry = {
 export class ManagedJavascriptDOM {
   private entries = new Map<string, Entry>();
   private current: Plan = new Map();
+  private targets = new WeakMap<EventTarget, string>();
+  private fault?: { error: unknown };
+  private click: EventListener = (event) => {
+    try {
+      this.validate();
+      const target = event.target;
+      const uid = target && this.targets.get(target);
+      if (!uid || this.entries.get(uid)?.node !== target)
+        throw new Error(
+          "JavaScript DOM pointer: wrapper background or foreign nodes require a root pointer adapter",
+        );
+      this.event(uid, event);
+    } catch (error) {
+      this.fault = { error };
+      this.onError(error);
+      throw error;
+    }
+  };
   constructor(
     private wrapper: HTMLElement,
     private dispatch: Dispatch,
-  ) {}
+    private onError: (error: unknown) => void = () => {},
+  ) {
+    wrapper.addEventListener("click", this.click);
+  }
+
+  validate() {
+    if (this.fault) throw this.fault.error;
+  }
 
   element(uid: string): HTMLElement | undefined {
     const entry = this.entries.get(uid);
@@ -216,21 +241,23 @@ export class ManagedJavascriptDOM {
   }
 
   private event(uid: string, event: Event) {
+    this.validate();
     const frame = this.current.get(uid)?.frame;
     if (!frame) return;
     const checkbox =
       frame.tag === "input" &&
       asciiLower(frame.attrs?.type ?? "text") === "checkbox";
     if (event.type === "click") {
+      if (frame.disabled) return;
       if (checkbox) {
         if (this.dispatch(uid, "click") === true) event.preventDefault();
-      } else if (
-        frame.tag === "button" ||
-        frame.tag === "a" ||
-        (frame.tag === "label" && frame.attrs?.for)
-      ) {
-        event.preventDefault();
-        this.dispatch(uid, "click");
+      } else {
+        const ownsDefault =
+          frame.tag === "button" ||
+          frame.tag === "a" ||
+          (frame.tag === "label" && !!frame.attrs?.for);
+        if (ownsDefault) event.preventDefault();
+        if (this.dispatch(uid, "click") === true) event.preventDefault();
       }
     } else if (
       !checkbox &&
@@ -246,6 +273,7 @@ export class ManagedJavascriptDOM {
   }
 
   commit(frames: JavascriptFrame[]) {
+    this.validate();
     const plan = prepareJavascriptDOM(
       frames,
       new Map([...this.entries].map(([uid, entry]) => [uid, entry.tag])),
@@ -264,14 +292,15 @@ export class ManagedJavascriptDOM {
         style: "",
         listeners: [],
       };
-      if (["button", "a", "label", "input", "textarea"].includes(frame.tag)) {
+      if (["input", "textarea"].includes(frame.tag)) {
         const listener: EventListener = (event) => this.event(uid, event);
-        for (const type of ["click", "input", "change"]) {
+        for (const type of ["input", "change"]) {
           node.addEventListener(type, listener);
           entry.listeners.push([type, listener]);
         }
       }
       this.entries.set(uid, entry);
+      if (frame.tag !== "#text") this.targets.set(node, uid);
     }
     this.current = plan;
     const place = (parent: Node, children: JavascriptFrame[]) => {
@@ -356,6 +385,7 @@ export class ManagedJavascriptDOM {
   }
 
   dispose() {
+    this.wrapper.removeEventListener("click", this.click);
     this.current.clear();
     for (const entry of this.entries.values())
       for (const [type, listener] of entry.listeners)

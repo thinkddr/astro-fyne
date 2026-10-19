@@ -23,7 +23,7 @@ function copy(value){return JSON.parse(JSON.stringify(value))}
 function sample(){return [{uid:"root",tag:"div",attrs:{id:"root"},css:true,style:{width:"200px",height:"300px",backgroundColor:"#ffffff"},children:[
 {uid:"panel",tag:"div",attrs:{id:"panel"},css:true,style:{height:(20+Math.min(state.timeMs,1000)/10)+"px",backgroundColor:"#ff0000"}},
 {uid:"following",tag:"div",attrs:{id:"following"},css:true,style:{height:"30px",backgroundColor:"#0000ff"}},
-{uid:"button",tag:"button",attrs:{id:"button"},events:["click"],children:[{uid:"text",tag:"#text",text:String(count)}]}]}]}
+{uid:"button",tag:"button",attrs:{id:"button"},events:["clickfalse"],children:[{uid:"text",tag:"#text",text:String(count)}]}]}]}
 function advance(ms){if(!Number.isFinite(ms)||ms<state.timeMs||ms>1e12)throw new Error("bad timeline");state.timeMs=ms;if(state.playState==="running"&&ms>=1000)state.playState="finished"}
 function event(input,replay){count++;var saved=copy(input);saved.timeMs=state.timeMs;events.push(saved);if(replay){var recorded=archive.journal[replayed++];if(!recorded)throw new Error("missing journal");journal.push(copy(recorded))}else{var result=host("action","changed",JSON.stringify([count]));journal.push({kind:"action",name:"changed",args:JSON.stringify([count]),value:JSON.stringify(result)})}}
 return {flush(){},snapshot:sample,animationState(){return copy(state)},advanceAnimations:advance,pauseAnimations(){if(state.playState==="running")state.playState="paused"},playAnimations(){if(state.playState==="paused")state.playState="running"},

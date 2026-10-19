@@ -26,7 +26,7 @@ bun src/cli.ts reverse --scene artifacts/reverse-controls/scene.json --out examp
 cp example/src/pages/reverse-controls/ReverseControls.* artifacts/reverse-controls/
 bun run typecheck
 bun test src
-bunx --no-install prettier --check README.md docs bin src capture example ci/program-roundtrip.ts ci/javascript-roundtrip.ts ci/css-roundtrip.ts ci/css-has-roundtrip.ts ci/css-height-roundtrip.ts ci/catalogue-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json typography-probe.json image-enlargement.json image-enlargement-scenario.json ci/image-sampling/*.md ci/image-sampling/source-pin.json ci/image-production-pin.json package.json tsconfig.json
+bunx --no-install prettier --check README.md docs bin src capture example ci/program-roundtrip.ts ci/javascript-roundtrip.ts ci/javascript-pointer-roundtrip.ts ci/css-roundtrip.ts ci/css-has-roundtrip.ts ci/css-height-roundtrip.ts ci/catalogue-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json typography-probe.json image-enlargement.json image-enlargement-scenario.json ci/image-sampling/*.md ci/image-sampling/source-pin.json ci/image-production-pin.json package.json tsconfig.json
 bun src/cli.ts generate --config astro-fyne.json
 bun src/cli.ts check --config astro-fyne.json
 bun src/cli.ts generate --config conformance.json
@@ -78,6 +78,7 @@ bun ci/css-roundtrip.ts prepare
 bun ci/css-has-roundtrip.ts prepare
 bun ci/css-height-roundtrip.ts prepare
 bun ci/catalogue-roundtrip.ts prepare
+bun ci/javascript-pointer-roundtrip.ts prepare
 # Include the generated portable islands in the real Astro build and type check.
 bun run typecheck
 bun run build:web
@@ -110,6 +111,7 @@ bun ci/css-roundtrip.ts verify
 bun ci/css-has-roundtrip.ts verify
 bun ci/css-height-roundtrip.ts verify
 bun ci/catalogue-roundtrip.ts verify
+bun ci/javascript-pointer-roundtrip.ts verify
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/geometry --out artifacts --width 320 --height 240 --scale 1 --source-hash "$task_source_hash"
 bun capture/behavior.ts http://127.0.0.1:4321/conformance conformance-scenario.json artifacts/web-behavior.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH"
 bun capture/keyed-behavior.ts http://127.0.0.1:4321/keyed keyed-scenario.json artifacts/web-keyed-behavior.json "$task_keyed_source_hash"

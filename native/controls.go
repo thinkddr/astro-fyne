@@ -81,7 +81,7 @@ func wrapText(text string, style Style, width float32, backend Backend) []string
 }
 
 func (w *actionWidget) Tapped(*fyne.PointEvent) {
-	if w.disabled {
+	if w.disabled || !w.element.pointerAttached() {
 		return
 	}
 	if w.element.view.responsive {
@@ -94,7 +94,7 @@ func (w *actionWidget) Tapped(*fyne.PointEvent) {
 		}
 		// Focus commits the preceding editor. Its callback may disable or
 		// unmount this button before pointer activation reaches the tap handler.
-		if w.disabled || w.element.node.Disabled || w.element.view.elements[w.element.node.ID] != w.element {
+		if w.disabled || !w.element.pointerAttached() {
 			if target != nil && target.Focused() == w {
 				target.Unfocus()
 			}
