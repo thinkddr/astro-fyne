@@ -272,6 +272,7 @@ function scene(responsive: boolean): SceneDocument {
           ? {
               sourceStyle: {
                 ...style,
+                width: 0,
                 measured: false as const,
                 display: "flex",
                 flex: {
