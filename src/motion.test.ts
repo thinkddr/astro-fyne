@@ -9,6 +9,7 @@ import {
   validateMotion,
   validateMotionState,
   type MotionSpec,
+  type MotionState,
 } from "./motion.ts";
 
 function fixture(): MotionSpec {
@@ -193,7 +194,7 @@ test("unsupported and ambiguous motion metadata is rejected", () => {
 });
 
 test("portable state preserves required finite time and explicit identity", () => {
-  const state = {
+  const state: MotionState = {
     schema: 1,
     clipId: "move",
     clipHash: "a".repeat(64),
