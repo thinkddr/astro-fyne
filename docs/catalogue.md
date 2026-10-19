@@ -226,6 +226,17 @@ from component/theme `fontFaces`; the native backend receives the exact font
 resource. Web output emits the same bytes and a matching `@font-face` rule.
 Keep the actual font's redistribution license with the resource.
 
+For explicit nominal glyph checks, use
+[`fontresource.NewStaticFace`](../native/fontresource/README.md) with the exact
+TTF bytes, weight and style. Its immutable `StaticFace` provides `Contains(rune)`,
+`ValidateText(string)` and a copied `Profile()` containing the font digest,
+parser identity and inclusive Unicode scalar ranges. Rebuild a profile from its
+font bytes before trusting imported metadata.
+
+These methods check the selected character map. They do not certify shaping,
+outlines or raster parity, and do not enable strict font admission in existing
+widgets or browser components.
+
 A stylesheet reference must match the component archive's imported CSS path,
 digest and bytes. Compile the Astro/Preact source with its CSS imports first;
 adding unrelated source text to metadata does not apply CSS to arbitrary Go

@@ -112,7 +112,7 @@ async function retainedBytes(directory: string, spec: CatalogueSpec) {
 const driver = `// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 package catalogueprobe
-import("bytes";"encoding/json";"os";"path/filepath";"testing";"fyne.io/fyne/v2";"fyne.io/fyne/v2/test";webui "github.com/thinkddr/astro-fyne/native";"github.com/thinkddr/astro-fyne/native/catalog";js "github.com/thinkddr/astro-fyne/native/javascript")
+import("bytes";"encoding/json";"os";"path/filepath";"testing";"fyne.io/fyne/v2";"fyne.io/fyne/v2/test";webui "github.com/thinkddr/astro-fyne/native";"github.com/thinkddr/astro-fyne/native/catalog";js "github.com/thinkddr/astro-fyne/native/javascript";"github.com/thinkddr/astro-fyne/native/fontresource")
 type used struct {Count string \`json:"count"\`;PaddingLeft float32 \`json:"paddingLeft"\`;PaddingRight float32 \`json:"paddingRight"\`;Color string \`json:"color"\`;FontFamily string \`json:"fontFamily"\`}
 func TestCatalogueBrowserRoundtrip(t *testing.T){
  app:=test.NewApp();defer app.Quit();output:=os.Getenv("ASTRO_FYNE_CATALOGUE_ARTIFACTS");mode:=os.Getenv("ASTRO_FYNE_CATALOGUE_MODE");if output==""{t.Fatal("missing output")}
@@ -136,6 +136,24 @@ func TestCatalogueBrowserRoundtrip(t *testing.T){
  for _,id:=range []string{"left","right"}{object,err:=parsed.NewIsland(id,webui.Actions{"observe":func(...any)any{replayCalls++;return nil}});check(err);view:=object.(*js.Widget);restored[id]=capture(view);check(view.Close());if restored[id]!=after[id]{t.Fatalf("restored %s differs",id)}};if replayCalls!=0{t.Fatal("repeated host effects")}
  theme,err:=registry.Theme("light",nil);check(err);fontBound:=false;for _,resource:=range registry.Resources(){if resource.MediaType=="font/ttf"&&bytes.Equal(theme.Font(fyne.TextStyle{}).Content(),resource.Content){fontBound=true}};if !fontBound{t.Fatal("unbound native font")}
  check(os.MkdirAll(output,0755));prefix:=filepath.Join(output,"native-"+mode);check(os.WriteFile(prefix+".catalogue.json",append(data,'\\n'),0644));result,err:=json.MarshalIndent(map[string]any{"schema":1,"mode":mode,"initial":initial,"after":after,"restored":restored,"archives":archives,"calls":calls,"replayCalls":replayCalls,"stableNativeObjects":6,"independentVMs":true,"nativeFontBound":fontBound,"pixelPerfectVerified":false},"","  ");check(err);check(os.WriteFile(prefix+".json",append(result,'\\n'),0644))
+}
+func TestCatalogueFontCoverage(t *testing.T){
+ check:=func(err error){if err!=nil{t.Fatal(err)}};output:=os.Getenv("ASTRO_FYNE_CATALOGUE_ARTIFACTS");mode:=os.Getenv("ASTRO_FYNE_CATALOGUE_MODE");if output==""||(mode!="prepare"&&mode!="verify"){t.Fatal("missing coverage output/mode")}
+ registry,err:=NewCatalogueProbeCatalogue();check(err)
+ if input:=os.Getenv("ASTRO_FYNE_CATALOGUE_INPUT");input!=""{data,err:=os.ReadFile(input);check(err);registry,err=catalog.Parse(data);check(err)}
+ profiles:=map[string]fontresource.CoverageProfile{};spec:=registry.Spec()
+ for _,face:=range spec.FontFaces{
+  found:=false
+  for _,resource:=range spec.Resources{if resource.Name!=face.Resource{continue};found=true;before:=bytes.Clone(resource.Content)
+   parsed,err:=fontresource.NewStaticFace(resource.Content,face.Weight,face.Style);check(err);profile:=parsed.Profile()
+   if profile.Schema!=1||profile.FontHash!=resource.Hash||profile.FontHash!=face.Hash||profile.Weight!=face.Weight||profile.Style!=face.Style||profile.Parser!="github.com/go-text/typesetting@v0.3.4"{t.Fatal("unbound coverage profile",profile)}
+   check(parsed.ValidateText("Catalogue roundtrip 0123"));if !parsed.Contains('A')||parsed.Contains(-1)||parsed.Contains(0xd800)||parsed.Contains(0x110000){t.Fatal("invalid scalar coverage")}
+   if parsed.ValidateText(string(rune(0x10ffff)))==nil||parsed.ValidateText(string([]byte{255}))==nil{t.Fatal("missing or invalid text was admitted")}
+   if !bytes.Equal(before,resource.Content){t.Fatal("coverage changed native resource bytes")};profiles[face.ID]=profile
+  };if !found{t.Fatal("missing coverage resource",face.Resource)}
+ }
+ if len(profiles)!=1{t.Fatal("unexpected fixture coverage count",len(profiles))}
+ data,err:=json.MarshalIndent(map[string]any{"schema":1,"mode":mode,"profiles":profiles,"strictAdmissionEnabled":false,"pixelPerfectVerified":false},"","  ");check(err);check(os.MkdirAll(output,0755));check(os.WriteFile(filepath.Join(output,"native-"+mode+".font-coverage.json"),append(data,'\\n'),0644))
 }
 `;
 
@@ -249,6 +267,15 @@ if (mode === "prepare") {
       ASTRO_FYNE_CATALOGUE_MODE: "prepare",
     },
   );
+  await command(
+    "native-coverage-prepare",
+    [binary, "-test.run", "^TestCatalogueFontCoverage$", "-test.v"],
+    native,
+    {
+      ASTRO_FYNE_CATALOGUE_ARTIFACTS: out,
+      ASTRO_FYNE_CATALOGUE_MODE: "prepare",
+    },
+  );
   const checkpointSource = await readFile(
       join(out, "native-prepare.catalogue.json"),
       "utf8",
@@ -322,6 +349,9 @@ if (mode === "prepare") {
     "native/javascript/nodes.go",
     "native/fontresource/validate.go",
     "native/fontresource/validate_test.go",
+    "native/fontresource/coverage.go",
+    "native/fontresource/coverage_test.go",
+    "native/fontresource/coverage_identity_test.go",
     "native/go.mod",
     "native/go.sum",
     "package.json",
@@ -388,6 +418,25 @@ if (mode === "prepare") {
       ASTRO_FYNE_CATALOGUE_INPUT: join(out, "browser.catalogue.json"),
     },
   );
+  await command(
+    "native-coverage-verify",
+    [binary, "-test.run", "^TestCatalogueFontCoverage$", "-test.v"],
+    native,
+    {
+      ASTRO_FYNE_CATALOGUE_ARTIFACTS: out,
+      ASTRO_FYNE_CATALOGUE_MODE: "verify",
+      ASTRO_FYNE_CATALOGUE_INPUT: join(out, "browser.catalogue.json"),
+    },
+  );
+  const originalCoverage = JSON.parse(
+    await readFile(join(out, "native-prepare.font-coverage.json"), "utf8"),
+  );
+  const returnedCoverage = JSON.parse(
+    await readFile(join(out, "native-verify.font-coverage.json"), "utf8"),
+  );
+  assert.deepEqual(returnedCoverage.profiles, originalCoverage.profiles);
+  assert.equal(originalCoverage.strictAdmissionEnabled, false);
+  assert.equal(returnedCoverage.strictAdmissionEnabled, false);
   const restored = await parseCatalogue(
     await readFile(join(out, "native-verify.catalogue.json"), "utf8"),
   );
@@ -422,6 +471,14 @@ if (mode === "prepare") {
     independentNativeVMs: true,
     stableNativeObjectsPerPhase: 6,
     actualFontBytesVerified: true,
+    nominalCoveragePreserved: true,
+    nativeCoveragePrepareHash: catalogueHash(
+      await readFile(join(out, "native-prepare.font-coverage.json")),
+    ),
+    nativeCoverageVerifyHash: catalogueHash(
+      await readFile(join(out, "native-verify.font-coverage.json")),
+    ),
+    strictFontAdmissionEnabled: false,
     stylesheetCopiesExact: true,
     nativeBrowserNativeContinuation: true,
     pixelPerfectVerified: false,

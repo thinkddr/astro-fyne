@@ -7,6 +7,7 @@ task_evidence="$task_root/artifacts/fractional-text"
 task_temporary="$(mktemp -d)"
 trap 'rm -rf "$task_temporary"' EXIT
 mkdir -p "$task_evidence"
+cp ci/fractional-text.sh "$task_evidence/fractional-text.sh"
 
 test -z "$(gofmt -l ci/typesetting-fractional_test.go)"
 cp ci/typesetting-fractional_test.go "$task_evidence/fractional_size_test.go"
@@ -112,10 +113,52 @@ task_production_variant="$(go list -m -f '{{if .Replace}}fork-{{.Replace.Version
 go list -m -json all > "$task_evidence/original-native-modules.jsonl"
 ASTRO_FYNE_TYPOGRAPHY_ARTIFACTS="$task_evidence/original-native" ASTRO_FYNE_TEXT_VARIANT="$task_production_variant" ASTRO_FYNE_TEXT_ORIGIN=nearest \
   GOMAXPROCS=2 go test -count=1 -p=1 -run '^TestTypographyProbeSoftwareCanvasEvidence$' ./generated
+GOMAXPROCS=2 go test -json -count=1 -p=1 -race ./fontresource > "$task_evidence/original-font-coverage.jsonl"
 go mod edit -modfile="$task_modfile" -replace="github.com/go-text/typesetting=$task_checkout"
 ASTRO_FYNE_TYPOGRAPHY_ARTIFACTS="$task_evidence/candidate-native" ASTRO_FYNE_TEXT_VARIANT=fork-fractional-candidate ASTRO_FYNE_TEXT_ORIGIN=nearest \
   GOMAXPROCS=2 go test -mod=mod -modfile="$task_modfile" -count=1 -p=1 -run '^TestTypographyProbeSoftwareCanvasEvidence$' ./generated
-GOMAXPROCS=2 go test -mod=mod -modfile="$task_modfile" -count=1 -p=2 -race ./... > "$task_evidence/native-tests.log"
+GOMAXPROCS=2 go test -json -mod=mod -modfile="$task_modfile" -count=1 -p=1 -race -run '^TestCoverageBuildContract$' ./fontresource > "$task_evidence/replaced-font-coverage.jsonl"
+GOMAXPROCS=2 go test -mod=mod -modfile="$task_modfile" -count=1 -p=2 -race -skip '^TestStaticFace' ./... > "$task_evidence/native-tests.log"
+go list -mod=mod -modfile="$task_modfile" -m -json all > "$task_evidence/patched-native-modules.jsonl"
+cp "$task_modfile" "$task_evidence/patched-native.mod"
+cp "$task_temporary/native.sum" "$task_evidence/patched-native.sum"
+python3 - "$task_evidence" <<'PY'
+import hashlib, json, pathlib, re, sys
+root = pathlib.Path(sys.argv[1])
+original_path = root/'original-font-coverage.jsonl'
+replaced_path = root/'replaced-font-coverage.jsonl'
+original = [json.loads(line) for line in original_path.read_text().splitlines()]
+replaced = [json.loads(line) for line in replaced_path.read_text().splitlines()]
+source = pathlib.Path('fontresource/coverage_test.go').read_text()
+names = re.findall(r'^func (TestStaticFace\w+)\(t \*testing.T\)', source, re.M)
+assert len(names) == 8 and len(set(names)) == 8
+for events in [original, replaced]:
+    assert not any(e.get('Action') in ['fail', 'skip'] for e in events)
+    assert any(e.get('Action') == 'pass' and e.get('Test') == 'TestCoverageBuildContract' for e in events)
+assert all(any(e.get('Action') == 'pass' and e.get('Test') == name for e in original) for name in names)
+assert any('qualified parser build admitted' in e.get('Output', '') for e in original)
+assert any('unqualified parser build rejected' in e.get('Output', '') for e in replaced)
+(root/'font-coverage-variants.json').write_text(json.dumps({
+    'schema': 1, 'diagnosticOnly': True,
+    'originalCoveragePackage': 'github.com/thinkddr/astro-fyne/native/fontresource',
+    'originalParser': 'github.com/go-text/typesetting@v0.3.4',
+    'originalCoverageTestsPassed': names,
+    'originalCoveragePassedCases': sorted({e['Test'] for e in original if e.get('Action') == 'pass' and e.get('Test', '').split('/')[0] in names}),
+    'patchedNativeSuiteSkipPattern': '^TestStaticFace',
+    'patchedNativeSuiteExcludedTests': names,
+    'patchedConstructorRejectionTest': 'TestCoverageBuildContract',
+    'patchedConstructorRejected': True,
+    'originalTraceHash': hashlib.sha256(original_path.read_bytes()).hexdigest(),
+    'patchedTraceHash': hashlib.sha256(replaced_path.read_bytes()).hexdigest(),
+    'nativeTestsLogHash': hashlib.sha256((root/'native-tests.log').read_bytes()).hexdigest(),
+    'producerScriptHash': hashlib.sha256((root/'fractional-text.sh').read_bytes()).hexdigest(),
+    'originalModulesHash': hashlib.sha256((root/'original-native-modules.jsonl').read_bytes()).hexdigest(),
+    'patchedModulesHash': hashlib.sha256((root/'patched-native-modules.jsonl').read_bytes()).hexdigest(),
+    'patchedModfileHash': hashlib.sha256((root/'patched-native.mod').read_bytes()).hexdigest(),
+    'patchedSumHash': hashlib.sha256((root/'patched-native.sum').read_bytes()).hexdigest(),
+    'pixelPerfectVerified': False,
+}, indent=2) + '\n')
+PY
 for task_scale in 1 2; do
   task_status=0
   "$task_temporary/compare" --reference "$task_evidence/original-native/scale-$task_scale/native.png" \
