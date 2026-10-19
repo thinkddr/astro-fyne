@@ -77,6 +77,33 @@ func Validate(data []byte, weight int, style string) error {
 			return fmt.Errorf("missing TrueType table %s", tag)
 		}
 	}
+	head, maxp, hhea := tables["head"], tables["maxp"], tables["hhea"]
+	units := binary.BigEndian.Uint16(head[18:20])
+	glyphs := uint64(binary.BigEndian.Uint16(maxp[4:6]))
+	metrics := uint64(binary.BigEndian.Uint16(hhea[34:36]))
+	locationFormat := int16(binary.BigEndian.Uint16(head[50:52]))
+	entryBytes := uint64(2)
+	if locationFormat == 1 {
+		entryBytes = 4
+	}
+	if binary.BigEndian.Uint32(head[12:16]) != 0x5f0f3cf5 || units < 16 || units > 16384 || glyphs == 0 || metrics == 0 || metrics > glyphs || locationFormat != 0 && locationFormat != 1 || uint64(len(tables["hmtx"])) < metrics*4+(glyphs-metrics)*2 || uint64(len(tables["loca"])) < (glyphs+1)*entryBytes {
+		return fmt.Errorf("invalid TrueType metrics or indices")
+	}
+	loca, glyfSize := tables["loca"], uint64(len(tables["glyf"]))
+	var last uint64
+	for index := uint64(0); index <= glyphs; index++ {
+		at := int(index * entryBytes)
+		var offset uint64
+		if locationFormat == 1 {
+			offset = uint64(binary.BigEndian.Uint32(loca[at : at+4]))
+		} else {
+			offset = uint64(binary.BigEndian.Uint16(loca[at:at+2])) * 2
+		}
+		if offset < last || offset > glyfSize {
+			return fmt.Errorf("TrueType glyph index is out of bounds")
+		}
+		last = offset
+	}
 	if len(os2) < 64 || int(binary.BigEndian.Uint16(os2[4:6])) != weight || (binary.BigEndian.Uint16(os2[62:64])&1 != 0) != (style == "italic") || binary.BigEndian.Uint16(os2[62:64])&512 != 0 {
 		return fmt.Errorf("declared font weight/style does not match actual face")
 	}

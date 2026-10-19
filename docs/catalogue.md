@@ -176,9 +176,11 @@ unsupported CSS.
 weight `400` or `700` and style `normal` or `italic`. Families use consistent
 capitalization and each family/weight/style combination is unique. Resources
 require static single-face TrueType data, valid tables/checksums, matching actual
-weight/style and a successful native font parse. The pinned parser may ignore
-malformed optional `loca`/`glyf` outline tables; a successful parse does not
-certify every outline or glyph coverage. Variable fonts, color fonts and
+weight/style, consistent horizontal metrics and bounded glyph indexes before
+the native font parse. The index check accepts empty glyphs and rejects missing,
+descending or out-of-range locations in either TrueType location format. It
+does not validate every contour, composite or instruction, or certify glyph
+coverage. Variable fonts, color fonts and
 synthesized styles need separate adapters. The default JavaScript constructor
 passes referenced faces to `webui.FyneBackend`.
 
