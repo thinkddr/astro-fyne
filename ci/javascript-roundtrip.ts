@@ -2,6 +2,7 @@
 // Copyright 2026 Astro Fyne contributors.
 
 import { strict as assert } from "node:assert";
+import { cssSupportsProfile } from "../src/javascript-css-supports.ts";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
@@ -2188,6 +2189,30 @@ const cssCaseObservations: unknown[] = [];
 const cssIdentifierObservations: { stage: string; actual: unknown }[] = [];
 try {
   const page = await browser.newPage();
+  if (!astro) {
+    const supportResults = await page.evaluate(
+      (profile) =>
+        profile.map(([declaration, expected]) => ({
+          declaration,
+          expected,
+          actual: CSS.supports(`(${declaration})`),
+        })),
+      cssSupportsProfile,
+    );
+    await writeFile(
+      join(evidence, "css-supports-browser.json"),
+      JSON.stringify(supportResults, null, 2) + "\n",
+    );
+    console.log(
+      "Observed CSS supports profile: " + JSON.stringify(supportResults),
+    );
+    for (const item of supportResults)
+      assert.equal(
+        item.actual,
+        item.expected,
+        `CSS capability differs: ${item.declaration}`,
+      );
+  }
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(server.url.href);
   await page.waitForFunction(() => !!window.afyJavascript);

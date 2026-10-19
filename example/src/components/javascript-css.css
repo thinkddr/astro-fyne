@@ -28,6 +28,39 @@
   padding-left: 2px;
   padding: 3px 5px;
 }
+@supports (((display: flex)) and (not (color: astro-fyne-invalid))) or
+  ((-moz-orient: inline)) {
+  #css-supports-group {
+    color: #123456;
+    padding: 3px 5px;
+  }
+  @supports (display: flex) and (color: red) {
+    .css-theme[data-mode="alt"] #css-supports-group {
+      color: #007744;
+      padding-left: 9px;
+    }
+  }
+}
+#css-supports-negated {
+  color: #345678;
+}
+@supports not (display: astro-fyne-invalid) {
+  #css-supports-negated {
+    color: #456789;
+  }
+}
+@supports (display: astro-fyne-invalid) {
+  #css-supports-group {
+    position: absolute;
+  }
+}
+/* Tailwind's compatibility guard is false in the pinned Chromium profile. */
+@supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or
+  ((-moz-orient: inline)) {
+  #css-supports-group {
+    position: absolute;
+  }
+}
 .css-theme p {
   white-space: nowrap;
 }

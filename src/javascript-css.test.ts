@@ -21,6 +21,74 @@ async function withCSS(source: string, callback: (doc: any) => void) {
     await rm(dir, { recursive: true, force: true });
   }
 }
+test("CSS supports groups preserve the Tailwind guard, cascade layers and live selectors", async () => {
+  await withCSS(
+    `@layer a,b;
+     @layer a {
+       @supports (((display:flex)) and (not (color:astro-fyne-invalid))) or ((-moz-orient:inline)) {
+         .probe {color:red!important;padding:3px}
+         @supports (display:flex) and (color:red) {.probe[data-mode=alt]{color:blue!important}}
+       }
+     }
+     @layer b {.probe{color:green!important}}
+     @supports not (display:astro-fyne-invalid) {.probe{background-color:yellow}}
+     @supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline)) {
+       .probe:hover{position:absolute}
+     }
+     @supports (display:astro-fyne-invalid) {.probe:hover{position:absolute}}
+     @supports (display:astro-fyne-invalid) or (color:red) {.probe{padding-left:7px}}`,
+    ({ document, root, snapshot }) => {
+      const node = document.createElement("p");
+      node.className = "probe";
+      root.appendChild(node);
+      expect(snapshot()[0].style.color).toBe("red");
+      expect(snapshot()[0].style.backgroundColor).toBe("yellow");
+      expect(snapshot()[0].style.paddingTop).toBe("3px");
+      expect(snapshot()[0].style.paddingLeft).toBe("7px");
+      node.setAttribute("data-mode", "alt");
+      expect(snapshot()[0].style.color).toBe("blue");
+    },
+  );
+});
+test("CSS feature groups retain live relative selectors and their specificity", async () => {
+  await withCSS(
+    `@layer base,active;
+     @layer base {.card {color:green;padding:2px}}
+     @layer active {
+       @supports (display:flex) and (not (color:astro-fyne-invalid)) {
+         .card:has(> .ready, #never) {color:red;padding-left:7px}
+         .card:has(> .ready) {color:blue}
+       }
+       @supports (display:astro-fyne-invalid) {.card:hover {position:absolute}}
+     }`,
+    ({ document, root, snapshot }) => {
+      const card = document.createElement("section");
+      card.className = "card";
+      const child = document.createElement("span");
+      card.appendChild(child);
+      root.appendChild(card);
+      expect(snapshot()[0].style.color).toBe("green");
+      child.className = "ready";
+      expect(snapshot()[0].style.color).toBe("red");
+      expect(snapshot()[0].style.paddingLeft).toBe("7px");
+      child.className = "";
+      expect(snapshot()[0].style.color).toBe("green");
+      expect(snapshot()[0].style.paddingLeft).toBe("2px");
+    },
+  );
+});
+test("CSS supports diagnoses unknown probes, mixed operators, active unsupported styles and nested imports", async () => {
+  for (const source of [
+    "@supports (transform:rotate(1deg)){.probe{color:red}}",
+    "@supports (display:flex) or (transform:rotate(1deg)){.probe{color:red}}",
+    "@supports (display:flex) and (color:red) or (display:none){.probe{color:red}}",
+    "@supports selector(:has(p)){.probe{color:red}}",
+    "@supports (display:flex){.probe:hover{color:red}}",
+    '@supports (display:flex){@import "missing.css";}',
+  ]) {
+    await expect(withCSS(source, () => {})).rejects.toThrow(/adapter|import/);
+  }
+});
 test("CSS source rejects invalid UTF-8 instead of retaining replacement bytes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "afy-css-utf8-"));
   try {
