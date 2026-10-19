@@ -54,6 +54,25 @@ represent snapshots and do not expose a live program handle. With declared
 actions, pass `--actions-module ./actions.ts`; its path is relative to the
 catalogue module, with nested imports adjusted automatically.
 
+A generated browser module also exports `exportCatalogue`. Give it mounted
+JavaScript handles to capture their current checkpoints into a new catalogue:
+
+```ts
+import { exportCatalogue } from "./Widgets.catalogue.tsx";
+
+const updated = await exportCatalogue(new Map([["counter-left", leftHandle]]));
+const json = JSON.stringify(updated, null, 2);
+```
+
+`leftHandle` comes from a mounted `WidgetsIsland`'s `handleRef`. Commit editor
+values and clear focus before capturing. The helper snapshots supplied handles
+before hashing, checks component code/source/CSS/action identity, preserves
+other islands and returns independent metadata. It does not mutate the original
+catalogue or perform a download. Save `json` through your host application, then
+run `astro-fyne to-fyne Updated.catalogue.json` to restore supported state in Go.
+Scene/program checkpoint contracts remain their existing explicit export APIs;
+this helper currently accepts JavaScript island handles.
+
 The generated Astro page mounts all declared islands. Its module imports
 component CSS and font declarations. Named theme/layout objects are available
 for explicit host application; they do not alter the archived components.

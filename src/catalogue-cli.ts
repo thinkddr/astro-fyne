@@ -309,8 +309,22 @@ func merge${options.name}Fonts(target *webui.FyneBackend,extra webui.FyneBackend
       }
       islandNames.push(`${literal(island.id)}:${name}`);
     }
+    for (const file of [
+      "catalogue-types.ts",
+      "catalogue-web.ts",
+      "motion.ts",
+      "javascript-types.ts",
+    ])
+      text(
+        `_${options.name}-catalogue/${file}`,
+        header + (await readFile(new URL(file, import.meta.url), "utf8")),
+      );
+    imports.push(
+      `import {createCatalogueExporter} from "./_${options.name}-catalogue/catalogue-web.ts";`,
+      `import type {CatalogueSpec} from "./_${options.name}-catalogue/catalogue-types.ts";`,
+    );
     if (spec.motions?.length) {
-      for (const file of ["motion.ts", "motion-web.ts"])
+      for (const file of ["motion-web.ts"])
         text(
           `_${options.name}-catalogue/${file}`,
           header + (await readFile(new URL(file, import.meta.url), "utf8")),
@@ -329,7 +343,8 @@ func merge${options.name}Fonts(target *webui.FyneBackend,extra webui.FyneBackend
     text(
       `${options.name}.catalogue.tsx`,
       `${header}import {h,type ComponentType,type Ref} from "preact";\n${imports.join("\n")}\nimport "./${options.name}.fonts.css";
-export const catalogue=JSON.parse(${literal(source)}) as unknown;
+export const catalogue=JSON.parse(${literal(source)}) as CatalogueSpec;
+export const exportCatalogue=createCatalogueExporter(${literal(source)});
 export const themes=${literal(themes)};
 export const layouts=${literal(layouts)};
 export const motions${spec.motions?.length ? ":MotionSpec[]" : ""}=${literal(spec.motions ?? [])};

@@ -32,6 +32,8 @@ import type {
 } from "./javascript-types.ts";
 import { compile } from "./parser.ts";
 import { createProgramArchive } from "./program.ts";
+import { inspectFont } from "./fonts.ts";
+import type { MotionSpec } from "./motion.ts";
 import type { SceneDocument, SceneStyle } from "./reverse.ts";
 
 const launcher = fileURLToPath(
@@ -122,6 +124,20 @@ function component(
     stylesheets: [],
     fontFaces: [],
     actions: [],
+  };
+}
+function emptyCatalogue(name: string): CatalogueSpec {
+  return {
+    schema: 1,
+    kind: "astro-fyne-catalogue",
+    name,
+    resources: [],
+    stylesheets: [],
+    fontFaces: [],
+    themes: [],
+    layouts: [],
+    components: [],
+    islands: [],
   };
 }
 async function fixture(actions = false) {
@@ -608,7 +624,11 @@ test("scene and portable-program factories retain their own styles and embedded 
     source,
     "export default function Portable(){return <p>Portable text</p>}",
   );
-  await writeFile(join(directory, "regular.ttf"), await readFile(fontFile));
+  const regular = await readFile(fontFile),
+    document = scene();
+  document.roots[0]!.style.fontFamily = "PortableSans";
+  document.roots[0]!.children[0]!.style.fontFamily = "PortableSans";
+  await writeFile(join(directory, "regular.ttf"), regular);
   const program = await compile(source, undefined, {
     root: directory,
     fonts: [
@@ -625,13 +645,33 @@ test("scene and portable-program factories retain their own styles and embedded 
     schema: 1,
     kind: "astro-fyne-catalogue",
     name: "Mixed",
-    resources: [],
+    resources: [
+      {
+        name: "fonts/regular.ttf",
+        mediaType: "font/ttf",
+        hash: catalogueHash(regular),
+        content: regular.toString("base64"),
+        license: await readFile(fontLicense, "utf8"),
+      },
+    ],
     stylesheets: [],
-    fontFaces: [],
+    fontFaces: [
+      {
+        id: "regular",
+        family: "PortableSans",
+        weight: 400,
+        style: "normal",
+        resource: "fonts/regular.ttf",
+        hash: catalogueHash(regular),
+      },
+    ],
     themes: [],
     layouts: [],
     components: [
-      component("scene", "scene", scene()),
+      {
+        ...component("scene", "scene", document),
+        fontFaces: ["regular"],
+      },
       component("program", "program", createProgramArchive(program)),
       component("other-program", "program", createProgramArchive(program)),
     ],
@@ -777,3 +817,145 @@ test("installed CLI catalogue shortcuts work from the caller's directory and pre
   }
   await expect(stat(join(directory, "unused"))).rejects.toThrow();
 }, 120_000);
+
+test("invalid UTF-8 inside an otherwise valid token is rejected before either destination exists", async () => {
+  const spec = emptyCatalogue("Raw");
+  spec.themes.push({ id: "light", tokens: { "--note": "RAW" }, fontFaces: [] });
+  const source = Buffer.from(JSON.stringify(spec)),
+    at = source.indexOf('"RAW"');
+  expect(at).toBeGreaterThan(0);
+  source[at + 1] = 0xff;
+  const input = join(directory, "Raw.catalogue.json");
+  await writeFile(input, source);
+  for (const direction of ["native", "web"] as const) {
+    const out = join(directory, direction),
+      publicDir = join(directory, "public");
+    await expect(
+      generateCatalogue({
+        catalogue: input,
+        out,
+        name: "Raw",
+        direction,
+        ...(direction === "web" ? { publicDir } : {}),
+      }),
+    ).rejects.toThrow();
+    await expect(stat(out)).rejects.toThrow();
+    await expect(stat(publicDir)).rejects.toThrow();
+  }
+});
+
+test("conflicting valid static font hashes across catalogue and program faces block all output", async () => {
+  const regular = await readFile(fontFile),
+    padded = Buffer.concat([regular, Buffer.alloc(4)]),
+    face = { weight: 400 as const, style: "normal" as const };
+  inspectFont(regular, face);
+  inspectFont(padded, face);
+  expect(catalogueHash(padded)).not.toBe(catalogueHash(regular));
+  const source = join(directory, "Portable.tsx");
+  await writeFile(
+    source,
+    "export default function Portable(){return <p>Font conflict</p>}",
+  );
+  await writeFile(join(directory, "padded.ttf"), padded);
+  const program = await compile(source, undefined, {
+    root: directory,
+    fonts: [
+      {
+        ...face,
+        family: "CatalogueSans",
+        source: "padded.ttf",
+        webSrc: "/fonts/padded.ttf",
+      },
+    ],
+  });
+  const spec = emptyCatalogue("Conflict");
+  spec.resources.push({
+    name: "fonts/regular.ttf",
+    mediaType: "font/ttf",
+    hash: catalogueHash(regular),
+    content: regular.toString("base64"),
+    license: await readFile(fontLicense, "utf8"),
+  });
+  spec.fontFaces.push({
+    id: "regular",
+    family: "CatalogueSans",
+    ...face,
+    resource: "fonts/regular.ttf",
+    hash: catalogueHash(regular),
+  });
+  spec.components.push(
+    component("portable", "program", createProgramArchive(program)),
+  );
+  const input = await save(spec),
+    out = join(directory, "web"),
+    publicDir = join(directory, "public");
+  await expect(
+    generateCatalogue({
+      catalogue: input.path,
+      out,
+      publicDir,
+      name: "Conflict",
+      direction: "web",
+    }),
+  ).rejects.toThrow("Catalogue web font collision: cataloguesans:400:normal");
+  await expect(stat(out)).rejects.toThrow();
+  await expect(stat(publicDir)).rejects.toThrow();
+}, 60_000);
+
+test("declared catalogue motions export typed definitions and complete portable browser modules", async () => {
+  const motion: MotionSpec = {
+    schema: 1,
+    id: "move",
+    tracks: [
+      {
+        id: "horizontal",
+        target: "panel",
+        property: "x",
+        keyframes: [
+          { offset: 0, value: 0 },
+          { offset: 1, value: 100 },
+        ],
+      },
+    ],
+    timing: {
+      durationMs: 1000,
+      delayMs: 0,
+      iterations: 1,
+      direction: "normal",
+      fill: "both",
+      easing: { kind: "linear" },
+    },
+  };
+  const spec = emptyCatalogue("Animated");
+  spec.motions = [motion];
+  const input = await save(spec),
+    out = join(directory, "web"),
+    options = {
+      catalogue: input.path,
+      out,
+      name: "Animated",
+      direction: "web" as const,
+    };
+  await generateCatalogue(options);
+  const index = await readFile(join(out, "Animated.catalogue.tsx"), "utf8");
+  expect(index).toContain(
+    'import type {MotionSpec} from "./_Animated-catalogue/motion.ts"',
+  );
+  expect(index).toContain(
+    'export {WebMotionController} from "./_Animated-catalogue/motion-web.ts"',
+  );
+  const definition = index.match(
+    /^export const motions:MotionSpec\[\]=(.*);$/m,
+  );
+  expect(definition).not.toBeNull();
+  expect(JSON.parse(definition![1]!)).toEqual([motion]);
+  const header =
+    "// Code generated by astro-fyne. DO NOT EDIT.\n// SPDX-License-Identifier: Apache-2.0\n";
+  for (const file of ["motion.ts", "motion-web.ts"])
+    expect(await readFile(join(out, "_Animated-catalogue", file), "utf8")).toBe(
+      header + (await readFile(new URL(file, import.meta.url), "utf8")),
+    );
+  const initial = await tree(out);
+  await generateCatalogue({ ...options, check: true });
+  expect(await tree(out)).toEqual(initial);
+});

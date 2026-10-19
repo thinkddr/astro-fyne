@@ -68,6 +68,10 @@ and program factories plus the Goja JavaScript constructor. Web output provides
 `Widgets.catalogue.tsx`, named component exports, a `WidgetsIsland` component,
 matching font declarations and an Astro page mounting declared islands.
 
+The generated browser module's `exportCatalogue` helper collects mounted
+JavaScript island handles into another portable catalogue. Save that JSON and
+pass it to `to-fyne` to continue those independent checkpoints in native widgets.
+
 Both directions retain the exact input JSON, CSS and resource/license bytes in
 content-addressed sidecars. Use the reported `archiveFile` as input for another
 conversion. Themes/layouts remain explicit host dependencies. Motion definitions

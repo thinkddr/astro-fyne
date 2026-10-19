@@ -17,67 +17,26 @@ import {
 } from "./reverse.ts";
 import { validateMotion, type MotionSpec } from "./motion.ts";
 
-export interface CatalogueResource {
-  name: string;
-  mediaType: string;
-  hash: string;
-  content: string;
-  license: string;
-}
-export interface CatalogueStylesheet {
-  id: string;
-  path: string;
-  hash: string;
-  content: string;
-}
-export interface CatalogueFontFace {
-  id: string;
-  family: string;
-  weight: 400 | 700;
-  style: "normal" | "italic";
-  resource: string;
-  hash: string;
-}
-export interface CatalogueTheme {
-  id: string;
-  tokens: Record<string, string>;
-  fontFaces: string[];
-}
-export interface CatalogueLayout {
-  id: string;
-  style: SceneSourceStyle;
-}
-export interface CatalogueComponent {
-  id: string;
-  kind: "scene" | "program" | "javascript";
-  payload: string;
-  hash: string;
-  theme?: string;
-  layout?: string;
-  stylesheets: string[];
-  fontFaces: string[];
-  actions: string[];
-}
-export interface CatalogueIsland {
-  id: string;
-  component: string;
-  key: string;
-  statePayload?: string;
-  stateHash?: string;
-}
-export interface CatalogueSpec {
-  schema: 1;
-  kind: "astro-fyne-catalogue";
-  name: string;
-  resources: CatalogueResource[];
-  stylesheets: CatalogueStylesheet[];
-  fontFaces: CatalogueFontFace[];
-  themes: CatalogueTheme[];
-  layouts: CatalogueLayout[];
-  components: CatalogueComponent[];
-  islands: CatalogueIsland[];
-  motions?: MotionSpec[];
-}
+import type {
+  CatalogueResource,
+  CatalogueStylesheet,
+  CatalogueFontFace,
+  CatalogueTheme,
+  CatalogueLayout,
+  CatalogueComponent,
+  CatalogueIsland,
+  CatalogueSpec,
+} from "./catalogue-types.ts";
+export type {
+  CatalogueResource,
+  CatalogueStylesheet,
+  CatalogueFontFace,
+  CatalogueTheme,
+  CatalogueLayout,
+  CatalogueComponent,
+  CatalogueIsland,
+  CatalogueSpec,
+} from "./catalogue-types.ts";
 
 export const catalogueHash = (bytes: Uint8Array | string) =>
   createHash("sha256").update(bytes).digest("hex");
