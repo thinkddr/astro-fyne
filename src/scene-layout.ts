@@ -10,6 +10,8 @@ export interface SceneFlex {
   basis?: number;
   minWidth?: number;
   minHeight?: number;
+  maxWidth?: number;
+  maxHeight?: number;
   widthPercent?: number;
   heightPercent?: number;
   widthSet?: boolean;
@@ -39,6 +41,8 @@ const numeric = [
   "basis",
   "minWidth",
   "minHeight",
+  "maxWidth",
+  "maxHeight",
   "widthPercent",
   "heightPercent",
   ...margins,
@@ -138,11 +142,6 @@ export function validateResponsiveScene(document: SceneDocument): void {
         path,
         "responsive borders require integral CSS and device pixels with solid paint",
       );
-    if (
-      (f.minWidth !== undefined && f.minWidth !== 0) ||
-      (f.minHeight !== undefined && f.minHeight !== 0)
-    )
-      fail(path, "only explicit zero minima are supported");
     if ((s.width && !f.widthSet) || (s.height && !f.heightSet))
       fail(path, "pixel dimensions require presence metadata");
     for (const axis of ["width", "height"] as const) {
@@ -160,6 +159,13 @@ export function validateResponsiveScene(document: SceneDocument): void {
       if (f.order) fail(path, "order applies only to flex items");
       if (margins.some((key) => f[key]))
         fail(path, "margins apply only to flex items");
+      if (
+        f.minWidth ||
+        f.minHeight ||
+        f.maxWidth !== undefined ||
+        f.maxHeight !== undefined
+      )
+        fail(path, "the root cannot declare nonzero minima or maxima");
       if (
         node.kind !== "container" ||
         s.display !== "flex" ||
@@ -184,8 +190,15 @@ export function validateResponsiveScene(document: SceneDocument): void {
           "responsive root must guarantee opaque square borderless viewport coverage",
         );
     } else {
-      if (f.basis === undefined || f.minWidth !== 0 || f.minHeight !== 0)
-        fail(path, "each item requires a pixel basis and explicit zero minima");
+      if (
+        f.basis === undefined ||
+        f.minWidth === undefined ||
+        f.minHeight === undefined
+      )
+        fail(
+          path,
+          "each item requires a pixel basis and explicit pixel minima",
+        );
       const row = !["column", "column-reverse"].includes(parent.direction);
       if (row ? f.widthPercent !== undefined : f.heightPercent !== undefined)
         fail(
@@ -298,6 +311,8 @@ export function sourceStyleCSS(
     ["basis", "flexBasis"],
     ["minWidth", "minWidth"],
     ["minHeight", "minHeight"],
+    ["maxWidth", "maxWidth"],
+    ["maxHeight", "maxHeight"],
   ] as const)
     if (f[key] !== undefined) css[name] = f[key]!;
   for (const key of [

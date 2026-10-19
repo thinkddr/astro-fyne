@@ -48,6 +48,8 @@ const flexNames = {
   basis: "Basis",
   minWidth: "MinWidth",
   minHeight: "MinHeight",
+  maxWidth: "MaxWidth",
+  maxHeight: "MaxHeight",
   widthPercent: "WidthPercent",
   heightPercent: "HeightPercent",
   widthSet: "WidthSet",

@@ -20,14 +20,17 @@ import (
 // Order is an integer; ties keep source order. Fyne object, focus and paint
 // order stay in source order (items never overlap in this profile).
 // Item margins are nonnegative pixels; MarginSet records all four sides declared.
-// Intrinsic sizing, wrap, RTL, auto/negative margins, nonzero minima, percentage bases
-// and max constraints are unsupported. Text/control/bitmap leaves need explicit styles.
+// Minima and maxima are border-box pixels; a minimum wins over a smaller maximum.
+// Intrinsic sizing, wrap, RTL, auto/negative margins and percentage bases
+// are unsupported. Text/control/bitmap leaves need explicit styles.
 type FlexStyle struct {
 	Grow           *float32 `json:"grow,omitempty"`
 	Shrink         *float32 `json:"shrink,omitempty"`
 	Basis          *float32 `json:"basis,omitempty"`
 	MinWidth       *float32 `json:"minWidth,omitempty"`
 	MinHeight      *float32 `json:"minHeight,omitempty"`
+	MaxWidth       *float32 `json:"maxWidth,omitempty"`
+	MaxHeight      *float32 `json:"maxHeight,omitempty"`
 	WidthPercent   *float32 `json:"widthPercent,omitempty"`
 	HeightPercent  *float32 `json:"heightPercent,omitempty"`
 	WidthSet       bool     `json:"widthSet,omitempty"`
@@ -62,6 +65,7 @@ func freezeFlexStyles(nodes []Node) {
 			}
 			f.Grow, f.Shrink, f.Basis = clone(f.Grow), clone(f.Shrink), clone(f.Basis)
 			f.MinWidth, f.MinHeight = clone(f.MinWidth), clone(f.MinHeight)
+			f.MaxWidth, f.MaxHeight = clone(f.MaxWidth), clone(f.MaxHeight)
 			f.WidthPercent, f.HeightPercent = clone(f.WidthPercent), clone(f.HeightPercent)
 			nodes[i].Style.Flex = &f
 		}
@@ -74,7 +78,7 @@ func validateFlexStyle(id string, style Style) error {
 	if f == nil {
 		return nil
 	}
-	for _, value := range []*float32{f.Grow, f.Shrink, f.Basis, f.MinWidth, f.MinHeight, f.WidthPercent, f.HeightPercent, &f.MarginTop, &f.MarginRight, &f.MarginBottom, &f.MarginLeft} {
+	for _, value := range []*float32{f.Grow, f.Shrink, f.Basis, f.MinWidth, f.MinHeight, f.MaxWidth, f.MaxHeight, f.WidthPercent, f.HeightPercent, &f.MarginTop, &f.MarginRight, &f.MarginBottom, &f.MarginLeft} {
 		if value != nil && (!finite(*value) || *value < 0) {
 			return fmt.Errorf("webui: nonfinite or negative flex declaration on %q", id)
 		}
@@ -109,7 +113,7 @@ func validateFlexTree(nodes []Node) error {
 					return fmt.Errorf("webui: reverse direction on %q requires a responsive flex root", node.ID)
 				}
 				f := node.Style.Flex
-				if f != nil && (f.Grow != nil || f.Shrink != nil || f.Basis != nil || f.MinWidth != nil || f.MinHeight != nil ||
+				if f != nil && (f.Grow != nil || f.Shrink != nil || f.Basis != nil || f.MinWidth != nil || f.MinHeight != nil || f.MaxWidth != nil || f.MaxHeight != nil ||
 					f.WidthPercent != nil || f.HeightPercent != nil || f.JustifyContent != "" || f.AlignItems != "" ||
 					f.AlignSelf != "" || f.BoxSizing != "" || f.BorderStyle != "" || f.Appearance != "" || f.MarginSet || f.Order != 0 || f.MarginTop != 0 || f.MarginRight != 0 || f.MarginBottom != 0 || f.MarginLeft != 0) {
 					return fmt.Errorf("webui: flex declarations on %q require a supported responsive flex root", node.ID)
@@ -200,9 +204,6 @@ func validateFlexTree(nodes []Node) error {
 		if s.BorderWidth != float32(math.Trunc(float64(s.BorderWidth))) {
 			return fail("source border widths must be integral CSS pixels; fractional used-border snapping is unsupported")
 		}
-		if f.MinWidth != nil && *f.MinWidth != 0 || f.MinHeight != nil && *f.MinHeight != 0 {
-			return fail("only explicit zero minima are supported")
-		}
 		if !justifySupported(f.JustifyContent) || !alignSupported(f.AlignItems, false) || !alignSupported(f.AlignSelf, true) {
 			return fail("unsupported justification or alignment")
 		}
@@ -219,6 +220,9 @@ func validateFlexTree(nodes []Node) error {
 			}
 			if f.Order != 0 || f.MarginTop != 0 || f.MarginRight != 0 || f.MarginBottom != 0 || f.MarginLeft != 0 {
 				return fail("order and margins apply only to flex items")
+			}
+			if f.MinWidth != nil && *f.MinWidth != 0 || f.MinHeight != nil && *f.MinHeight != 0 || f.MaxWidth != nil || f.MaxHeight != nil {
+				return fail("the root cannot declare nonzero minima or maxima")
 			}
 		} else {
 			if f.Basis == nil || f.MinWidth == nil || f.MinHeight == nil {
@@ -366,13 +370,33 @@ func flexMargins(s Style, row, reverse bool) (mainStart, mainEnd, crossStart, cr
 }
 
 type flexItem struct {
-	base, floor, target, grow, shrink float64
-	frozen                            bool
+	base, floor, minimum, maximum, target, grow, shrink float64
+	frozen                                              bool
 }
 
-// flexibleSizes resolves one line: hypothetical sizes choose grow/shrink,
-// scaled shrink uses inner bases, and decoration floors freeze and redistribute.
-// Zero factors and below-floor shrink bases freeze first; max constraints are absent.
+func (item flexItem) clamp(size float64) float64 { return max(min(size, item.maximum), item.minimum) }
+
+// flexLimits resolves border-box min/max on one axis. The padding/border floor
+// is the automatic content minimum of an empty border-box; a minimum beats a maximum.
+func flexLimits(s Style, row bool) (minimum, maximum float64) {
+	f := s.Flex
+	floor, low, high := verticalDecoration(s), f.MinHeight, f.MaxHeight
+	if row {
+		floor, low, high = horizontalDecoration(s), f.MinWidth, f.MaxWidth
+	}
+	minimum, maximum = float64(floor), math.Inf(1)
+	if low != nil {
+		minimum = max(minimum, float64(*low))
+	}
+	if high != nil {
+		maximum = max(float64(*high), minimum)
+	}
+	return minimum, maximum
+}
+
+// flexibleSizes resolves one line with the CSS Flexbox §9.7 loop: hypothetical
+// sizes choose grow/shrink, scaled shrink uses inner bases, and each pass freezes
+// the min or max violators selected by the sign of the total violation.
 func flexibleSizes(children []*element, main float32, row bool, gap float32) []float32 {
 	items := make([]flexItem, len(children))
 	available := float64(main) - float64(gap)*float64(max(len(children)-1, 0))
@@ -386,21 +410,21 @@ func flexibleSizes(children []*element, main float32, row bool, gap float32) []f
 			floor = horizontalDecoration(s)
 		}
 		item := flexItem{base: float64(*f.Basis), floor: float64(floor), shrink: 1}
+		item.minimum, item.maximum = flexLimits(s, row)
 		if f.Grow != nil {
 			item.grow = float64(*f.Grow)
 		}
 		if f.Shrink != nil {
 			item.shrink = float64(*f.Shrink)
 		}
-		item.target = item.base
-		hypothetical += max(item.base, item.floor)
+		item.target = item.clamp(item.base)
+		hypothetical += item.target
 		items[i] = item
 	}
 	grow := hypothetical < available
 	for i := range items {
 		item := &items[i]
-		if grow && item.grow == 0 || !grow && (item.shrink == 0 || item.base < item.floor) {
-			item.target = max(item.base, item.floor)
+		if grow && (item.grow == 0 || item.base > item.target) || !grow && (item.shrink == 0 || item.base < item.target) {
 			item.frozen = true
 		}
 	}
@@ -442,28 +466,30 @@ func flexibleSizes(children []*element, main float32, row bool, gap float32) []f
 				remaining = partial
 			}
 		}
-		violation := false
+		var violation float64
+		adjustments := make([]float64, len(items))
 		for i := range items {
 			item := &items[i]
 			if item.frozen {
 				continue
 			}
-			item.target = item.base
+			target := item.base
 			if weightSum > 0 {
 				if grow {
-					item.target += remaining * item.grow / weightSum
+					target += remaining * item.grow / weightSum
 				} else {
-					item.target -= math.Abs(remaining) * item.shrink * (item.base - item.floor) / weightSum
+					target -= math.Abs(remaining) * item.shrink * (item.base - item.floor) / weightSum
 				}
 			}
-			if item.target < item.floor {
-				item.target = item.floor
-				item.frozen = true
-				violation = true
-			}
+			item.target = item.clamp(target)
+			adjustments[i] = item.target - target
+			violation += adjustments[i]
 		}
-		if !violation {
-			break
+		for i := range items {
+			item := &items[i]
+			if !item.frozen && (violation == 0 || violation > 0 && adjustments[i] > 0 || violation < 0 && adjustments[i] < 0) {
+				item.frozen = true
+			}
 		}
 	}
 	out := make([]float32, len(items))
@@ -538,10 +564,8 @@ func flexFrames(children []*element, parent Style, content fyne.Size, origin fyn
 		child := children[i]
 		s, f := child.style, child.style.Flex
 		crossSize, crossSet, percent := s.Width, f.WidthSet, f.WidthPercent
-		crossFloor := horizontalDecoration(s)
 		if row {
 			crossSize, crossSet, percent = s.Height, f.HeightSet, f.HeightPercent
-			crossFloor = verticalDecoration(s)
 		}
 		mainStart, mainEnd, crossStart, crossEnd := flexMargins(s, row, reverse)
 		align := itemAlignment(parent, s)
@@ -550,7 +574,8 @@ func flexFrames(children []*element, parent Style, content fyne.Size, origin fyn
 		} else if !crossSet && align == "stretch" {
 			crossSize = cross - crossStart - crossEnd
 		}
-		crossSize = max(crossSize, crossFloor)
+		low, high := flexLimits(s, !row)
+		crossSize = float32(max(min(float64(crossSize), high), low))
 		crossOffset := crossStart
 		switch align {
 		case "end":

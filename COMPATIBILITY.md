@@ -166,7 +166,7 @@ The root must have `width: "100%"`, an explicit pixel height and
 `boxSizing: "border-box"`. Containers with children must themselves use
 `display: "flex"`; supported leaves are empty containers, plain text, buttons,
 single-line text inputs and bitmap images. Every flex item must
-declare a nonnegative pixel `flexBasis`, `minWidth: 0`, `minHeight: 0` and
+declare a nonnegative pixel `flexBasis`, explicit pixel `minWidth` and `minHeight` and
 `boxSizing: "border-box"`. `flexGrow` defaults to 0 and `flexShrink` to 1; explicit zero
 factors remain zero. Sizes and spacing use numbers or `px`, not the prototype mapper's
 14px `rem` assumption. A dimension of zero remains distinct from an omitted dimension.
@@ -179,6 +179,10 @@ Items may declare nonnegative pixel margins through `margin` (one value) and the
 longhands, applied in source order. Margins reduce the free space, offset both axes and
 shrink a stretched cross size; reverse directions start at the physical right or bottom margin.
 The root cannot declare margins.
+Items may also declare pixel `maxWidth`/`maxHeight` (or `none`). Main sizes follow the
+CSS §9.7 loop that freezes minimum or maximum violators by the sign of the total violation;
+cross sizes are clamped after stretch. A minimum wins over a smaller maximum, and the
+padding/border floor still applies. The root cannot declare nonzero minima or maxima.
 `justifyContent` accepts `flex-start`, `flex-end`, `center`, `space-between`,
 `space-around` and `space-evenly`. `alignItems` and `alignSelf` accept `flex-start`,
 `flex-end`, `center` and `stretch`; `alignSelf: "auto"` inherits the container's setting.
@@ -213,8 +217,8 @@ and zero padding, border and radius. The responsive bitmap corpus uses the sourc
 natural 16×16 size and scale 1; it does not certify image interpolation at another size or scale.
 
 This mode does not implement text or control intrinsic sizes, automatic/content/percentage
-bases, automatic minima, auto/negative margins, wrapping, RTL/vertical writing, baseline alignment,
-min/max constraints, the CSS cascade, external stylesheets or arbitrary percentage sizing.
+bases, automatic minima, percentage minima/maxima, auto/negative margins, wrapping, RTL/vertical
+writing, baseline alignment, the CSS cascade, external stylesheets or arbitrary percentage sizing.
 Unsupported declarations or tree shapes fail explicitly. Measured profiles keep their
 existing exact-viewport restriction.
 

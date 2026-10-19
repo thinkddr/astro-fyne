@@ -304,7 +304,8 @@ func TestResponsiveFlexRejectsUnsupportedDeclarationsWithoutMutatingLastFrame(t 
 	}{
 		{"missing item basis", func(root *Node) { root.Children[0].Style.Flex.Basis = nil }},
 		{"automatic item minimum", func(root *Node) { root.Children[0].Style.Flex.MinWidth = nil }},
-		{"nonzero item minimum", func(root *Node) { *root.Children[0].Style.Flex.MinHeight = 10 }},
+		{"negative item maximum", func(root *Node) { root.Children[0].Style.Flex.MaxHeight = FlexValue(-1) }},
+		{"root maximum", func(root *Node) { root.Style.Flex.MaxWidth = FlexValue(100) }},
 		{"percentage main axis", func(root *Node) {
 			root.Children[0].Style.Flex.WidthSet = true
 			root.Children[0].Style.Flex.WidthPercent = FlexValue(100)
@@ -492,5 +493,38 @@ func TestFlexMarginsReduceFreeSpaceAndOffsetBothAxes(t *testing.T) {
 	item.Style.Flex.MarginLeft = -1
 	if err := validateFlexStyle("a", item.Style); err == nil {
 		t.Fatal("accepted a negative margin")
+	}
+}
+
+func TestFlexMinMaxFreezeViolatorsAndClampCrossSize(t *testing.T) {
+	a, b, c := flexTestItem("a", 50), flexTestItem("b", 50), flexTestItem("c", 20)
+	a.Style.Flex.Grow, a.Style.Flex.MaxWidth, a.Style.Flex.MaxHeight = FlexValue(1), FlexValue(70), FlexValue(30)
+	b.Style.Flex.Grow, b.Style.Flex.MinWidth = FlexValue(1), FlexValue(45)
+	c.Style.Flex.Grow, c.Style.Flex.MinWidth, c.Style.Flex.MinHeight = FlexValue(0), FlexValue(40), FlexValue(70)
+	root := flexTestRoot(60, a, b, c)
+	v := NewView(func() []Node { return []Node{root} })
+	canvas := software.NewCanvas()
+	canvas.SetPadded(false)
+	canvas.SetContent(v)
+	if err := v.BindCanvas(canvas); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []struct {
+		width        float32
+		a, b, bX, cX float32
+	}{
+		// Growth: a hits its maximum and freezes; b takes the rest.
+		{200, 70, 90, 70, 160},
+		// Shrinkage: c's minimum freezes it first, then b's minimum freezes b.
+		{100, 15, 45, 15, 60},
+	} {
+		canvas.Resize(fyne.NewSize(step.width, 60))
+		canvas.Capture()
+		if err := v.Error(); err != nil {
+			t.Fatal(err)
+		}
+		flexTestFrame(t, v, "a", 0, 0, step.a, 30)
+		flexTestFrame(t, v, "b", step.bX, 0, step.b, 60)
+		flexTestFrame(t, v, "c", step.cX, 0, 40, 70)
 	}
 }
