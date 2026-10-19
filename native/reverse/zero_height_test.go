@@ -25,18 +25,28 @@ func TestFrozenScenePreservesZeroBoxWithoutInventingBlockLayout(t *testing.T) {
 	canvas.SetPadded(false)
 	canvas.SetContent(view)
 	canvas.Resize(fyne.NewSize(320, 240))
-	if err := view.BindCanvas(canvas); err != nil { t.Fatal(err) }
+	if err := view.BindCanvas(canvas); err != nil {
+		t.Fatal(err)
+	}
 	opts := options()
 	opts.Canvas = canvas
 	scene, err := Export(view, opts)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	nodes := content(scene).Children
 	if scene.Schema != 1 || nodes[0].ID != "zero" || nodes[0].Style.Height != 0 || nodes[0].Style.Width != 320 || nodes[0].SourceStyle != nil || nodes[0].Style.Flex != nil || nodes[1].Style.Y != 0 {
 		t.Fatalf("frozen scene lost the zero box: %+v", nodes)
 	}
 	bytes, err := json.Marshal(scene)
-	if err != nil { t.Fatal(err) }
-	if strings.Contains(string(bytes), "heightSet") { t.Fatal("frozen scene leaked source presence metadata") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(bytes), "heightSet") {
+		t.Fatal("frozen scene leaked source presence metadata")
+	}
 	opts.PreserveLayout = true
-	if _, err = Export(view, opts); err == nil || !strings.Contains(err.Error(), "responsive") { t.Fatalf("block source layout was silently frozen: %v", err) }
+	if _, err = Export(view, opts); err == nil || !strings.Contains(err.Error(), "responsive") {
+		t.Fatalf("block source layout was silently frozen: %v", err)
+	}
 }

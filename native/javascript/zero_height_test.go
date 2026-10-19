@@ -32,7 +32,9 @@ func TestCSSZeroHeightRequiresAnEmptyUndecoratedBlock(t *testing.T) {
 		{Tag: "section", Style: map[string]any{"flexDirection": "row"}},
 	} {
 		frame.UID, frame.CSS = "panel", true
-		if frame.Style == nil { frame.Style = map[string]any{} }
+		if frame.Style == nil {
+			frame.Style = map[string]any{}
+		}
 		frame.Style["height"] = "0px"
 		if _, err := w.nodes([]Frame{frame}); err == nil || !strings.Contains(err.Error(), "zero height") {
 			t.Fatalf("unsupported zero-height frame was admitted: %+v %v", frame, err)
