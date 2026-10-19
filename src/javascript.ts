@@ -6,7 +6,11 @@ import { readFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { javascriptHostJSON, validJavascriptText } from "./javascript-data.ts";
+import {
+  javascriptHostJSON,
+  validJavascriptText,
+  validateJavascriptAnimationState,
+} from "./javascript-data.ts";
 import { astroJavascript } from "./javascript-astro.ts";
 import { compileJavascriptCSS } from "./javascript-css.ts";
 
@@ -43,6 +47,23 @@ export async function bundleJavascript(
     string,
     { path: string; hash: string; text: string }
   >();
+  let heightAnimations = false;
+  const features = (rules: any[]) => {
+    if (
+      rules.some(
+        (rule) =>
+          rule.heightKeyframes ||
+          rule.declarations?.some((item: any) =>
+            item.animation?.some(
+              ([name, value]: [string, unknown]) =>
+                name === "animation-name" && value !== "none",
+            ),
+          ),
+      )
+    )
+      heightAnimations = true;
+    return rules;
+  };
   const recordCSS = (file: string, text: string) => {
     const path = relative(root, file).replaceAll("\\", "/"),
       digest = hash(text),
@@ -56,7 +77,9 @@ export async function bundleJavascript(
   for (const file of stylesheets) {
     if (extname(file) !== ".css")
       throw new Error("Stylesheet input must be a local CSS file");
-    externalStyles.push(...(await compileJavascriptCSS(file, recordCSS)));
+    externalStyles.push(
+      ...features(await compileJavascriptCSS(file, recordCSS)),
+    );
   }
   const scripts = new Map<string, { contents: string; directory: string }>();
   async function build(
@@ -146,7 +169,9 @@ export async function bundleJavascript(
                   throw new Error(
                     "CSS modules require a native class-export adapter",
                   );
-                const rules = await compileJavascriptCSS(args.path, recordCSS);
+                const rules = features(
+                  await compileJavascriptCSS(args.path, recordCSS),
+                );
                 return {
                   contents: `globalThis._afyCssInstall(${JSON.stringify(rules)});`,
                   loader: "js" as const,
@@ -219,9 +244,9 @@ export async function bundleJavascript(
     resolve(fileURLToPath(import.meta.resolve("preact")), "../../LICENSE"),
     "utf8",
   );
-  const code = `/* Bundled Preact: ${license.replaceAll("*/", "* / ")} */\nfunction(host,archive){const globalThis={};${runtime}\nconst runtime=globalThis._afyRuntime(host,archive);${stylesheets.length ? `runtime.environment._afyCssInstall(${JSON.stringify(externalStyles)});` : ""}return(function(environment){const{document,window,self,globalThis,Math,Date,setTimeout,clearTimeout,requestAnimationFrame,cancelAnimationFrame,queueMicrotask,fetch,setInterval,getComputedStyle,console}=environment;${scriptFactories.length ? `globalThis._afyAstroScripts={${scriptFactories.join(",")}};` : ""}${program}\nreturn runtime.bind(globalThis._afyComponent,globalThis._afyPreact);})(runtime.environment);}`;
+  const code = `/* Bundled Preact: ${license.replaceAll("*/", "* / ")} */\nfunction(host,archive){if(archive.schema!==${heightAnimations ? 2 : 1})throw new Error("JavaScript archive schema differs from its compiled animation ABI");const globalThis={};${runtime}\nconst runtime=globalThis._afyRuntime(host,archive);${stylesheets.length ? `runtime.environment._afyCssInstall(${JSON.stringify(externalStyles)});` : ""}return(function(environment){const{document,window,self,globalThis,Math,Date,setTimeout,clearTimeout,requestAnimationFrame,cancelAnimationFrame,queueMicrotask,fetch,setInterval,getComputedStyle,console}=environment;${scriptFactories.length ? `globalThis._afyAstroScripts={${scriptFactories.join(",")}};` : ""}${program}\nreturn runtime.bind(globalThis._afyComponent,globalThis._afyPreact);})(runtime.environment);}`;
   const archive: JavascriptArchive = {
-    schema: 1,
+    schema: heightAnimations ? 2 : 1,
     kind: "astro-fyne-javascript",
     code,
     codeHash: hash(code),
@@ -239,6 +264,15 @@ export async function bundleJavascript(
     actions,
     events: [],
     journal: [],
+    ...(heightAnimations
+      ? {
+          animation: {
+            schema: 1 as const,
+            timeMs: 0,
+            playState: "running" as const,
+          },
+        }
+      : {}),
   };
   await validateJavascriptArchive(archive);
   return archive;
@@ -278,16 +312,19 @@ export async function validateJavascriptArchive(
       "events",
       "journal",
     ],
-    ["frame", "stylesheets"],
+    ["frame", "stylesheets", "animation"],
   );
   if (
-    value.schema !== 1 ||
+    ![1, 2].includes(value.schema) ||
     value.kind !== "astro-fyne-javascript" ||
     typeof value.code !== "string" ||
     Buffer.byteLength(value.code) > 64 * 1024 * 1024 ||
     value.codeHash !== hash(value.code)
   )
     throw new Error("Invalid JavaScript archive or digest");
+  if (value.schema === 2) validateJavascriptAnimationState(value.animation);
+  else if (Object.hasOwn(value, "animation"))
+    throw new Error("Schema 1 forbids animation state");
   if (
     !record(value.props) ||
     Buffer.byteLength(JSON.stringify(value.props)) > 1024 * 1024 ||
@@ -356,9 +393,14 @@ export async function validateJavascriptArchive(
     value.journal.length > 100000
   )
     throw new Error("JavaScript history exceeds its limits");
+  let eventTime = 0;
   for (const event of value.events) {
     if (!record(event)) throw new Error("Invalid JavaScript event");
-    fields(event, ["node", "type"], ["value"]);
+    fields(
+      event,
+      ["node", "type", ...(value.schema === 2 ? ["timeMs"] : [])],
+      ["value"],
+    );
     if (
       typeof event.node !== "string" ||
       !event.node ||
@@ -366,6 +408,18 @@ export async function validateJavascriptArchive(
       (event.value !== undefined && typeof event.value !== "string")
     )
       throw new Error("Invalid JavaScript event");
+    if (value.schema === 2) {
+      if (
+        typeof event.timeMs !== "number" ||
+        !Number.isFinite(event.timeMs) ||
+        event.timeMs < eventTime ||
+        event.timeMs > value.animation.timeMs
+      )
+        throw new Error(
+          "JavaScript animation event time must be monotonic and within the final clock",
+        );
+      eventTime = event.timeMs;
+    }
   }
   for (const entry of value.journal) {
     if (!record(entry)) throw new Error("Invalid JavaScript journal entry");

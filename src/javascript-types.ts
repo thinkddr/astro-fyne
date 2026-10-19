@@ -3,6 +3,12 @@ export interface JavascriptEvent {
   node: string;
   type: "click" | "input" | "change";
   value?: string;
+  timeMs?: number;
+}
+export interface JavascriptAnimationState {
+  schema: 1;
+  timeMs: number;
+  playState: "running" | "paused" | "finished";
 }
 export interface JavascriptJournal {
   kind: "random" | "now" | "action";
@@ -25,7 +31,7 @@ export interface JavascriptFrame {
   children?: JavascriptFrame[];
 }
 export interface JavascriptArchive {
-  schema: 1;
+  schema: 1 | 2;
   kind: "astro-fyne-javascript";
   code: string;
   codeHash: string;
@@ -36,6 +42,7 @@ export interface JavascriptArchive {
   events: JavascriptEvent[];
   journal: JavascriptJournal[];
   frame?: JavascriptFrame[];
+  animation?: JavascriptAnimationState;
 }
 export interface JavascriptAPI {
   snapshot(): JavascriptFrame[];
@@ -45,6 +52,10 @@ export interface JavascriptAPI {
   flush(): void;
   export(): JavascriptArchive;
   dispose(): void;
+  animationState?(): JavascriptAnimationState;
+  advanceAnimations?(timeMs: number): void;
+  pauseAnimations?(): void;
+  playAnimations?(): void;
 }
 export type JavascriptActions = Record<string, (...args: any[]) => unknown>;
 export type JavascriptFactory = (

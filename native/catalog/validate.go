@@ -112,6 +112,26 @@ func requiredFields(data []byte, kind reflect.Type) error {
 				}
 			}
 		}
+		if kind == reflect.TypeOf(javascript.Archive{}) {
+			var schema int
+			if err := json.Unmarshal(fields["schema"], &schema); err != nil {
+				return fmt.Errorf("catalog: JavaScript schema must be an integer")
+			}
+			_, animated := fields["animation"]
+			if schema == 1 && animated || schema == 2 && !animated {
+				return fmt.Errorf("catalog: JavaScript animation state must match its schema")
+			}
+			var events []map[string]json.RawMessage
+			if err := json.Unmarshal(fields["events"], &events); err != nil {
+				return fmt.Errorf("catalog: JavaScript events must be an array")
+			}
+			for _, event := range events {
+				_, timed := event["timeMs"]
+				if schema == 1 && timed || schema == 2 && !timed {
+					return fmt.Errorf("catalog: JavaScript event timeMs must match its schema")
+				}
+			}
+		}
 		allowed := map[string]bool{}
 		for i := 0; i < kind.NumField(); i++ {
 			field := kind.Field(i)
@@ -425,7 +445,7 @@ func validateIslandState(island Island, component Component) error {
 	if err := javascript.Validate(state); err != nil {
 		return err
 	}
-	if state.Code != prototype.Code || state.CodeHash != prototype.CodeHash || !slices.Equal(state.Sources, prototype.Sources) || !slices.Equal(state.Stylesheets, prototype.Stylesheets) || !slices.Equal(state.Actions, prototype.Actions) {
+	if state.Schema != prototype.Schema || state.Kind != prototype.Kind || state.Code != prototype.Code || state.CodeHash != prototype.CodeHash || !slices.Equal(state.Sources, prototype.Sources) || !slices.Equal(state.Stylesheets, prototype.Stylesheets) || !slices.Equal(state.Actions, prototype.Actions) {
 		return fmt.Errorf("catalog: island %q state cannot replace component code, CSS, sources or action contracts", island.ID)
 	}
 	return nil

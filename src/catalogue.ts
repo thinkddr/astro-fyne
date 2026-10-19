@@ -699,6 +699,7 @@ export async function validateCatalogue(
           text,
         ]);
       if (
+        state.schema !== prototype.schema ||
         state.code !== prototype.code ||
         state.codeHash !== prototype.codeHash ||
         JSON.stringify(sources(state)) !== JSON.stringify(sources(prototype)) ||

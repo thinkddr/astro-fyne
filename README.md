@@ -270,19 +270,20 @@ for a single measured entry, `--measurements PATH`. Reverse output is checked wi
 
 ## Compatibility and visual accuracy
 
-| Area                 | Current support                                                                                                 |
-| -------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Source               | Declarative Astro/TSX components, props, supported expressions, `useState`, events and keyed lists              |
-| Native output        | Fyne widgets, generated themes, explicit host actions, local PNG/JPEG resources and static TTF faces            |
-| Responsive layout    | Single-line LTR Flexbox in four directions, boxes, one-line text, buttons, single-line inputs and bitmap leaves |
-| Browser measurements | Fixed source/state/viewport/device-scale profiles with validated styles                                         |
-| Reverse output       | Fixed native scenes or preserved source Flexbox, with values, resources and named actions                       |
-| Program roundtrip    | Opt-in compiler IR, declared props/state and list identities restored in Preact and generated Go                |
-| Still unsupported    | Arbitrary JS/Go, full CSS cascade, grid, wrapping/intrinsic layout, animations and browser APIs                 |
+| Area                 | Current support                                                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source               | Declarative Astro/TSX components, props, supported expressions, `useState`, events and keyed lists                                           |
+| Native output        | Fyne widgets, generated themes, explicit host actions, local PNG/JPEG resources and static TTF faces                                         |
+| Responsive layout    | Single-line LTR Flexbox in four directions, boxes, one-line text, buttons, single-line inputs and bitmap leaves                              |
+| Browser measurements | Fixed source/state/viewport/device-scale profiles with validated styles                                                                      |
+| Reverse output       | Fixed native scenes or preserved source Flexbox, with values, resources and named actions                                                    |
+| Program roundtrip    | Opt-in compiler IR, declared props/state and list identities restored in Preact and generated Go                                             |
+| Motion               | Explicit portable numeric clips and [automatic CSS height animations](docs/css-height-animations.md) in the bounded empty block-flow profile |
+| Still unsupported    | Arbitrary JS/Go, full CSS, grid, wrapping/intrinsic layout, general animation effects and browser APIs                                       |
 
 CI compares browser and native captures and retains the generated code, traces, scene files
-and pixel diffs. The current suite requires **44 exact full-frame visual comparisons**
-with zero RGBA differences, including six comparisons of the published image sampler.
+and pixel diffs. Supported visual profiles require exact full-frame comparisons
+with zero RGBA differences, including comparisons of the published image sampler.
 It also checks native scene reconstruction, control behavior and geometry.
 **All 22 responsive typography frames
 still differ at zero tolerance.** Passing a profile certifies that profile only.
@@ -321,7 +322,7 @@ conversion and strict pixel comparisons. To run the full `bash ci/run.sh` workfl
 remote machine, first install the capture browser with
 `bunx --no-install playwright install chromium`.
 
-When contributing, include a small reproduction, preserve explicit unsupported-feature
+For each change, include a small reproduction, preserve explicit unsupported-feature
 errors, and add behavior or visual evidence for new conversion features. See
 [COMPATIBILITY.md](COMPATIBILITY.md) for the rendering contract and remaining work.
 

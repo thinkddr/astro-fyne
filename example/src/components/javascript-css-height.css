@@ -1,0 +1,26 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#height-root {
+  background-color: #ffffff;
+  padding: 0;
+  margin: 0;
+}
+#height-panel {
+  height: 20px;
+  background-color: #2468ac;
+  animation: panel-height 1000ms linear 100ms 2 alternate both;
+}
+#height-sibling {
+  height: 24px;
+  background-color: #c65432;
+}
+#height-panel.eased {
+  animation-timing-function: ease-in-out;
+}
+@keyframes panel-height {
+  from {
+    height: 20px;
+  }
+  to {
+    height: 100px;
+  }
+}

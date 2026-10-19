@@ -2,6 +2,12 @@
 
 # CSS in both directions
 
+Automatic source `@keyframes` for a bounded height-only block-flow profile are
+described in [CSS height animations](css-height-animations.md), including clocks,
+checkpoint restoration and the remaining fractional geometry limit. General
+animation effects and automatic arbitrary `@font-face` imports remain outside
+that profile; fonts use explicit validated resource metadata.
+
 CSS is part of the Astro/Preact ↔ Fyne conversion contract. A successful
 conversion must preserve supported styling behavior, including changes after
 interaction. Unsupported rules must produce a diagnostic. Full CSS support and

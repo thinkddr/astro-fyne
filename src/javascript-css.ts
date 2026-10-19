@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { evaluateCSSSupports } from "./javascript-css-supports.ts";
+import {
+  compileHeightAnimation,
+  compileHeightKeyframes,
+  heightCSSParser,
+} from "./javascript-css-height.ts";
 const cssPackage = "css-tree";
 const css = await import(cssPackage);
+const parser = heightCSSParser(css);
 const asciiLower = (value: string) =>
   value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 const isIdentifier = (value: string) => {
@@ -41,7 +47,7 @@ export async function compileJavascriptCSS(
   record(file, text);
   let ast;
   try {
-    ast = css.parse(text, {
+    ast = parser.parse(text, {
       positions: true,
       onParseError(error: Error, fallback: any) {
         // Condition parsing first tries a declaration before a parenthesized
@@ -210,10 +216,13 @@ export async function compileJavascriptCSS(
                 "CSS URL resources require a native resource adapter",
               );
           });
+          const at = `${basename(file)}:${item.loc?.start.line ?? 0}:${item.loc?.start.column ?? 0}`,
+            animation = compileHeightAnimation(name, item.value, css, at);
           return {
             name,
             value: css.generate(item.value),
             important: item.important,
+            ...(animation ? { animation, at } : {}),
           };
         });
         result.push({
@@ -221,6 +230,17 @@ export async function compileJavascriptCSS(
           declarations,
           layer,
         });
+      } else if (
+        node.type === "Atrule" &&
+        asciiLower(node.name) === "keyframes"
+      ) {
+        importsAllowed = false;
+        const at = `${basename(file)}:${node.loc?.start.line ?? 0}:${node.loc?.start.column ?? 0}`;
+        if (layer || grouped)
+          throw new Error(
+            `CSS height animation at ${at}: grouped keyframes require another profile`,
+          );
+        result.push({ heightKeyframes: compileHeightKeyframes(node, css, at) });
       } else if (
         node.type === "Atrule" &&
         asciiLower(node.name) === "supports"

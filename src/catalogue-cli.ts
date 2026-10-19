@@ -345,6 +345,9 @@ func merge${options.name}Fonts(target *webui.FyneBackend,extra webui.FyneBackend
       "catalogue-types.ts",
       "catalogue-web.ts",
       "motion.ts",
+      "motion-sample.js",
+      "motion-sample.d.ts",
+      "javascript-data.ts",
       "javascript-types.ts",
     ])
       text(

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 
+import { createValidatedMotionSampler } from "./motion-sample.js";
+
 export interface MotionKeyframe {
   offset: number;
   value: number;
@@ -256,87 +258,11 @@ export function motionEndTime(value: unknown): number {
   return Math.max(0, timing.delayMs + timing.durationMs * timing.iterations);
 }
 
-function easingValue(easing: MotionEasing, progress: number): number {
-  if (easing.kind === "linear" || progress === 0 || progress === 1)
-    return progress;
-  const [x1, y1, x2, y2] = easing.points!;
-  const axis = (t: number, a: number, b: number) => {
-    const u = 1 - t;
-    return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t;
-  };
-  let lo = 0,
-    hi = 1;
-  for (let i = 0; i < 52; i++) {
-    const mid = (lo + hi) / 2;
-    if (axis(mid, x1!, x2!) < progress) lo = mid;
-    else hi = mid;
-  }
-  return axis((lo + hi) / 2, y1!, y2!);
-}
-
 /** Own a validated copy once; each sample contains newly allocated values. */
 export function createMotionSampler(
   value: unknown,
 ): (timeMs: number) => MotionSample {
-  const clip = validateMotion(value);
-  return (timeMs) => {
-    number(timeMs, 1e12);
-    const { timing } = clip;
-    const before = timeMs < timing.delayMs;
-    const after =
-      timeMs >= timing.delayMs + timing.durationMs * timing.iterations;
-    if (
-      (before && !["backwards", "both"].includes(timing.fill)) ||
-      (after && !["forwards", "both"].includes(timing.fill))
-    )
-      return { active: false, progress: 0, values: [] };
-    let position = 0;
-    if (after) position = timing.iterations;
-    else if (!before && timing.durationMs > 0)
-      position = (timeMs - timing.delayMs) / timing.durationMs;
-    let iteration = Math.floor(position),
-      progress = position - Math.floor(position);
-    if (after && progress === 0 && position > 0) {
-      iteration--;
-      progress = 1;
-    }
-    let reversed = ["reverse", "alternate-reverse"].includes(timing.direction);
-    if (
-      ["alternate", "alternate-reverse"].includes(timing.direction) &&
-      iteration % 2 === 1
-    )
-      reversed = !reversed;
-    if (reversed) progress = 1 - progress;
-    return {
-      active: true,
-      progress,
-      values: clip.tracks.map((track) => {
-        let index = track.keyframes.findIndex(
-          (frame) => frame.offset >= progress,
-        );
-        if (index === 0) index = 1;
-        if (index < 0) index = track.keyframes.length - 1;
-        const a = track.keyframes[index - 1]!,
-          b = track.keyframes[index]!;
-        const local = (progress - a.offset) / (b.offset - a.offset);
-        const result =
-          a.value + (b.value - a.value) * easingValue(timing.easing, local);
-        number(
-          result,
-          float32Maximum,
-          track.property === "width" || track.property === "height"
-            ? 0
-            : -float32Maximum,
-        );
-        return {
-          track: track.id,
-          target: track.target,
-          property: track.property,
-          value: result,
-        };
-      }),
-    };
-  };
+  return createValidatedMotionSampler(validateMotion(value));
 }
 
 export function sampleMotion(value: unknown, timeMs: number): MotionSample {

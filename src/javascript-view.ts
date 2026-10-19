@@ -15,16 +15,27 @@ import type {
   JavascriptArchive,
   JavascriptFactory,
   JavascriptFrame,
+  JavascriptAnimationState,
 } from "./javascript-types.ts";
 
 export interface JavascriptHandle {
   exportJavascript(): JavascriptArchive;
+  advanceAnimations?(timeMs: number): void;
+  pauseAnimations?(): void;
+  playAnimations?(): void;
+  animationState?(): JavascriptAnimationState;
+}
+export interface JavascriptAnimationOptions {
+  manual?: boolean;
+  now?: () => number;
 }
 export interface JavascriptProps {
   actions?: JavascriptActions;
   ref?: Ref<JavascriptHandle>;
+  animation?: JavascriptAnimationOptions;
 }
 const emptyActions: JavascriptActions = {};
+const animationNow = () => performance.now();
 
 /** Render the same Preact program's native DOM representation in an Astro island. */
 export function createJavascriptComponent(
@@ -42,6 +53,12 @@ export function createJavascriptComponent(
       error?: unknown;
       dom?: ManagedJavascriptDOM;
       generation: number;
+      manualAnimations: boolean;
+      now: () => number;
+      frame?: number;
+      anchorClock?: number;
+      anchorTime: number;
+      lastClock?: number;
     }>();
     if (!context.current) {
       const actions = input.actions ?? emptyActions;
@@ -69,15 +86,83 @@ export function createJavascriptComponent(
         mounted: false,
         dirty: false,
         generation: 0,
+        manualAnimations: input.animation?.manual ?? false,
+        now: input.animation?.now ?? animationNow,
+        anchorTime: archive.animation?.timeMs ?? 0,
       };
     }
     const ctx = context.current;
+    if (
+      (input.animation?.manual ?? false) !== ctx.manualAnimations ||
+      (input.animation?.now ?? animationNow) !== ctx.now
+    )
+      throw new Error(
+        "Animation clock ownership must stay stable; remount to replace it",
+      );
     if ((input.actions ?? emptyActions) !== ctx.actions)
       throw new Error(
         "JavaScript action bindings must stay stable; remount to replace them",
       );
     const [frames, setFrames] = useState(() => ctx.api.snapshot());
     const wrapper = useRef<HTMLDivElement>(null);
+    function clock() {
+      const now = ctx.now();
+      if (
+        !Number.isFinite(now) ||
+        (ctx.lastClock !== undefined && now < ctx.lastClock)
+      )
+        throw new Error("Animation clock must be finite and monotonic");
+      ctx.lastClock = now;
+      return now;
+    }
+    function anchor(sampledClock?: number) {
+      ctx.anchorTime = ctx.api.animationState!().timeMs;
+      ctx.anchorClock = sampledClock ?? clock();
+    }
+    function advanceClock() {
+      if (
+        ctx.manualAnimations ||
+        ctx.api.animationState?.().playState !== "running"
+      )
+        return;
+      const now = clock();
+      if (ctx.anchorClock === undefined) {
+        ctx.anchorTime = ctx.api.animationState!().timeMs;
+        ctx.anchorClock = now;
+      }
+      ctx.api.advanceAnimations!(ctx.anchorTime + now - ctx.anchorClock!);
+      return now;
+    }
+    function changed(task: () => void) {
+      ctx.dirty = true;
+      ctx.generation++;
+      try {
+        task();
+        setFrames(ctx.api.snapshot());
+      } catch (error) {
+        ctx.error = error;
+        throw error;
+      }
+    }
+    function schedule() {
+      if (
+        ctx.manualAnimations ||
+        ctx.frame !== undefined ||
+        !ctx.mounted ||
+        ctx.error ||
+        ctx.api.animationState?.().playState !== "running"
+      )
+        return;
+      ctx.frame = requestAnimationFrame(() => {
+        ctx.frame = undefined;
+        if (!ctx.mounted || ctx.error) return;
+        if (ctx.dirty) {
+          schedule();
+          return;
+        }
+        changed(advanceClock);
+      });
+    }
     useLayoutEffect(() => {
       const generation = ctx.generation;
       try {
@@ -86,15 +171,23 @@ export function createJavascriptComponent(
         ctx.dom.commit(frames);
         ctx.dirty = ctx.generation !== generation;
         ctx.mounted = true;
+        if (archive.schema === 2 && !ctx.manualAnimations) {
+          if (ctx.anchorClock === undefined) anchor();
+          schedule();
+        }
       } catch (error) {
         ctx.error = error;
         ctx.mounted = false;
+        if (ctx.frame !== undefined) cancelAnimationFrame(ctx.frame);
+        ctx.frame = undefined;
         throw error;
       }
     });
     useLayoutEffect(
       () => () => {
         ctx.mounted = false;
+        if (ctx.frame !== undefined) cancelAnimationFrame(ctx.frame);
+        ctx.frame = undefined;
         ctx.dom?.dispose();
         ctx.api.dispose();
       },
@@ -137,6 +230,44 @@ export function createJavascriptComponent(
         check(frames);
         return ctx.api.export();
       },
+      ...(archive.schema === 2
+        ? {
+            animationState: () => ctx.api.animationState!(),
+            advanceAnimations(timeMs: number) {
+              const state = ctx.api.animationState!();
+              if (
+                !Number.isFinite(timeMs) ||
+                timeMs < state.timeMs ||
+                timeMs > 1e12
+              )
+                throw new Error(
+                  "Animation time must advance monotonically within 1e12ms",
+                );
+              changed(() => ctx.api.advanceAnimations!(timeMs));
+              if (!ctx.manualAnimations) anchor();
+            },
+            pauseAnimations() {
+              changed(() => {
+                advanceClock();
+                ctx.api.pauseAnimations!();
+              });
+              if (ctx.frame !== undefined) cancelAnimationFrame(ctx.frame);
+              ctx.frame = undefined;
+            },
+            playAnimations() {
+              let sampledClock: number | undefined;
+              changed(() => {
+                sampledClock = advanceClock();
+                ctx.api.playAnimations!();
+              });
+              if (
+                !ctx.manualAnimations &&
+                ctx.api.animationState!().playState === "running"
+              )
+                anchor(sampledClock);
+            },
+          }
+        : {}),
     }));
     const dispatch = (
       uid: string,
@@ -146,6 +277,7 @@ export function createJavascriptComponent(
       ctx.dirty = true;
       ctx.generation++;
       try {
+        if (archive.schema === 2) advanceClock();
         const prevented = ctx.api.dispatch({
           node: uid,
           type,
@@ -170,6 +302,26 @@ export function createJavascriptComponent(
       if (!this.handle.current)
         throw new Error("Export requires a mounted JavaScript program");
       return this.handle.current.exportJavascript();
+    }
+    advanceAnimations(timeMs: number) {
+      if (!this.handle.current?.advanceAnimations)
+        throw new Error("Program has no mounted CSS animation clock");
+      this.handle.current.advanceAnimations(timeMs);
+    }
+    pauseAnimations() {
+      if (!this.handle.current?.pauseAnimations)
+        throw new Error("Program has no mounted CSS animation clock");
+      this.handle.current.pauseAnimations();
+    }
+    playAnimations() {
+      if (!this.handle.current?.playAnimations)
+        throw new Error("Program has no mounted CSS animation clock");
+      this.handle.current.playAnimations();
+    }
+    animationState() {
+      if (!this.handle.current?.animationState)
+        throw new Error("Program has no mounted CSS animation clock");
+      return this.handle.current.animationState();
     }
     render() {
       return h(JavascriptProgram, { ...this.props, handle: this.handle });

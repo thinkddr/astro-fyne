@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Astro Fyne contributors.
 
+import { createHeightAnimations } from "./javascript-height-runtime.js";
+
 const inherited = new Set([
   "color",
   "font-family",
@@ -78,12 +80,14 @@ const kebab = (name) =>
 /** Source rules remain in the archived program, not in a browser dependency. */
 export function createCSSCascade() {
   const rules = [],
-    layers = [];
+    layers = [],
+    height = createHeightAnimations();
   let active = false;
   function install(packet) {
     active = true;
     for (const item of packet) {
-      if (item.layers)
+      if (item.heightKeyframes) height.install(item.heightKeyframes);
+      else if (item.layers)
         for (const layer of item.layers) {
           if (!layers.includes(layer)) layers.push(layer);
         }
@@ -487,7 +491,9 @@ export function createCSSCascade() {
             declarationOrder,
           ];
           // Custom property substitution precedes shorthand expansion below.
-          put(item.name, item.value, rank);
+          if (item.animation)
+            for (const [name, value] of item.animation) put(name, value, rank);
+          else put(item.name, item.value, rank);
         }
       }
     }
@@ -604,21 +610,30 @@ export function createCSSCascade() {
         );
       else values[name] = item.value;
     }
+    height.apply(node, values, winners);
     const style = {};
     for (const [name, value] of Object.entries(values).sort(([a], [b]) =>
       a < b ? -1 : a > b ? 1 : 0,
     ))
-      style[camel(name)] =
-        name === "line-height" &&
-        typeof value === "string" &&
-        /^\d+(\.\d+)?$/.test(value)
-          ? Number(value)
-          : value;
+      if (!name.startsWith("animation-"))
+        style[camel(name)] =
+          name === "line-height" &&
+          typeof value === "string" &&
+          /^\d+(\.\d+)?$/.test(value)
+            ? Number(value)
+            : value;
     return { values, variables: computedVariables, style };
   }
   return {
     install,
     compute,
+    begin: height.begin,
+    end: height.end,
+    animationState: height.state,
+    restoreAnimationState: height.setState,
+    advanceAnimations: height.advance,
+    pauseAnimations: height.pause,
+    playAnimations: height.play,
     get active() {
       return active;
     },

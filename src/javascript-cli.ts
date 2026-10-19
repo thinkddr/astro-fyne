@@ -121,10 +121,15 @@ export async function prepareJavascript(options: Options) {
 import("encoding/json";"errors";webui "github.com/thinkddr/astro-fyne/native";jsruntime "github.com/thinkddr/astro-fyne/native/javascript")
 const ${options.name}JavascriptArchive = ${literal(JSON.stringify(archive))}
 type ${options.name}Widget = jsruntime.Widget
-func New${options.name}(props webui.Scope,actions webui.Actions,backends ...webui.Backend)(*${options.name}Widget,error){
+${
+  archive.schema === 2
+    ? `func New${options.name}(props webui.Scope,actions webui.Actions,backends ...webui.Backend)(*${options.name}Widget,error){return New${options.name}WithOptions(props,actions,jsruntime.Options{},backends...)}
+func New${options.name}WithOptions(props webui.Scope,actions webui.Actions,options jsruntime.Options,backends ...webui.Backend)(*${options.name}Widget,error){`
+    : `func New${options.name}(props webui.Scope,actions webui.Actions,backends ...webui.Backend)(*${options.name}Widget,error){`
+}
 var archive jsruntime.Archive;if err:=json.Unmarshal([]byte(${options.name}JavascriptArchive),&archive);err!=nil{return nil,err}
 if len(props)>0 {if len(archive.Events)>0||len(archive.Journal)>0||archive.Frame!=nil{return nil,errors.New("javascript: replay requires original props; regenerate source to replace them")};data,err:=json.Marshal(props);if err!=nil{return nil,err};archive.Props=data}
-return jsruntime.New(archive,actions,backends...)
+return jsruntime.${archive.schema === 2 ? "NewWithOptions(archive,actions,options,backends...)" : "New(archive,actions,backends...)"}
 }
 `;
     const formatted = spawnSync("gofmt", [], {
@@ -188,7 +193,11 @@ private program=createRef<JavascriptHandle>();private active=false;state:{loaded
 componentDidMount(){this.active=true;${module ? `if(!this.props.actions)import(${literal(module)}).then(value=>{if(this.active)this.setState({loaded:value.actions});}).catch(error=>{if(this.active)this.setState({failure:error});});` : ""}}
 componentWillUnmount(){this.active=false;}
 exportJavascript(){if(!this.program.current)throw new Error("Export requires a mounted JavaScript program");return this.program.current.exportJavascript();}
-render(){const {loaded,failure}=this.state;if(failure)throw failure;const actions=this.props.actions??loaded${archive.actions.length || module ? "" : "??emptyActions"};return actions?h(Program,{actions,ref:this.program}):null;}
+advanceAnimations(timeMs:number){if(!this.program.current?.advanceAnimations)throw new Error("Program has no mounted animation clock");this.program.current.advanceAnimations(timeMs);}
+pauseAnimations(){if(!this.program.current?.pauseAnimations)throw new Error("Program has no mounted animation clock");this.program.current.pauseAnimations();}
+playAnimations(){if(!this.program.current?.playAnimations)throw new Error("Program has no mounted animation clock");this.program.current.playAnimations();}
+animationState(){if(!this.program.current?.animationState)throw new Error("Program has no mounted animation clock");return this.program.current.animationState();}
+render(){const {loaded,failure}=this.state;if(failure)throw failure;const actions=this.props.actions??loaded${archive.actions.length || module ? "" : "??emptyActions"};return actions?h(Program,{actions,animation:this.props.animation,ref:this.program}):null;}
 }
 export default ${options.name};\n`,
     );

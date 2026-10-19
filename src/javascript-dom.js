@@ -640,15 +640,25 @@ export function createDocument() {
     document,
     root,
     snapshot: () => {
+      css.begin(root);
       const inheritedStyle = css.active
         ? css.compute(
             root,
             css.compute(document.body, css.compute(document.documentElement)),
           )
         : null;
-      return root.childNodes.map((child) => snapshot(child, inheritedStyle));
+      const frames = root.childNodes.map((child) =>
+        snapshot(child, inheritedStyle),
+      );
+      css.end();
+      return frames;
     },
     installCSS: css.install,
+    animationState: css.animationState,
+    restoreAnimationState: css.restoreAnimationState,
+    advanceAnimations: css.advanceAnimations,
+    pauseAnimations: css.pauseAnimations,
+    playAnimations: css.playAnimations,
     dispatch,
   };
 }
