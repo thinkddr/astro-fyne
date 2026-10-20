@@ -454,6 +454,8 @@ if (mode === "prepare") {
     "native/go.sum",
     "native/view.go",
     "native/backend.go",
+    "native/font_resources.go",
+    "native/font_resources_test.go",
     "native/controls.go",
     "native/fontresource/validate.go",
     "package.json",
