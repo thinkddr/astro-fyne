@@ -348,6 +348,8 @@ if (mode === "prepare") {
     "src/javascript-css-runtime.js",
     "native/javascript/runtime.go",
     "native/javascript/nodes.go",
+    "native/font_resources.go",
+    "native/font_resources_test.go",
     "native/fontresource/validate.go",
     "native/fontresource/validate_test.go",
     "native/fontresource/coverage.go",

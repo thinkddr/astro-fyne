@@ -65,6 +65,7 @@ type preparedBinding struct {
 
 var _ webui.Backend = (*Backend)(nil)
 var _ webui.LegacyTextValidator = (*Backend)(nil)
+var _ webui.FontResourceBinder = (*Backend)(nil)
 
 // New freezes 1..16 explicit faces. Input resources are read once per binding.
 // Licenses remain the caller's responsibility, including catalogue metadata.
@@ -205,6 +206,32 @@ func (backend *Backend) Profiles() []FaceProfile {
 		profiles[index] = FaceProfile{Family: item.family, Coverage: item.face.Profile()}
 	}
 	return profiles
+}
+
+// BindFontResources checks the already frozen faces without changing ownership.
+func (backend *Backend) BindFontResources(requirements []webui.FontResourceRequirement) (webui.Backend, error) {
+	if err := webui.ValidateFontResourceRequirements(requirements); err != nil {
+		return nil, err
+	}
+	if err := backend.valid(); err != nil {
+		return nil, err
+	}
+	for _, item := range requirements {
+		found := false
+		for _, binding := range backend.bindings {
+			if strings.EqualFold(item.Family, binding.family) && item.Weight == binding.slot.Weight && (item.Style == "italic") == binding.slot.Italic {
+				if item.Hash != binding.face.Profile().FontHash {
+					return nil, fmt.Errorf("fontbackend: required font resource hash differs for %q", item.Family)
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("fontbackend: required font resource has no exact face for %q", item.Family)
+		}
+	}
+	return backend, nil
 }
 
 func (backend *Backend) textFace(style webui.Style) (*fontresource.StaticFace, error) {

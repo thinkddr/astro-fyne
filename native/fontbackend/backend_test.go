@@ -68,6 +68,52 @@ func TestFontBackendBuildContract(t *testing.T) {
 	t.Log("unqualified nominal backend build rejected")
 }
 
+func TestNominalBackendResourceBinding(t *testing.T) {
+	app := test.NewApp()
+	t.Cleanup(app.Quit)
+	regular := &mutableResource{data: fontBytes(t, "Regular")}
+	bold := &mutableResource{data: fontBytes(t, "Bold")}
+	backend := requireBackend(t, map[string]map[webui.Font]fyne.Resource{
+		"Host": {{Weight: 400}: regular, {Weight: 700}: bold},
+	})
+	requirements := []webui.FontResourceRequirement{
+		{Family: "hOsT", Weight: 400, Style: "normal", Hash: fontHash(regular.data)},
+		{Family: "Host", Weight: 700, Style: "normal", Hash: fontHash(bold.data)},
+	}
+	profiles := backend.Profiles()
+	regularFont := backend.Text("Stable", regularStyle()).FontSource
+	for range 2 {
+		selected, err := backend.BindFontResources(requirements)
+		if err != nil || selected != backend || regular.reads != 1 || bold.reads != 1 || backend.Text("Stable", regularStyle()).FontSource != regularFont || !reflect.DeepEqual(profiles, backend.Profiles()) {
+			t.Fatalf("resource binding replaced or reread immutable nominal ownership: %v", err)
+		}
+	}
+	for _, change := range []func(*webui.FontResourceRequirement){
+		func(item *webui.FontResourceRequirement) { item.Hash = strings.Repeat("0", 64) },
+		func(item *webui.FontResourceRequirement) { item.Family = "Missing" },
+		func(item *webui.FontResourceRequirement) { item.Style = "italic" },
+		func(item *webui.FontResourceRequirement) { item.Weight = 600 },
+	} {
+		invalid := requirements[0]
+		change(&invalid)
+		if selected, err := backend.BindFontResources([]webui.FontResourceRequirement{invalid}); err == nil || selected != nil {
+			t.Fatalf("nominal backend admitted an unsupported resource requirement: %+v %v", invalid, err)
+		}
+	}
+	if selected, err := backend.BindFontResources(append(requirements, requirements[0])); err == nil || selected != nil {
+		t.Fatal("nominal backend bypassed shared duplicate validation")
+	}
+	var nilBackend *fontbackend.Backend
+	for _, invalid := range []*fontbackend.Backend{nilBackend, new(fontbackend.Backend)} {
+		if selected, err := invalid.BindFontResources(requirements); err == nil || selected != nil {
+			t.Fatal("unconstructed nominal backend advertised resources")
+		}
+	}
+	if regular.reads != 1 || bold.reads != 1 || !reflect.DeepEqual(profiles, backend.Profiles()) {
+		t.Fatal("failed nominal requirement checks changed ownership")
+	}
+}
+
 func TestNominalBackendOwnershipAndPainterIdentity(t *testing.T) {
 	app := test.NewApp()
 	t.Cleanup(app.Quit)

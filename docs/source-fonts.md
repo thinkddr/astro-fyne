@@ -122,3 +122,7 @@ or strict browser glyph admission. Missing dynamic faces/glyphs, shaping,
 fallback behavior and raster parity still need their documented adapters and
 evidence. Authored CSS `@font-face` and unsupported URL resources keep their
 existing diagnostics. Resource transport alone does not certify pixel equivalence.
+
+Custom native hosts can use the optional [font resource binding API](font-resource-binding.md)
+to check exact descriptor/hash requirements and retain an immutable backend.
+That opt-in API does not change this CLI route's default font admission.
