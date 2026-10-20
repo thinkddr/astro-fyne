@@ -50,6 +50,7 @@ from source with licensed local fonts, easy native constructors and a complete
 catalogue exporter. See the [source font guide](docs/source-fonts.md).
 
 Source-font islands resolve supported Unicode CSS family aliases automatically.
+Quoted and unquoted CSS escapes decode while preserving the authored CSS in exports.
 For example, CSS `STRAẞE` selects a declared `Straße` alias. Conversion requires
 agreement with native simple folding and unchanged astral scalars; full-fold-only
 spellings such as `STRASSE` produce a diagnostic. See the

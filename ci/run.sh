@@ -82,6 +82,7 @@ bun ci/catalogue-roundtrip.ts prepare
 bun ci/source-fonts-roundtrip.ts prepare
 bun ci/source-fonts-roundtrip.ts prepare --unicode
 bun ci/source-fonts-roundtrip.ts prepare --unicode-matching
+bun ci/source-fonts-roundtrip.ts prepare --css-escapes
 bun ci/javascript-pointer-roundtrip.ts prepare
 # Include the generated portable islands in the real Astro build and type check.
 bun run typecheck
@@ -118,6 +119,7 @@ bun ci/catalogue-roundtrip.ts verify
 bun ci/source-fonts-roundtrip.ts verify
 bun ci/source-fonts-roundtrip.ts verify --unicode
 bun ci/source-fonts-roundtrip.ts verify --unicode-matching
+bun ci/source-fonts-roundtrip.ts verify --css-escapes
 bun ci/javascript-pointer-roundtrip.ts verify
 bun capture/astro-fyne-capture.ts --url http://127.0.0.1:4321/geometry --out artifacts --width 320 --height 240 --scale 1 --source-hash "$task_source_hash"
 bun capture/behavior.ts http://127.0.0.1:4321/conformance conformance-scenario.json artifacts/web-behavior.json "$ASTRO_FYNE_CONFORMANCE_SOURCE_HASH"
