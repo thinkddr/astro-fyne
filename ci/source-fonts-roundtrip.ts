@@ -289,7 +289,10 @@ if (mode === "prepare") {
     join(fixture, "counter.css"),
     '@import "./tokens.css";\r\n#font-root{width:400px;height:180px;padding:8px;background:#ffffff;color:var(--source-ink);font-family:"SourceNoto";font-weight:400;font-style:normal;font-size:16px;line-height:24px;white-space:nowrap}#font-count,#font-seed{font-weight:400;font-style:normal;font-size:16px;line-height:24px}#font-increment{font-family:"SourceNoto";font-weight:700;font-style:normal;font-size:16px;line-height:24px;height:36px;width:140px}\r\n',
   );
-  await save(join(fixture, "external.css"), "#font-root{border-radius:0}\r\n");
+  await save(
+    join(fixture, "external.css"),
+    "#font-root{border-radius:2px}\r\n",
+  );
   const args = [
     relative(foreign, join(fixture, "Counter.tsx")),
     "--fonts",
