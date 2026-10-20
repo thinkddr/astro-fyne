@@ -121,7 +121,15 @@ async function command(name: string, argv: string[], cwd = root) {
     });
     await json(join(out, "commands.json"), phases);
     assert.equal(timedOut, false, name + " timed out; see retained logs");
-    assert.equal(exitCode, 0, name + " failed; see retained logs");
+    assert.equal(
+      exitCode,
+      0,
+      name +
+        " failed; see retained logs\n" +
+        stderr.slice(-12000) +
+        "\n" +
+        stdout.slice(-4000),
+    );
     return stdout + "\n" + stderr;
   } finally {
     clearTimeout(timeout);
