@@ -362,7 +362,16 @@ try {
       true,
     ),
   );
-  await save(join(site, "package.json"), '{"private":true,"type":"module"}\n');
+  await json(join(site, "package.json"), {
+    private: true,
+    type: "module",
+    dependencies: Object.fromEntries(
+      ["astro", "@astrojs/preact", "preact"].map((name) => [
+        name,
+        packageManifest.devDependencies[name],
+      ]),
+    ),
+  });
   const routeFile = join(out, "routes.json");
   await save(
     join(site, "astro.config.mjs"),
