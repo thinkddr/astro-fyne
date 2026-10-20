@@ -6,6 +6,17 @@ import type {
   JavascriptFrame,
 } from "./javascript-types.ts";
 
+export const fontResourceFactoryHeader = "/* astro-fyne font resources:1 */\n";
+
+export function validateJavascriptBrowserResources(archive: {
+  code: string;
+}): void {
+  if (archive.code.startsWith(fontResourceFactoryHeader))
+    throw new Error(
+      "JavaScript font resource factories require a browser resource adapter",
+    );
+}
+
 /** Zero sizing is admitted only where native flow has the same empty box. */
 export function validateJavascriptZeroHeight(frame: JavascriptFrame): void {
   const style = frame.style ?? {},

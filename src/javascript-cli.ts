@@ -14,6 +14,7 @@ import {
 import { readCLIJSON, usageError } from "./cli-help.ts";
 import { bundleJavascript, validateJavascriptArchive } from "./javascript.ts";
 import { prepareJavascriptDOM } from "./javascript-managed-dom.ts";
+import { validateJavascriptBrowserResources } from "./javascript-data.ts";
 import type { JavascriptArchive } from "./javascript-types.ts";
 
 interface Options {
@@ -75,6 +76,7 @@ export async function prepareJavascript(options: Options) {
           options.actions ?? [],
           options.stylesheet ? [resolve(options.stylesheet)] : [],
         );
+  if (options.direction === "web") validateJavascriptBrowserResources(archive);
   if (archive.frame !== undefined) prepareJavascriptDOM(archive.frame);
   const output = resolve(options.out),
     artifacts: Artifact[] = [];

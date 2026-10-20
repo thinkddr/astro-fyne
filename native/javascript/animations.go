@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	webui "github.com/thinkddr/astro-fyne/native"
 )
 
 const maximumAnimationTimeMS = 1e12
@@ -89,6 +90,7 @@ func (clock ClockFunc) Now() time.Time { return clock() }
 type Options struct {
 	ManualAnimations bool
 	Clock            Clock
+	FontResources    webui.FontResourceBinder
 }
 
 type animationScheduler struct {

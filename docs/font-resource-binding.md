@@ -67,6 +67,7 @@ does not prove glyph coverage, shaping, outline validity, fallback-free renderin
 or pixel equality. Required TrueType checks retain the parser's documented limits.
 Direct mutation of canvas objects after placement is outside this contract.
 
-This foundation does not enable CSS `@font-face`, JavaScript resource requests or
-browser font admission. Those adapters must use the selected backend and keep
-their resource and export contracts explicit.
+The [JavaScript resource adapter](javascript-font-resources.md) uses this API
+for explicit compiled factory requests. CSS `@font-face`, automatic source
+emission and browser font admission still need adapters that preserve their
+resource and export contracts.

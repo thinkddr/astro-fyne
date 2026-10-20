@@ -188,13 +188,14 @@ type Widget struct {
 	animationLast   time.Time
 	scheduler       *animationScheduler
 	closed          bool
+	fontResources   *fontResourceRequest
 }
 
 func New(archive Archive, actions webui.Actions, backends ...webui.Backend) (*Widget, error) {
 	return NewWithOptions(archive, actions, Options{}, backends...)
 }
 
-// NewWithOptions configures clock ownership without changing the portable program.
+// NewWithOptions configures clock ownership and trusted resource binding.
 func NewWithOptions(archive Archive, actions webui.Actions, options Options, backends ...webui.Backend) (*Widget, error) {
 	if err := Validate(archive); err != nil {
 		return nil, err
@@ -205,7 +206,7 @@ func NewWithOptions(archive Archive, actions webui.Actions, options Options, bac
 	if options.Clock == nil {
 		options.Clock = ClockFunc(time.Now)
 	}
-	w := &Widget{vm: goja.New(), budget: 500 * time.Millisecond, archive: archive, options: options}
+	w := &Widget{vm: goja.New(), budget: 500 * time.Millisecond, archive: archive, options: options, fontResources: &fontResourceRequest{marked: strings.HasPrefix(archive.Code, FontResourceFactoryHeader)}}
 	w.vm.SetMaxCallStackSize(512)
 	w.vm.SetPromiseRejectionTracker(func(_ *goja.Promise, operation goja.PromiseRejectionOperation) {
 		if operation == goja.PromiseRejectionReject {
@@ -213,7 +214,30 @@ func NewWithOptions(archive Archive, actions webui.Actions, options Options, bac
 		}
 	})
 	host := func(call goja.FunctionCall) goja.Value {
-		kind, name, args := call.Argument(0).String(), call.Argument(1).String(), call.Argument(2).String()
+		fontFailure := func(err error) goja.Value {
+			if w.fontResources.err == nil {
+				w.fontResources.err = err
+			}
+			w.fault = w.fontResources.err
+			panic(w.vm.NewGoError(w.fontResources.err))
+		}
+		if w.fontResources.err != nil {
+			return fontFailure(w.fontResources.err)
+		}
+		kind := call.Argument(0).String()
+		if kind == "font-resources" {
+			if err := w.fontResources.bind(call, options.FontResources, backends); err != nil {
+				return fontFailure(err)
+			}
+			return goja.Null()
+		}
+		if w.fontResources.marked && w.fontResources.backend == nil {
+			return fontFailure(errors.New("javascript: marked font factory requires checked resources before other host work"))
+		}
+		name, args := call.Argument(1).String(), call.Argument(2).String()
+		if w.fontResources.err != nil {
+			return fontFailure(w.fontResources.err)
+		}
 		var result any
 		var err error
 		switch kind {
@@ -272,7 +296,26 @@ func NewWithOptions(archive Archive, actions webui.Actions, options Options, bac
 		if err != nil {
 			return err
 		}
-		value, err = factory(goja.Undefined(), w.vm.ToValue(host), value)
+		if w.fontResources.marked {
+			trampoline, trampolineErr := w.vm.RunString(`(function(factory,host,archive,finished){try{return factory(host,archive)}finally{finished()}})`)
+			if trampolineErr != nil {
+				return trampolineErr
+			}
+			initialize, _ := goja.AssertFunction(trampoline)
+			w.fontResources.initializing = true
+			finished := func() { w.fontResources.initializing = false }
+			value, err = initialize(goja.Undefined(), code, w.vm.ToValue(host), value, w.vm.ToValue(finished))
+			w.fontResources.initializing = false
+			if err == nil && w.fontResources.err == nil && w.fontResources.backend == nil {
+				w.fontResources.err = errors.New("javascript: marked font factory requires a synchronous font resource request")
+				w.fault = w.fontResources.err
+			}
+		} else {
+			value, err = factory(goja.Undefined(), w.vm.ToValue(host), value)
+		}
+		if w.fontResources.err != nil {
+			return w.fontResources.err
+		}
 		if err != nil {
 			return err
 		}
@@ -296,6 +339,10 @@ func NewWithOptions(archive Archive, actions webui.Actions, options Options, bac
 	if _, err = w.call("finishReplay"); err != nil {
 		return nil, err
 	}
+	viewBackends := backends
+	if w.fontResources.backend != nil {
+		viewBackends = []webui.Backend{w.fontResources.backend}
+	}
 	w.View = webui.NewViewForWidget(func(v *webui.View) fyne.Widget { w.View = v; return w }, func() []webui.Node {
 		if w.fault != nil {
 			panic(w.fault)
@@ -313,7 +360,7 @@ func NewWithOptions(archive Archive, actions webui.Actions, options Options, bac
 			panic(err)
 		}
 		return nodes
-	}, backends...)
+	}, viewBackends...)
 	w.SetAutoRefreshEvents(false)
 	if err = w.Error(); err != nil {
 		return nil, err
@@ -348,6 +395,9 @@ func (w *Widget) call(name string, args ...goja.Value) (goja.Value, error) {
 	if w.closed {
 		return nil, errors.New("javascript: widget is closed")
 	}
+	if w.fontResources != nil && w.fontResources.err != nil {
+		return nil, w.fontResources.err
+	}
 	var result goja.Value
 	err := w.limited(func() error {
 		function, ok := goja.AssertFunction(w.api.Get(name))
@@ -358,6 +408,9 @@ func (w *Widget) call(name string, args ...goja.Value) (goja.Value, error) {
 		result, err = function(w.api, args...)
 		return err
 	})
+	if w.fontResources != nil && w.fontResources.err != nil {
+		return nil, w.fontResources.err
+	}
 	if err == nil && w.fault != nil {
 		err = w.fault
 	}
@@ -382,12 +435,25 @@ func (w *Widget) callJSON(name string, value any) (goja.Value, error) {
 }
 func (w *Widget) decode(value goja.Value, target any) error {
 	stringify, _ := goja.AssertFunction(w.vm.Get("JSON").ToObject(w.vm).Get("stringify"))
+	if w.fontResources != nil && w.fontResources.err != nil {
+		return w.fontResources.err
+	}
 	var encoded goja.Value
 	err := w.limited(func() error { var err error; encoded, err = stringify(goja.Undefined(), value); return err })
+	if w.fontResources != nil && w.fontResources.err != nil {
+		return w.fontResources.err
+	}
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal([]byte(encoded.String()), target)
+	if w.fontResources != nil && w.fontResources.marked && !goja.IsString(encoded) {
+		return errors.New("javascript: font factory JSON serialization requires a primitive string")
+	}
+	text := encoded.String()
+	if w.fontResources != nil && w.fontResources.err != nil {
+		return w.fontResources.err
+	}
+	return json.Unmarshal([]byte(text), target)
 }
 func (w *Widget) dispatch(node, kind string, value *string) {
 	if w.closed || w.fault != nil {
@@ -422,6 +488,9 @@ func (w *Widget) Tapped(*fyne.PointEvent) {
 func (w *Widget) ExportJavascript() (Archive, error) {
 	if w.closed {
 		return Archive{}, errors.New("javascript: widget is closed")
+	}
+	if w.fontResources != nil && w.fontResources.err != nil {
+		return Archive{}, w.fontResources.err
 	}
 	// Reuse the scene/state transport's validation of the existing native frame.
 	if _, err := webui.ExportProgram(`{"actions":[]}`, w.archive.CodeHash, webui.Scope{}, webui.Scope{}, w.View); err != nil {
