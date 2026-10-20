@@ -9,6 +9,7 @@ import {
   useImperativeHandle,
 } from "preact/hooks";
 import { ManagedJavascriptDOM } from "./javascript-managed-dom.ts";
+import { validateJavascriptBrowserResources } from "./javascript-data.ts";
 import type {
   JavascriptActions,
   JavascriptAPI,
@@ -42,6 +43,7 @@ export function createJavascriptComponent(
   factory: JavascriptFactory,
   archive: JavascriptArchive,
 ) {
+  validateJavascriptBrowserResources(archive);
   function JavascriptProgram(
     input: JavascriptProps & { handle: RefObject<JavascriptHandle> },
   ) {
@@ -61,6 +63,7 @@ export function createJavascriptComponent(
       lastClock?: number;
     }>();
     if (!context.current) {
+      validateJavascriptBrowserResources(archive);
       const actions = input.actions ?? emptyActions;
       for (const name of archive.actions)
         if (

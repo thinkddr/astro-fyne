@@ -26,7 +26,7 @@ bun src/cli.ts reverse --scene artifacts/reverse-controls/scene.json --out examp
 cp example/src/pages/reverse-controls/ReverseControls.* artifacts/reverse-controls/
 bun run typecheck
 bun test src
-bunx --no-install prettier --check README.md docs bin src capture example ci/program-roundtrip.ts ci/javascript-roundtrip.ts ci/javascript-pointer-roundtrip.ts ci/source-fonts-roundtrip.ts ci/font-resource-binding.ts ci/css-roundtrip.ts ci/css-has-roundtrip.ts ci/css-height-roundtrip.ts ci/css-zero-height.ts ci/catalogue-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json typography-probe.json image-enlargement.json image-enlargement-scenario.json ci/image-sampling/*.md ci/image-sampling/source-pin.json ci/image-production-pin.json package.json tsconfig.json
+bunx --no-install prettier --check README.md docs bin src capture example ci/program-roundtrip.ts ci/javascript-roundtrip.ts ci/javascript-pointer-roundtrip.ts ci/source-fonts-roundtrip.ts ci/font-resource-binding.ts ci/javascript-font-resources.ts ci/css-roundtrip.ts ci/css-has-roundtrip.ts ci/css-height-roundtrip.ts ci/css-zero-height.ts ci/catalogue-roundtrip.ts astro-fyne.json visual.json visual-scale2.json image-visual.json reverse-visual.json conformance.json updater-conformance.json conformance-scenario.json keyed-conformance.json keyed-scenario.json primitive-conformance.json primitive-scenario.json responsive-flex.json responsive-flex-scenario.json responsive-controls.json responsive-controls-scenario.json responsive-bitmap.json responsive-bitmap-scenario.json typography-probe.json image-enlargement.json image-enlargement-scenario.json ci/image-sampling/*.md ci/image-sampling/source-pin.json ci/image-production-pin.json package.json tsconfig.json
 bun src/cli.ts generate --config astro-fyne.json
 bun src/cli.ts check --config astro-fyne.json
 bun src/cli.ts generate --config conformance.json
@@ -156,6 +156,7 @@ GOMAXPROCS=2 go test -count=1 -p=2 -race ./... || task_native_test_status=$?
 if [[ "$task_native_test_status" -eq 0 ]]; then
   cd ..
   bun ci/font-resource-binding.ts
+  bun ci/javascript-font-resources.ts
   bash ci/text-admission.sh
   bun capture/motion-catalogue.ts artifacts/motion-catalogue/native.json artifacts/motion-catalogue
   while IFS= read -r task_flex_case; do
