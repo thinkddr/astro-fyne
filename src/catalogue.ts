@@ -3,6 +3,7 @@
 
 import { createHash } from "node:crypto";
 import { inspectFont } from "./fonts.ts";
+import { simpleFontFamilyKey, validFontResourceFamily } from "./font-family.ts";
 import {
   validateJavascriptArchive,
   type JavascriptArchive,
@@ -397,8 +398,7 @@ export async function validateCatalogue(
     id(face.id);
     if (
       typeof face.family !== "string" ||
-      !/^[A-Za-z][A-Za-z0-9 _-]{0,79}$/.test(face.family) ||
-      face.family.trim() !== face.family ||
+      !validFontResourceFamily(face.family) ||
       ![400, 700].includes(face.weight as number) ||
       !["normal", "italic"].includes(face.style as string)
     )
@@ -410,15 +410,15 @@ export async function validateCatalogue(
       resource.hash !== face.hash
     )
       fail("missing or mismatched font resource");
-    const key = `${face.family.toLowerCase()}:${face.weight}:${face.style}`;
+    const family = simpleFontFamilyKey(face.family),
+      key = `${family}:${face.weight}:${face.style}`;
     if (
       faceKeys.has(key) ||
-      (families.has(face.family.toLowerCase()) &&
-        families.get(face.family.toLowerCase()) !== face.family)
+      (families.has(family) && families.get(family) !== face.family)
     )
       fail("duplicate or inconsistently named font face");
     faceKeys.add(key);
-    families.set(face.family.toLowerCase(), face.family);
+    families.set(family, face.family);
     inspectFont(
       catalogueBytes(resource.content, 20 * 1024 * 1024),
       face as unknown as CatalogueFontFace,

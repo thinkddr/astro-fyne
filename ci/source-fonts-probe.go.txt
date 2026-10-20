@@ -57,7 +57,9 @@ func TestSourceFontsRoundtrip(t *testing.T){
    visit(node.Children)
   }}
   visit(snapshot.Roots);if count==""||seed==""{t.Fatal("missing native caption/seed")}
-  return map[string]any{"count":count,"seed":seed}
+  state:=map[string]any{"count":count,"seed":seed}
+  CAPTURE_FAMILY
+  return state
  }
  CHECK_ASTRO
  initial:=capture(view);beforeArchive,err:=view.ExportJavascript();check(err)

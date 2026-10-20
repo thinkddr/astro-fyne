@@ -87,6 +87,7 @@ export async function prepareSourceCatalogue(options: SourceCatalogueOptions) {
         : {},
       snapshot.actions ?? [],
       stylesheet ? [stylesheet] : [],
+      [...new Set(fonts.fontFaces.map((face) => face.family))],
     );
   for (const input of [...fonts.inputPaths, ...bundle.inputPaths])
     protectedInputs.add(input);

@@ -30,7 +30,6 @@ import (
 
 var identifier = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,127}$`)
 var relativePath = regexp.MustCompile(`^[A-Za-z0-9_./-]+$`)
-var familyName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9 _-]{0,79}$`)
 
 func digest(data []byte) string {
 	hash := sha256.Sum256(data)
@@ -319,17 +318,22 @@ func validate(spec Spec) error {
 		}
 		sheets[sheet.ID] = sheet
 	}
-	faces, keys, families := map[string]FontFace{}, map[string]bool{}, map[string]string{}
-	for _, face := range spec.FontFaces {
+	faces := map[string]FontFace{}
+	for index, face := range spec.FontFaces {
 		resource, ok := resources[face.Resource]
-		key := fmt.Sprintf("%s/%d/%s", strings.ToLower(face.Family), face.Weight, face.Style)
-		if !identifier.MatchString(face.ID) || faces[face.ID].ID != "" || !familyName.MatchString(face.Family) || strings.TrimSpace(face.Family) != face.Family || !ok || resource.MediaType != "font/ttf" || face.Hash != resource.Hash || (face.Weight != 400 && face.Weight != 700) || (face.Style != "normal" && face.Style != "italic") || keys[key] || families[strings.ToLower(face.Family)] != "" && families[strings.ToLower(face.Family)] != face.Family {
+		requirement := webui.FontResourceRequirement{Family: face.Family, Weight: face.Weight, Style: face.Style, Hash: face.Hash}
+		if !identifier.MatchString(face.ID) || faces[face.ID].ID != "" || !ok || resource.MediaType != "font/ttf" || face.Hash != resource.Hash || webui.ValidateFontResourceRequirements([]webui.FontResourceRequirement{requirement}) != nil {
 			return fmt.Errorf("catalog: invalid, conflicting or missing font binding %q", face.ID)
+		}
+		for _, previous := range spec.FontFaces[:index] {
+			if strings.EqualFold(previous.Family, face.Family) && (previous.Family != face.Family || previous.Weight == face.Weight && previous.Style == face.Style) {
+				return fmt.Errorf("catalog: invalid, conflicting or missing font binding %q", face.ID)
+			}
 		}
 		if err := validateFont(resource.Content, face); err != nil {
 			return fmt.Errorf("catalog: font %q: %w", face.ID, err)
 		}
-		faces[face.ID], keys[key], families[strings.ToLower(face.Family)] = face, true, face.Family
+		faces[face.ID] = face
 	}
 	themes := map[string]ThemeSpec{}
 	for _, item := range spec.Themes {

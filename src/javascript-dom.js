@@ -7,7 +7,7 @@ import {
 import { createCSSCascade } from "./javascript-css-runtime.js";
 
 /** A Preact DOM adapter backed by native objects, never a browser renderer. */
-export function createDocument() {
+export function createDocument(resolveFontFamily) {
   let next = 0;
   const css = createCSSCascade();
   const asciiLower = (value) => value.replace(/[A-Z]/g, (c) => c.toLowerCase());
@@ -485,6 +485,15 @@ export function createDocument() {
       ),
       children: node.childNodes.map((child) => snapshot(child, resolved)),
     };
+    if (
+      resolveFontFamily &&
+      frame.style.fontFamily !== undefined &&
+      frame.style.fontFamily !== ""
+    )
+      frame.style = {
+        ...frame.style,
+        fontFamily: resolveFontFamily(frame.style.fontFamily),
+      };
     validateJavascriptZeroHeight(frame);
     return frame;
   }
