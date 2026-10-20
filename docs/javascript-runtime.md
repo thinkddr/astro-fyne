@@ -131,6 +131,12 @@ Restoration checks each boundary's name and arguments, exhausts the recorded res
 and compares the resulting virtual frame. A mismatch is an error. Further live actions
 use local bindings and append to the history. Imports execute again during restoration;
 external effects must enter through the recorded host boundary.
+
+Each mounted runtime owns its props, source/style metadata and replay records.
+Export returns detached props, metadata, events, journal records and frame nodes.
+Editing an exported checkpoint or the caller's restored input cannot change a
+running instance. Save the returned archive before editing it to create a separate
+conversion input; mounting still checks its code, CSS digests and replay contract.
 Locale/time-zone behavior, dynamic code that bypasses the recorded globals and other
 nondeterministic services require replay adapters; a changed frame is rejected on restore.
 

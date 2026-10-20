@@ -44,6 +44,8 @@ export function createJavascriptComponent(
   archive: JavascriptArchive,
 ) {
   validateJavascriptBrowserResources(archive);
+  const schema = archive.schema,
+    codeHash = archive.codeHash;
   function JavascriptProgram(
     input: JavascriptProps & { handle: RefObject<JavascriptHandle> },
   ) {
@@ -64,7 +66,9 @@ export function createJavascriptComponent(
     }>();
     if (!context.current) {
       validateJavascriptBrowserResources(archive);
-      const actions = input.actions ?? emptyActions;
+      const events = archive.events.map((event) => ({ ...event })),
+        anchorTime = archive.animation?.timeMs ?? 0,
+        actions = input.actions ?? emptyActions;
       for (const name of archive.actions)
         if (
           !Object.hasOwn(actions, name) ||
@@ -78,7 +82,7 @@ export function createJavascriptComponent(
         throw new Error("Unknown JavaScript host boundary");
       }, archive);
       api.flush();
-      for (const event of archive.events) {
+      for (const event of events) {
         api.replay(event);
         api.flush();
       }
@@ -91,7 +95,7 @@ export function createJavascriptComponent(
         generation: 0,
         manualAnimations: input.animation?.manual ?? false,
         now: input.animation?.now ?? animationNow,
-        anchorTime: archive.animation?.timeMs ?? 0,
+        anchorTime,
       };
     }
     const ctx = context.current;
@@ -182,7 +186,7 @@ export function createJavascriptComponent(
         ctx.dom.commit(frames);
         ctx.dirty = ctx.generation !== generation;
         ctx.mounted = true;
-        if (archive.schema === 2 && !ctx.manualAnimations) {
+        if (schema === 2 && !ctx.manualAnimations) {
           if (ctx.anchorClock === undefined) anchor();
           schedule();
         }
@@ -242,7 +246,7 @@ export function createJavascriptComponent(
         check(frames);
         return ctx.api.export();
       },
-      ...(archive.schema === 2
+      ...(schema === 2
         ? {
             animationState: () => ctx.api.animationState!(),
             advanceAnimations(timeMs: number) {
@@ -289,7 +293,7 @@ export function createJavascriptComponent(
       ctx.dirty = true;
       ctx.generation++;
       try {
-        if (archive.schema === 2) advanceClock();
+        if (schema === 2) advanceClock();
         const prevented = ctx.api.dispatch({
           node: uid,
           type,
@@ -303,7 +307,7 @@ export function createJavascriptComponent(
         throw error;
       }
     };
-    return h("div", { "data-afy-javascript": archive.codeHash, ref: wrapper });
+    return h("div", { "data-afy-javascript": codeHash, ref: wrapper });
   }
   return class JavascriptProgramComponent
     extends Component<JavascriptProps>
