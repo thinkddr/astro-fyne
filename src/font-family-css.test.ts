@@ -155,6 +155,49 @@ test("single CSS font parsing diagnoses unsupported syntax instead of stripping 
   expect(parseCSSFontFamily("𐐀".repeat(80)).family).toBe("𐐀".repeat(80));
 });
 
+test("CSS matching spellings can exceed native alias length and leading-letter rules", () => {
+  const canonical = "ΐ".repeat(80),
+    dotted = "İ".repeat(80);
+  const resolve = createCSSFontFamilyResolver(["Ι", canonical, dotted]);
+  expect(resolve("\u0345")).toBe('"Ι"');
+  expect(resolve('"\u0345"')).toBe('"Ι"');
+  for (const raw of [
+    "\u0345\u0308\u0301".repeat(80),
+    "ι\u0308\u0301".repeat(80),
+  ]) {
+    expect([...raw].length).toBe(240);
+    expect(() => resolve(raw)).toThrow("full-fold-only");
+    expect(() => resolve(JSON.stringify(raw))).toThrow("full-fold-only");
+    expect(() => parseCSSFontFamily(raw)).toThrow();
+  }
+  expect(() => resolve("i\u0307".repeat(80))).toThrow("full-fold-only");
+  expect(
+    createCSSFontFamilyResolver(["Ι".repeat(80)])("\u0345".repeat(80)),
+  ).toBe(JSON.stringify("Ι".repeat(80)));
+  expect(resolve(canonical)).toBe(canonical);
+  expect(() => createCSSFontFamilyResolver(["\u0345"])).toThrow();
+  expect(() =>
+    createCSSFontFamilyResolver(["ι\u0308\u0301".repeat(80)]),
+  ).toThrow();
+});
+
+test("broader CSS matching keeps unknown resource limits and exact combining order", () => {
+  const canonical = "ΐ".repeat(80),
+    resolve = createCSSFontFamilyResolver([canonical, "é", "I"]);
+  for (const raw of [
+    "\u0345",
+    "A".repeat(81),
+    "ι\u0301\u0308".repeat(80),
+    "\u0345\u0308\u0301".repeat(81),
+    "\ud800",
+    '"A\udfff"',
+  ])
+    expect(() => resolve(raw)).toThrow();
+  expect(resolve("e\u0301")).toBe("e\u0301");
+  expect(resolve("ı")).toBe("ı");
+  expect(() => createCSSFontFamilyResolver([])("\u0345")).toThrow();
+});
+
 test("CSS font resolvers preserve exact canonical CSS and quote full-fold aliases", () => {
   const resolve = createCSSFontFamilyResolver([
     "Straße",
@@ -169,9 +212,8 @@ test("CSS font resolvers preserve exact canonical CSS and quote full-fold aliase
   for (const raw of ["Straße", ' "Straße" ', "'Straße'", " \tNoto Sans\r"])
     expect(resolve(raw)).toBe(raw);
   for (const [raw, canonical] of [
-    ["STRASSE", "Straße"],
-    ['"strasse"', "Straße"],
-    ["i\u0307", "İ"],
+    ["STRAẞE", "Straße"],
+    ['"straße"', "Straße"],
     ["Noto   Sans", "Noto Sans"],
     ["Noto\tSans", "Noto Sans"],
     ["ς", "Σ"],
@@ -187,8 +229,8 @@ test("CSS font resolvers keep unknown names distinct and snapshot canonical inpu
   const families = ["é", "I", "Straße", "𐐀".repeat(80)],
     resolve = createCSSFontFamilyResolver(families);
   families.fill("Changed");
-  families.push("STRASSE");
-  expect(resolve("STRASSE")).toBe('"Straße"');
+  families.push("STRAẞE");
+  expect(resolve("STRAẞE")).toBe('"Straße"');
   for (const raw of [
     "e\u0301",
     "ı",
@@ -203,6 +245,28 @@ test("CSS font resolvers keep unknown names distinct and snapshot canonical inpu
   expect(empty("serif")).toBe("serif");
   expect(() => empty("Noto, serif")).toThrow();
   expect(() => empty("𐐀".repeat(81))).toThrow();
+});
+
+test("font alias conversion diagnoses full-only and changed-astral rewrites", () => {
+  for (const [canonical, authored] of [
+    ["Straße", "STRASSE"],
+    ["İ", "i\u0307"],
+    ["ﬀ", "ff"],
+    ["ΐ".repeat(80), "\u0345\u0308\u0301".repeat(80)],
+  ]) {
+    const resolve = createCSSFontFamilyResolver([canonical!]);
+    expect(() => resolve(authored!)).toThrow("full-fold-only");
+    expect(() => resolve(JSON.stringify(authored))).toThrow("full-fold-only");
+    expect(resolve(canonical!)).toBe(canonical!);
+  }
+  const canonical = "𐐀Source𐐀",
+    resolve = createCSSFontFamilyResolver([canonical]);
+  for (const authored of ["𐐨Source𐐀", "𐐀Source𐐨", "𐐨source𐐨"])
+    expect(() => resolve(authored)).toThrow("changed astral");
+  expect(resolve(canonical)).toBe(canonical);
+  expect(resolve("𐐀source𐐀")).toBe(JSON.stringify(canonical));
+  expect(resolve(JSON.stringify(canonical))).toBe(JSON.stringify(canonical));
+  expect(createCSSFontFamilyResolver([])("𐐨source𐐨")).toBe("𐐨source𐐨");
 });
 
 test("CSS font resolvers reject ambiguous and noncanonical declarations", () => {

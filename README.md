@@ -49,9 +49,10 @@ The same CLI generates a native registry or an Astro/Preact library from its JSO
 from source with licensed local fonts, easy native constructors and a complete
 catalogue exporter. See the [source font guide](docs/source-fonts.md).
 
-Source-font islands also resolve Unicode CSS family aliases automatically. For
-example, CSS `STRASSE` selects a declared `Straße` alias through the native → web
-→ native checkpoint. Ambiguous CSS names produce diagnostics. See the
+Source-font islands resolve supported Unicode CSS family aliases automatically.
+For example, CSS `STRAẞE` selects a declared `Straße` alias. Conversion requires
+agreement with native simple folding and unchanged astral scalars; full-fold-only
+spellings such as `STRASSE` produce a diagnostic. See the
 [font-family policy](docs/font-family-policy.md) for syntax and profile limits.
 [Portable motion](docs/motion.md) provides native Go controllers and a matching browser
 adapter for explicit numeric keyframes, clocks and target bindings.

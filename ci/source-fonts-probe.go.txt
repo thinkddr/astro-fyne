@@ -35,6 +35,36 @@ func sourceClick(t *testing.T,view *js.Widget,window fyne.Window)fyne.Position{
  test.TapCanvas(window.Canvas(),point);if err:=view.Error();err!=nil{t.Fatal(err)}
  window.Canvas().Unfocus();window.Canvas().Capture();return point
 }
+type sourceFontRejectionCase struct{
+ constructor,sourceFile,manifestFile,canonical,authored,class string
+ catalogue func()(*catalog.Registry,error)
+ construct func(webui.Scope,webui.Actions,js.Options)(*js.Widget,error)
+}
+func sourceFontRejections(t *testing.T,output string,actions webui.Actions,actionCount func()int,cases []sourceFontRejectionCase){
+ t.Helper();rows:=[]map[string]any{}
+ persist:=func(){
+  data,err:=json.MarshalIndent(map[string]any{"schema":1,"mode":"prepare","sourceKind":"installed-cli-generated-native-constructor-rejection","cases":rows,"hostCalls":actionCount(),"beforeNativeWindowOrCanvasSourceBound":true,"painterCallsIndependentlyCounted":false,"pixelPerfectVerified":false},"","  ")
+  if err!=nil{t.Fatal(err)};if err=os.WriteFile(filepath.Join(output,"native-font-rejection.json"),append(data,'\n'),0644);err!=nil{t.Fatal(err)}
+ }
+ for _,item:=range cases{
+  registry,registryErr:=item.catalogue();spec:=registry.Spec();var archive js.Archive;var archiveErr error
+  payload:="";if len(spec.Components)==1{payload=spec.Components[0].Payload;archiveErr=json.Unmarshal([]byte(payload),&archive)}
+  var rejected *js.Widget;var constructorErr error;var constructorPanic any
+  func(){defer func(){constructorPanic=recover()}();rejected,constructorErr=item.construct(nil,actions,js.Options{ManualAnimations:true})}()
+  message,errorType,errorClass:="","",""
+  if constructorErr!=nil{message=constructorErr.Error();errorType=fmt.Sprintf("%T",constructorErr)}
+  for _,class:=range []string{"full-fold-only","changed astral"}{if bytes.Contains([]byte(message),[]byte("CSS font family: "+class+" aliases need a browser font matching adapter.")){errorClass=class}}
+  faces:=[]map[string]any{};for _,face:=range spec.FontFaces{faces=append(faces,map[string]any{"id":face.ID,"family":face.Family,"weight":face.Weight,"style":face.Style,"resource":face.Resource,"hash":face.Hash})}
+  row:=map[string]any{"constructor":item.constructor,"sourceFile":item.sourceFile,"manifestFile":item.manifestFile,"canonical":item.canonical,"authoredFamily":item.authored,"expectedErrorClass":item.class,"errorClass":errorClass,"errorObserved":constructorErr!=nil,"errorMessage":message,"errorGoType":errorType,"returnedWidgetNil":rejected==nil,"constructorInvoked":true,"constructorPanicked":constructorPanic!=nil,"hostCalls":actionCount(),"componentPayloadHash":sourceFontHash([]byte(payload)),"factoryCodeHash":archive.CodeHash,"sourceInputs":archive.Sources,"fontFaces":faces}
+  if registryErr!=nil{row["catalogueError"]=registryErr.Error()};if archiveErr!=nil{row["archiveError"]=archiveErr.Error()};if constructorPanic!=nil{row["panicMessage"]=fmt.Sprint(constructorPanic)}
+  rows=append(rows,row);persist()
+  if rejected!=nil{closeErr:=rejected.Close();t.Fatalf("rejected source constructor returned a widget: %s error=%v cleanup=%v",item.constructor,constructorErr,closeErr)}
+  if constructorPanic!=nil{t.Fatalf("source constructor panicked instead of returning a diagnostic: %s %v",item.constructor,constructorPanic)}
+  if registryErr!=nil||registry==nil||archiveErr!=nil||len(spec.Components)!=1||sourceFontHash([]byte(archive.Code))!=archive.CodeHash{t.Fatal("rejected fixture lost its actual generated archive",item.constructor,registryErr,archiveErr)}
+  if len(spec.FontFaces)!=2{t.Fatal("rejected fixture lost its licensed faces",item.constructor)};for _,face:=range spec.FontFaces{if face.Family!=item.canonical{t.Fatal("rejected fixture has the wrong canonical family",item.constructor,face.Family)}}
+  if constructorErr==nil||errorClass!=item.class||actionCount()!=0{t.Fatal("source constructor did not fail at its font admission boundary",row)}
+ }
+}
 func TestSourceFontsRoundtrip(t *testing.T){
  app:=test.NewApp();defer app.Quit()
  output,mode:=os.Getenv("ASTRO_FYNE_SOURCE_FONTS_OUTPUT"),os.Getenv("ASTRO_FYNE_SOURCE_FONTS_MODE")
@@ -43,6 +73,7 @@ func TestSourceFontsRoundtrip(t *testing.T){
  registry,err:=PROBE_CATALOGUE();check(err)
  calls:=[][]any{}
  actions:=webui.Actions{"observe":func(args ...any)any{calls=append(calls,append([]any{},args...));return nil}}
+ CHECK_FONT_REJECTIONS
  MAKE_VIEW
  defer view.Close()
  if len(calls)!=0{t.Fatal("construction repeated host actions",calls)}

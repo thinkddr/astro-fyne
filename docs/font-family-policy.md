@@ -2,8 +2,8 @@
 
 # Unicode font-family policy
 
-`src/font-family.ts` provides deterministic Unicode17 alias validation and two
-different comparison keys. It uses pinned Unicode data in browser and compiler
+`src/font-family.ts` provides deterministic Unicode17 alias validation and simple
+and full comparison keys. It uses pinned Unicode data in browser and compiler
 code, without relying on the JavaScript engine's casing or Unicode property
 tables.
 
@@ -35,6 +35,17 @@ These functions accept a decoded alias, rather than CSS syntax such as a quoted
 family or fallback list. `validFontResourceFamily` returns false for invalid input;
 both key functions throw an error. Keys are comparison values: full folding may
 expand an 80-scalar input beyond 80 scalars.
+
+`cssFontFamilyTextKey` compares decoded CSS text separately from resource aliases.
+It accepts nonempty, well-formed Unicode text up to 240 scalars. This bound comes
+from the 80-scalar native limit and the largest three-scalar C/F expansion in the
+pinned data. Case folding never deletes an input scalar, so a longer spelling
+cannot equal a supported native alias's full key. The function is comparison
+arithmetic; it does not parse CSS syntax or validate a resource declaration.
+
+`simpleFontFamilyTextKey` applies the same decoded-text bounds with the pinned
+`C`/`S` mappings. The converter uses it as an additional admission check; it does
+not replace the CSS full-fold comparison rule.
 
 The grammar matches the native font-resource requirement rule when Go uses
 Unicode17.0.0. The Go standard library's Unicode version is a separate toolchain
@@ -93,15 +104,26 @@ Generated CSS is UTF-8. The host Astro document must declare UTF-8, for example
 with `<meta charset="utf-8">` in the layout's `<head>`. Component emitters leave
 that document head to the host layout.
 
-With a declared `Straße` family, authored `font-family: STRASSE` resolves to the
-canonical CSS string `"Straße"` in native and generated web frames. Dynamic inline
-styles, inherited styles and CSS variables pass through the same final snapshot
-resolver. The source DOM style, original stylesheet text/hash and checkpoint
-journal stay intact. Canonical names are embedded in the compiled factory and
-therefore affect its code hash. Factories that include Unicode comparison data
-also retain its complete Unicode-3.0 license notice, hash and protected source
-path. A warm checkpoint carries that resolver back to
-Fyne without adding host calls or replaying effects.
+With a declared `Straße` family, authored `font-family: STRAẞE` resolves to the
+canonical CSS string `"Straße"` in native and generated web frames. Conversion
+first selects a declared alias by its full-fold key, then requires equal simple
+keys and unchanged astral scalars at every position. A changed scalar above
+`U+FFFF`, including a Deseret case pair, requires an adapter. Exact astral
+spellings remain valid resource aliases. These restrictions are a conservative
+conversion profile, not a replacement for CSS's specified comparison rule or
+proof of a browser's complete algorithm.
+
+Dynamic inline styles, inherited styles and CSS variables pass through the same
+final snapshot resolver. Dynamic code may produce an unsupported value only at
+mount or a later update; the CLI cannot statically reject every future branch.
+The source DOM style, original stylesheet text/hash and checkpoint journal stay
+intact. Canonical names are embedded in the compiled factory and therefore
+affect its code hash. Factories that include Unicode comparison data also retain
+its complete Unicode-3.0 license notice, hash and protected source path. A warm
+checkpoint carries that resolver back to Fyne without replaying effects.
+Each exported frame owns its attribute maps. Later DOM updates or edits to another
+snapshot preserve the saved checkpoint, including when a font diagnostic rejects
+the current state.
 
 `src/font-family-css.ts` also exposes `parseCSSFontFamily`,
 `createCSSFontFamilyResolver` and `validateCSSFontNamespace`. The parser accepts
@@ -112,8 +134,20 @@ Keyword recognition is ASCII-insensitive, independently of Unicode family
 matching. See [CSS family syntax](https://www.w3.org/TR/css-fonts-4/#family-name-syntax)
 and [custom identifiers](https://www.w3.org/TR/css-values-4/#custom-idents).
 
-Lists, CSS escapes, generic functions and names outside the bounded resource
-grammar require additional adapters and produce diagnostics. Cleared inline
+The resolver accepts a broader authored spelling when it also passes that
+admission filter. For example, `U+0345` is a combining mark that simple-folds to
+Greek iota. Eighty such marks, or eighty `ι` scalars, can select a declared alias
+of eighty `Ι` scalars, although a resource declaration cannot start with a mark.
+An 80-scalar alias consisting of `ΐ` and its 240-scalar full-fold spellings still
+have equal mathematical C/F keys. Their simple keys differ, so conversion
+diagnoses them until a matching adapter is qualified. The same distinction
+rejects `STRASSE` for `Straße` and `i` followed by `U+0307` for `İ`. No Unicode
+normalization is applied. The exported `parseCSSFontFamily` keeps its existing
+bounded resource-parser contract; the resolver uses a separate parser path for
+matching. Unknown names still pass the existing resource-profile checks.
+
+Lists, CSS escapes, generic functions and unmatched names outside the bounded
+resource grammar require additional adapters and produce diagnostics. Cleared inline
 families keep the existing empty-style behavior. Unknown valid names are left
 to the existing native style/resource checks. The older responsive emitter and
 capture adapter still have narrower family parsing rules; this integration does
@@ -124,6 +158,26 @@ alias scheme for colliding families. It does not enable the stricter native
 resource-factory ABI or a verified browser `FontFace` resource pool. These
 functions do not load fonts, inspect glyph coverage or establish shaping,
 fallback absence or pixel equivalence.
+
+## Observed browser boundary
+
+A retained failed hosted probe used Chromium 153.0.8010.12 with declared
+`SourceStraße` faces at weights 400 and 700. Canonical queries loaded one face
+each with the expected font bytes. Raw `SOURCESTRASSE` queries loaded no faces;
+raw `sourceſtraße` queries loaded the same face objects as the canonical queries.
+Both names have the same normative C/F key. These observations concern those
+queries and that browser build, not all Unicode names or browsers.
+
+The browser reported revision `971a7443b0c9b0a9b2860529b33331b76077ec62`.
+At that source revision, [FontFaceSet loading](https://chromium.googlesource.com/chromium/src/+/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/css/font_face_set.cc)
+uses the [family cache](https://chromium.googlesource.com/chromium/src/+/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/core/css/font_face_cache.h),
+whose [comparison trait](https://chromium.googlesource.com/chromium/src/+/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/platform/wtf/text/case_folding_hash.h)
+reaches a [string comparison](https://chromium.googlesource.com/chromium/src/+/971a7443b0c9b0a9b2860529b33331b76077ec62/third_party/blink/renderer/platform/wtf/text/string_view.cc)
+that first rejects unequal UTF-16 lengths. This is consistent with the observed
+sharp-s expansion difference. It does not attest that the executable was built
+from those source bytes, or prove that every comparison equals Go simple
+folding. The conversion filter also excludes changed astral scalars rather than
+assuming UTF-16 cache behavior is scalar-aware.
 
 ## Data and regeneration
 
@@ -151,8 +205,8 @@ updating pins and expected counts, regenerating and running hosted conformance.
 ## Hosted verification
 
 The source-font roundtrip gate runs separate ASCII and Unicode profiles. The
-Unicode profile declares `SourceStraße`, retains authored CSS `SOURCESTRASSE`,
-and alternates inline `SOURCESTRASSE`/`sourceſtraße` after real clicks. A program
+Unicode profile declares `SourceStraße`, retains authored CSS `SOURCESTRAẞE`,
+and alternates inline `SOURCESTRAẞE`/`sourceſtraße` after real clicks. A program
 attribute exposes the chosen authored alias; native snapshots and exported
 frames retain the exact quoted canonical CSS string. Managed browser computed
 styles are observed separately. The same warm checkpoint moves from native
@@ -161,10 +215,23 @@ font bytes, licenses and host history. A separate original Astro JSON-props case
 is native-only. These checks establish the observed loaded-font behavior rather
 than font-origin, fallback-free or pixel equivalence.
 
-The seven Bun tests include explicit failure cases and independent parsing of
+A separate `--unicode-matching` profile declares eighty `Ι` scalars and alternates
+eighty `U+0345` marks and eighty `ι` scalars. It keeps the same
+native/browser/returned-native checkpoint tests and licensed font bytes. Unicode
+browser probes query `document.fonts.load` with each admitted raw authored name
+and compare the returned `FontFace` object with the canonical query's object.
+Separate negative probes retain the observed outcomes for full-fold-only and
+changed-astral names; native constructor cases must diagnose those conversions.
+These assertions check selected actual name matches and admission failures, not
+font origin, every painted glyph or raster equivalence. The independent C/F
+math tests still require the 80-to-240-scalar expansion equality.
+
+The eleven Bun tests include explicit failure cases and independent parsing of
 the original data files. They compare leading and continuation grammar for
 every code point, and exact simple/full keys for every admitted continuation
-scalar. They also check license/source pins and generated provenance.
+scalar. Separate text-key sweeps check C/S and C/F mappings for all 1,112,064
+Unicode scalars, including names outside the resource grammar. The tests also
+check license/source pins and generated provenance.
 
 `ci/unicode-font-family.ts` runs the hosted cross-reference gate. It copies
 `ci/unicode-font-family.go.txt` into a generated native package, replaces
@@ -202,7 +269,7 @@ observed. The harness uses a loopback HTTP server and closes its browser and
 server on failure.
 
 The Go test has a 180-second limit, the Bun comparison subprocess a 180-second
-limit, and the Chromium comparison a 180-second limit. The two exhaustive Bun
+limit, and the Chromium comparison a 180-second limit. The four exhaustive Bun
 unit tests have separate 120-second limits. Enumeration counters and bounded
 mismatch diagnostics are retained; individual native scalar assertion states are
 not separate snapshots. Source or passing counts alone do not attest a compiler
