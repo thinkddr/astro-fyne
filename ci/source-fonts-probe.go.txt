@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Astro Fyne contributors.
+package PROBE_PACKAGE
+
+import (
+ "bytes"
+ "crypto/sha256"
+ "encoding/hex"
+ "encoding/json"
+ "fmt"
+ "os"
+ "path/filepath"
+ "reflect"
+ "testing"
+ "fyne.io/fyne/v2"
+ "fyne.io/fyne/v2/canvas"
+ "fyne.io/fyne/v2/test"
+ webui "github.com/thinkddr/astro-fyne/native"
+ "github.com/thinkddr/astro-fyne/native/catalog"
+ js "github.com/thinkddr/astro-fyne/native/javascript"
+)
+
+func sourceFontHash(data []byte) string { value:=sha256.Sum256(data);return hex.EncodeToString(value[:]) }
+func sourcePainted(t *testing.T,object fyne.CanvasObject,text string)*canvas.Text{
+ t.Helper()
+ for _,child:=range test.WidgetRenderer(object.(fyne.Widget)).Objects(){if painted,ok:=child.(*canvas.Text);ok&&painted.Text==text{return painted}}
+ t.Fatalf("missing painted text %q",text);return nil
+}
+func sourceClick(t *testing.T,view *js.Widget,window fyne.Window)fyne.Position{
+ t.Helper();snapshot,err:=view.Snapshot();if err!=nil{t.Fatal(err)}
+ var point fyne.Position;found:=false
+ var locate func([]webui.SnapshotNode,fyne.Position)
+ locate=func(nodes []webui.SnapshotNode,parent fyne.Position){for _,node:=range nodes{position:=parent;if object:=view.Object(node.Node.ID);object!=nil{position=position.Add(object.Position())};if node.Node.ID=="font-increment"{point=position.Add(fyne.NewPos(8,8));found=true};locate(node.Children,position)}}
+ locate(snapshot.Roots,view.Position());if !found{t.Fatal("missing physical click target")}
+ test.TapCanvas(window.Canvas(),point);if err:=view.Error();err!=nil{t.Fatal(err)}
+ window.Canvas().Unfocus();window.Canvas().Capture();return point
+}
+func TestSourceFontsRoundtrip(t *testing.T){
+ app:=test.NewApp();defer app.Quit()
+ output,mode:=os.Getenv("ASTRO_FYNE_SOURCE_FONTS_OUTPUT"),os.Getenv("ASTRO_FYNE_SOURCE_FONTS_MODE")
+ if output==""||(mode!="prepare"&&mode!="verify"){t.Fatal("missing output/mode")}
+ check:=func(err error){if err!=nil{t.Fatal(err)}}
+ registry,err:=PROBE_CATALOGUE();check(err)
+ calls:=[][]any{}
+ actions:=webui.Actions{"observe":func(args ...any)any{calls=append(calls,append([]any{},args...));return nil}}
+ MAKE_VIEW
+ defer view.Close()
+ if len(calls)!=0{t.Fatal("construction repeated host actions",calls)}
+ window:=test.NewWindow(view);defer window.Close();window.SetPadded(false);window.Resize(fyne.NewSize(420,200))
+ view.SetViewport(420,200);check(view.BindCanvas(window.Canvas()));window.Canvas().Capture()
+ capture:=func(widget *js.Widget)map[string]any{
+  snapshot,err:=widget.Snapshot();check(err);count,seed:="",""
+  var visit func([]webui.SnapshotNode)
+  visit=func(nodes []webui.SnapshotNode){for _,node:=range nodes{
+   if node.Node.ID=="font-count"{count=node.Node.Text}
+   if node.Node.ID=="font-seed"{seed=node.Node.Text}
+   visit(node.Children)
+  }}
+  visit(snapshot.Roots);if count==""||seed==""{t.Fatal("missing native caption/seed")}
+  return map[string]any{"count":count,"seed":seed}
+ }
+ CHECK_ASTRO
+ initial:=capture(view);beforeArchive,err:=view.ExportJavascript();check(err)
+ wantInitial,wantAfter:="Native override:0","Native override:1"
+ if mode=="verify"{wantInitial,wantAfter="Native override:2","Native override:3"}
+ if initial["count"]!=wantInitial{t.Fatal("wrong initial state",initial)}
+ objects:=map[string]fyne.CanvasObject{}
+ for _,id:=range []string{"font-count","font-increment","font-seed"}{objects[id]=view.Object(id);if objects[id]==nil{t.Fatal("missing native object",id)}}
+ expectedFonts:=map[int]string{}
+ for _,face:=range registry.Spec().FontFaces{expectedFonts[face.Weight]=face.Hash}
+ if len(expectedFonts)!=2{t.Fatal("expected two explicit licensed faces")}
+ painters:=map[string]*canvas.Text{
+  "font-count":sourcePainted(t,objects["font-count"],wantInitial),
+  "font-increment":sourcePainted(t,objects["font-increment"],"Increment"),
+  "font-seed":sourcePainted(t,objects["font-seed"],initial["seed"].(string)),
+ }
+ fontRows:=[]map[string]any{};fontPointers:=map[string]fyne.Resource{}
+ for _,id:=range []string{"font-count","font-increment","font-seed"}{
+  painted:=painters[id]
+  weight:=400;if id=="font-increment"{weight=700}
+  if painted.FontSource==nil||sourceFontHash(painted.FontSource.Content())!=expectedFonts[weight]{t.Fatal("native painter lost licensed font",id)}
+  fontPointers[id]=painted.FontSource
+  fontRows=append(fontRows,map[string]any{"id":id,"weight":weight,"hash":sourceFontHash(painted.FontSource.Content())})
+ }
+ point:=sourceClick(t,view,window)
+ after:=capture(view);if after["count"]!=wantAfter||after["seed"]!=initial["seed"]{t.Fatal("wrong native click result",after)}
+ if len(calls)!=1||len(calls[0])!=1||fmt.Sprint(calls[0][0])!=map[string]string{"prepare":"1","verify":"3"}[mode]{t.Fatal("wrong native host action",calls)}
+ for id,object:=range objects{if view.Object(id)!=object{t.Fatal("native object identity changed",id)}}
+ for _,id:=range []string{"font-count","font-increment","font-seed"}{text:=wantAfter;if id=="font-increment"{text="Increment"};if id=="font-seed"{text=initial["seed"].(string)};if sourcePainted(t,view.Object(id),text).FontSource!=fontPointers[id]{t.Fatal("native font resource identity changed",id)}}
+ afterArchive,err:=view.ExportJavascript();check(err)
+ EXPORT_STATE
+ parsed,err:=catalog.Parse(data);check(err)
+ if !reflect.DeepEqual(parsed.Spec().Resources,registry.Spec().Resources)||!reflect.DeepEqual(parsed.Spec().FontFaces,registry.Spec().FontFaces)||!reflect.DeepEqual(parsed.Spec().Stylesheets,registry.Spec().Stylesheets){t.Fatal("export replaced catalogue resources")}
+ replayCalls:=0
+ object,err:=parsed.NewIsland("app",webui.Actions{"observe":func(...any)any{replayCalls++;return nil}});check(err)
+ replay:=object.(*js.Widget);restored:=capture(replay);restoredArchive,err:=replay.ExportJavascript();check(err);check(replay.Close())
+ if !reflect.DeepEqual(restored,after)||replayCalls!=0{t.Fatal("checkpoint did not restore without effects",restored,replayCalls)}
+ if !reflect.DeepEqual(restoredArchive,afterArchive){t.Fatal("restored complete JavaScript archive differs")}
+ for _,resource:=range parsed.Resources(){if resource.MediaType=="font/ttf"&&!bytes.Equal(resource.Content,registryResource(registry,resource.Name)){t.Fatal("font bytes changed")}}
+ check(os.MkdirAll(output,0755));prefix:=filepath.Join(output,"native-"+mode)
+ check(os.WriteFile(prefix+".catalogue.json",append(data,'\n'),0644))
+ result,err:=json.MarshalIndent(map[string]any{"schema":1,"mode":mode,"initial":initial,"after":after,"restored":restored,"initialArchive":beforeArchive,"afterArchive":afterArchive,"restoredArchive":restoredArchive,"calls":calls,"replayCalls":replayCalls,"fonts":fontRows,"stableNativeObjects":3,"physicalClick":map[string]float32{"x":point.X,"y":point.Y},"pixelPerfectVerified":false},"","  ");check(err)
+ check(os.WriteFile(prefix+".json",append(result,'\n'),0644))
+}
+func registryResource(registry *catalog.Registry,name string)[]byte{for _,resource:=range registry.Resources(){if resource.Name==name{return resource.Content}};return nil}

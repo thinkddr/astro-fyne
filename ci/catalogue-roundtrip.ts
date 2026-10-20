@@ -335,6 +335,7 @@ if (mode === "prepare") {
     "example/src/components/CatalogueCounter.tsx",
     "example/src/components/catalogue-counter.css",
     "src/catalogue.ts",
+    "src/json-source.ts",
     "src/catalogue-types.ts",
     "src/catalogue-web.ts",
     "src/catalogue-cli.ts",
