@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import {
   cssFontFamilyKey,
+  cssFontFamilyTextKey,
   simpleFontFamilyKey,
   validFontResourceFamily,
 } from "./font-family.ts";
@@ -76,7 +77,16 @@ function cssIdentifier(value: string): boolean {
 
 /** Parse one escape-free family; lists, comments and functions need an adapter. */
 export function parseCSSFontFamily(raw: string): ParsedCSSFontFamily {
+  return parseFamily(raw, false);
+}
+
+function parseFamily(raw: string, matching: boolean): ParsedCSSFontFamily {
   if (typeof raw !== "string") fail("require a string.");
+  const decoded = (family: string) => {
+    if (!matching) return checkedFamily(family);
+    cssFontFamilyTextKey(family);
+    return family;
+  };
   const value = raw.replace(cssOuterWhitespace, "");
   if (!value || value.includes("\\"))
     fail("require one nonempty family without CSS escapes.");
@@ -85,10 +95,10 @@ export function parseCSSFontFamily(raw: string): ParsedCSSFontFamily {
     const family = value.slice(1, -1);
     if (value.length < 2 || value.at(-1) !== quote || family.includes(quote))
       fail("require one complete quoted family.");
-    return { family: checkedFamily(family), generic: false, quoted: true };
+    return { family: decoded(family), generic: false, quoted: true };
   }
   const identifiers = value.split(cssWhitespace),
-    family = checkedFamily(identifiers.join(" "));
+    family = decoded(identifiers.join(" "));
   if (!identifiers.every(cssIdentifier))
     fail("require quoted text or unescaped CSS identifiers.");
   const reserved = identifiers.map(asciiKey);
@@ -178,14 +188,17 @@ export function createCSSFontFamilyResolver(
     byFull.set(full, family);
   }
   return (raw) => {
-    const parsed = parseCSSFontFamily(raw),
-      canonical = byFull.get(cssFontFamilyKey(parsed.family));
+    const parsed = parseFamily(raw, true),
+      canonical = byFull.get(cssFontFamilyTextKey(parsed.family));
     if (parsed.generic) {
       if (canonical !== undefined)
         fail("an unquoted keyword conflicts with a declared named alias.");
       return raw;
     }
-    if (canonical === undefined) return raw;
+    if (canonical === undefined) {
+      checkedFamily(parsed.family);
+      return raw;
+    }
     const exact =
       parsed.family === canonical &&
       (parsed.quoted || raw.replace(cssOuterWhitespace, "") === parsed.family);

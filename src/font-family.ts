@@ -18,6 +18,8 @@ if (data.version !== FONT_FAMILY_UNICODE_VERSION)
   throw new Error("Font family Unicode data version differs.");
 const simple = new Map(data.simpleOverrides),
   full = new Map(data.fullOverrides);
+const maxCSSFamilyTextScalars =
+  80 * Math.max(1, ...data.fullOverrides.map(([, target]) => target.length));
 
 function contains(ranges: readonly Range[], scalar: number): boolean {
   let low = 0,
@@ -103,8 +105,30 @@ export function simpleFontFamilyKey(value: string): string {
 
 /** Return a C+F key for CSS default caseless family matching. */
 export function cssFontFamilyKey(value: string): string {
+  return fullFamilyKey(checkedFamily(value));
+}
+
+/** Compare decoded CSS names that may fold to a bounded native alias. */
+export function cssFontFamilyTextKey(value: string): string {
+  if (typeof value !== "string" || !value)
+    throw new Error("CSS font matching requires nonempty Unicode text.");
+  let count = 0;
+  for (const character of value) {
+    const scalar = character.codePointAt(0)!;
+    if (
+      ++count > maxCSSFamilyTextScalars ||
+      (scalar >= 0xd800 && scalar <= 0xdfff)
+    )
+      throw new Error(
+        "CSS font matching exceeds the native alias comparison bounds.",
+      );
+  }
+  return fullFamilyKey(value);
+}
+
+function fullFamilyKey(value: string): string {
   let result = "";
-  for (const character of checkedFamily(value)) {
+  for (const character of value) {
     const scalar = character.codePointAt(0)!,
       mapped = full.get(scalar);
     result += mapped

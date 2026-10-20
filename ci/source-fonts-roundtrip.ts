@@ -11,14 +11,28 @@ import {
 import { captureSourceFonts } from "../capture/source-fonts-roundtrip.ts";
 
 const mode = process.argv[2],
-  unicode = process.argv[3] === "--unicode",
+  matching = process.argv[3] === "--unicode-matching",
+  unicode = matching || process.argv[3] === "--unicode",
   root = resolve(import.meta.dir, ".."),
-  stem = unicode ? "source-fonts-unicode" : "source-fonts",
-  family = unicode ? "SourceStraße" : "SourceNoto",
-  originalPackage = unicode ? "sourcefontsunicodeprobe" : "sourcefontsprobe",
-  returnedPackage = unicode
-    ? "sourcefontsunicodereturned"
-    : "sourcefontsreturned",
+  stem = matching
+    ? "source-fonts-unicode-matching"
+    : unicode
+      ? "source-fonts-unicode"
+      : "source-fonts",
+  family = matching ? "ΐ".repeat(80) : unicode ? "SourceStraße" : "SourceNoto",
+  aliases: readonly [string, string] = matching
+    ? ["\u0345\u0308\u0301".repeat(80), "\u03b9\u0308\u0301".repeat(80)]
+    : ["SOURCESTRASSE", "sourceſtraße"],
+  originalPackage = matching
+    ? "sourcefontsmatchingprobe"
+    : unicode
+      ? "sourcefontsunicodeprobe"
+      : "sourcefontsprobe",
+  returnedPackage = matching
+    ? "sourcefontsmatchingreturned"
+    : unicode
+      ? "sourcefontsunicodereturned"
+      : "sourcefontsreturned",
   out = join(root, "artifacts", stem + "-roundtrip"),
   foreign = join(out, "foreign"),
   fixture = join(out, "fixture"),
@@ -28,7 +42,7 @@ const mode = process.argv[2],
 assert.ok(
   ["prepare", "verify"].includes(mode ?? "") &&
     (process.argv.length === 3 || (process.argv.length === 4 && unicode)),
-  "Usage: bun ci/source-fonts-roundtrip.ts prepare|verify [--unicode]",
+  "Usage: bun ci/source-fonts-roundtrip.ts prepare|verify [--unicode|--unicode-matching]",
 );
 const phases: {
   name: string;
@@ -149,6 +163,12 @@ function sameMetadata(actual: CatalogueSpec, expected: CatalogueSpec) {
 }
 const unicodeCapture =
   'families:=map[string]string{};var visitFamilies func([]webui.SnapshotNode);visitFamilies=func(nodes []webui.SnapshotNode){for _,node:=range nodes{switch node.Node.ID{case "font-root","font-count","font-increment","font-seed":if node.Node.Style.FontFamily!=`"SourceStraße"`{t.Fatal("native family was not canonical",node.Node.ID,node.Node.Style.FontFamily)};families[node.Node.ID]=node.Node.Style.FontFamily};visitFamilies(node.Children)}};visitFamilies(snapshot.Roots);if len(families)!=4{t.Fatal("missing canonical native families",families)};archive,err:=widget.ExportJavascript();check(err);var frames []js.Frame;check(json.Unmarshal(archive.Frame,&frames));authored:="";var visitAuthored func([]js.Frame);visitAuthored=func(nodes []js.Frame){for _,node:=range nodes{if node.Attrs["id"]=="font-root"{authored=node.Attrs["data-authored-family"]};visitAuthored(node.Children)}};visitAuthored(frames);wantAuthored:="sourceſtraße";if count=="Native override:0"||count=="Native override:2"||count=="Original props:0"{wantAuthored="SOURCESTRASSE"};if authored!=wantAuthored{t.Fatal("authored family probe did not follow the real click",authored,wantAuthored)};state["fontFamilies"]=families;state["authoredFamily"]=authored';
+const matchingCapture = matching
+  ? unicodeCapture
+      .replace('`"SourceStraße"`', JSON.stringify(JSON.stringify(family)))
+      .replace('"sourceſtraße"', JSON.stringify(aliases[1]))
+      .replace('"SOURCESTRASSE"', JSON.stringify(aliases[0]))
+  : unicodeCapture;
 async function buildDriver(directory: string, phase: "prepare" | "verify") {
   const packageName = phase === "prepare" ? originalPackage : returnedPackage,
     constructor =
@@ -174,7 +194,7 @@ async function buildDriver(directory: string, phase: "prepare" | "verify") {
       .replaceAll("PROBE_CATALOGUE", constructor)
       .replaceAll("MAKE_VIEW", makeView)
       .replaceAll("CHECK_ASTRO", checkAstro)
-      .replaceAll("CAPTURE_FAMILY", unicode ? unicodeCapture : "")
+      .replaceAll("CAPTURE_FAMILY", unicode ? matchingCapture : "")
       .replaceAll("EXPORT_STATE", exportState),
     binary = join(out, "source-fonts-" + phase + ".test"),
     locks = await Promise.all(
@@ -290,16 +310,22 @@ if (mode === "prepare") {
   );
   await save(
     join(fixture, "Counter.tsx"),
-    unicode
-      ? 'import {useState} from "preact/hooks";import "./counter.css";export default function Counter({label,observe}){const[count,setCount]=useState(0);const[seed]=useState(()=>String(Date.now())+":"+String(Math.random()));const family=count%2?"sourceſtraße":"SOURCESTRASSE";return <div id="font-root" data-authored-family={family} style={{fontFamily:family}}><p id="font-count">{label}:{count}</p><button id="font-increment" onClick={()=>{setCount(count+1);if(observe)observe(count+1)}}>Increment</button><p id="font-seed">{seed}</p></div>}\n'
-      : 'import {useState} from "preact/hooks";import "./counter.css";export default function Counter({label,observe}){const[count,setCount]=useState(0);const[seed]=useState(()=>String(Date.now())+":"+String(Math.random()));return <div id="font-root"><p id="font-count">{label}:{count}</p><button id="font-increment" onClick={()=>{setCount(count+1);if(observe)observe(count+1)}}>Increment</button><p id="font-seed">{seed}</p></div>}\n',
+    matching
+      ? 'import {useState} from "preact/hooks";import "./counter.css";export default function Counter({label,observe}){const[count,setCount]=useState(0);const[seed]=useState(()=>String(Date.now())+":"+String(Math.random()));const family=count%2?' +
+          JSON.stringify(aliases[1]) +
+          ":" +
+          JSON.stringify(aliases[0]) +
+          ';return <div id="font-root" data-authored-family={family} style={{fontFamily:family}}><p id="font-count">{label}:{count}</p><button id="font-increment" onClick={()=>{setCount(count+1);if(observe)observe(count+1)}}>Increment</button><p id="font-seed">{seed}</p></div>}\n'
+      : unicode
+        ? 'import {useState} from "preact/hooks";import "./counter.css";export default function Counter({label,observe}){const[count,setCount]=useState(0);const[seed]=useState(()=>String(Date.now())+":"+String(Math.random()));const family=count%2?"sourceſtraße":"SOURCESTRASSE";return <div id="font-root" data-authored-family={family} style={{fontFamily:family}}><p id="font-count">{label}:{count}</p><button id="font-increment" onClick={()=>{setCount(count+1);if(observe)observe(count+1)}}>Increment</button><p id="font-seed">{seed}</p></div>}\n'
+        : 'import {useState} from "preact/hooks";import "./counter.css";export default function Counter({label,observe}){const[count,setCount]=useState(0);const[seed]=useState(()=>String(Date.now())+":"+String(Math.random()));return <div id="font-root"><p id="font-count">{label}:{count}</p><button id="font-increment" onClick={()=>{setCount(count+1);if(observe)observe(count+1)}}>Increment</button><p id="font-seed">{seed}</p></div>}\n',
   );
   await save(join(fixture, "tokens.css"), ":root{--source-ink:#123456}\r\n");
   await save(
     join(fixture, "counter.css"),
     '@import "./tokens.css";\r\n#font-root{width:400px;height:180px;padding:8px;background:#ffffff;color:var(--source-ink);font-family:"SourceNoto";font-weight:400;font-style:normal;font-size:16px;line-height:24px;white-space:nowrap}#font-count,#font-seed{font-weight:400;font-style:normal;font-size:16px;line-height:24px}#font-increment{font-family:"SourceNoto";font-weight:700;font-style:normal;font-size:16px;line-height:24px;height:36px;width:140px}\r\n'.replaceAll(
       '"SourceNoto"',
-      JSON.stringify(unicode ? "SOURCESTRASSE" : family),
+      JSON.stringify(unicode ? aliases[0] : family),
     ),
   );
   await save(
@@ -383,8 +409,8 @@ if (mode === "prepare") {
       ).text,
       sourceCSS,
     );
-    assert.ok(sourceCSS.includes('font-family:"SOURCESTRASSE"'));
-    assert.ok(!sourceCSS.includes('font-family:"SourceStraße"'));
+    assert.ok(sourceCSS.includes("font-family:" + JSON.stringify(aliases[0])));
+    assert.ok(!sourceCSS.includes("font-family:" + JSON.stringify(family)));
   }
   assert.deepEqual(
     new Set(cold.resources.map((resource) => resource.hash)),
@@ -403,9 +429,9 @@ if (mode === "prepare") {
   assert.deepEqual(nativePrepared.calls, [[1]]);
   assert.equal(nativePrepared.replayCalls, 0);
   if (unicode) {
-    assert.equal(nativePrepared.initial.authoredFamily, "SOURCESTRASSE");
-    assert.equal(nativePrepared.after.authoredFamily, "sourceſtraße");
-    assert.equal(nativePrepared.restored.authoredFamily, "sourceſtraße");
+    assert.equal(nativePrepared.initial.authoredFamily, aliases[0]);
+    assert.equal(nativePrepared.after.authoredFamily, aliases[1]);
+    assert.equal(nativePrepared.restored.authoredFamily, aliases[1]);
     assert.ok(
       Object.values(nativePrepared.initial.fontFamilies).every(
         (value) => value === JSON.stringify(family),
@@ -419,8 +445,8 @@ if (mode === "prepare") {
   assert.equal(astroPrepared.after.count, "Original props:1");
   assert.equal(astroPrepared.hostCalls, 0);
   if (unicode) {
-    assert.equal(astroPrepared.initial.authoredFamily, "SOURCESTRASSE");
-    assert.equal(astroPrepared.after.authoredFamily, "sourceſtraße");
+    assert.equal(astroPrepared.initial.authoredFamily, aliases[0]);
+    assert.equal(astroPrepared.after.authoredFamily, aliases[1]);
   }
   sameMetadata(checkpoint, cold);
   assert.equal(
@@ -547,8 +573,8 @@ if (mode === "prepare") {
           fontFamilyProfile: {
             canonical: family,
             canonicalCSS: JSON.stringify(family),
-            authoredCSS: "SOURCESTRASSE",
-            dynamicAliases: ["SOURCESTRASSE", "sourceſtraße"],
+            authoredCSS: aliases[0],
+            dynamicAliases: [...aliases],
             observedNativeFamilies: true,
             authoredInlineAssignmentSourceBound: true,
             pixelPerfectVerified: false,
@@ -584,6 +610,7 @@ if (mode === "prepare") {
     "http://127.0.0.1:4321/" + stem + "-roundtrip/",
     out,
     family,
+    unicode ? aliases : undefined,
   );
   const browser = JSON.parse(await readFile(join(out, "browser.json"), "utf8")),
     spec = await parseCatalogue(JSON.stringify(browser.exportedCatalogue)),
@@ -629,9 +656,9 @@ if (mode === "prepare") {
   assert.deepEqual(result.calls, [[3]]);
   assert.equal(result.replayCalls, 0);
   if (unicode) {
-    assert.equal(result.initial.authoredFamily, "SOURCESTRASSE");
-    assert.equal(result.after.authoredFamily, "sourceſtraße");
-    assert.equal(result.restored.authoredFamily, "sourceſtraße");
+    assert.equal(result.initial.authoredFamily, aliases[0]);
+    assert.equal(result.after.authoredFamily, aliases[1]);
+    assert.equal(result.restored.authoredFamily, aliases[1]);
   }
   await json(join(out, "verify.json"), {
     schema: 1,
@@ -648,9 +675,9 @@ if (mode === "prepare") {
           fontFamilyProfile: {
             canonical: family,
             canonicalCSS: JSON.stringify(family),
-            nativeInitialAlias: "sourceſtraße",
-            browserAfterAlias: "SOURCESTRASSE",
-            nativeReturnedAlias: "sourceſtraße",
+            nativeInitialAlias: aliases[1],
+            browserAfterAlias: aliases[0],
+            nativeReturnedAlias: aliases[1],
             authoredInlineAssignmentSourceBound: true,
           },
         }

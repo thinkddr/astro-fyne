@@ -45,6 +45,23 @@ type Frame = {
   focusExportRejected: boolean;
   authoredFamily?: string;
 };
+type FaceObservation = {
+  family: string;
+  status: string;
+  weight: string;
+  style: string;
+};
+type AuthoredFontMatch = {
+  alias: string;
+  weight: number;
+  query: string;
+  canonicalQuery: string;
+  loaded: number;
+  referenceEquality: boolean;
+  error?: string;
+  canonical?: FaceObservation;
+  faces: FaceObservation[];
+};
 type FontResponse = {
   url: string;
   status: number;
@@ -80,6 +97,7 @@ type FontObservation = {
     lineGapOverride: string;
   }[];
   astroIslands: number;
+  authoredMatches?: AuthoredFontMatch[];
 };
 
 /** Capture the source-font CLI checkpoint in the generated Astro island. */
@@ -87,12 +105,19 @@ export async function captureSourceFonts(
   url: string,
   out: string,
   expectedFamily = "SourceNoto",
+  aliases?: readonly [string, string],
 ) {
+  const familyAliases = aliases
+    ? ([aliases[0], aliases[1]] as const)
+    : expectedFamily === "SourceStraße"
+      ? (["SOURCESTRASSE", "sourceſtraße"] as const)
+      : undefined;
   let browser: Browser | undefined;
   let fonts: FontObservation | undefined;
   const errors: string[] = [],
     fontResponses: Promise<FontResponse>[] = [],
-    frames: Frame[] = [];
+    frames: Frame[] = [],
+    authoredFontMatches: AuthoredFontMatch[] = [];
   try {
     const native = JSON.parse(
       await readFile(join(out, "native-prepare.json"), "utf8"),
@@ -173,62 +198,125 @@ export async function captureSourceFonts(
     });
     assert.equal((await page.goto(url))?.ok(), true);
     await page.waitForFunction(() => !!window.afySourceFonts?.ready());
-    fonts = await page.evaluate(async (family): Promise<FontObservation> => {
-      const probes: FontObservation["probes"] = [];
-      for (const weight of [400, 700]) {
-        const query = `${weight} 16px ${JSON.stringify(family)}`,
-          text = "012IncrementNative override",
-          probe: FontObservation["probes"][number] = {
-            weight,
-            query,
-            text,
-            loaded: 0,
-            check: false,
-          };
-        try {
-          probe.loaded = (await document.fonts.load(query, text)).length;
-        } catch (error) {
-          probe.error = error instanceof Error ? error.message : String(error);
+    fonts = await page.evaluate(
+      async ({ family, aliases }): Promise<FontObservation> => {
+        const probes: FontObservation["probes"] = [],
+          canonicalFaces = new Map<number, FontFace>();
+        const observe = (face: FontFace) => ({
+          family: face.family,
+          status: face.status,
+          weight: face.weight,
+          style: face.style,
+        });
+        for (const weight of [400, 700]) {
+          const query = `${weight} 16px ${JSON.stringify(family)}`,
+            text = "012IncrementNative override",
+            probe: FontObservation["probes"][number] = {
+              weight,
+              query,
+              text,
+              loaded: 0,
+              check: false,
+            };
+          let loaded: FontFace[] = [];
+          try {
+            loaded = await document.fonts.load(query, text);
+            probe.loaded = loaded.length;
+          } catch (error) {
+            probe.error =
+              error instanceof Error ? error.message : String(error);
+          }
+          try {
+            probe.check = document.fonts.check(query, text);
+          } catch (error) {
+            probe.checkError =
+              error instanceof Error ? error.message : String(error);
+          }
+          if (loaded.length === 1) canonicalFaces.set(weight, loaded[0]!);
+          probes.push(probe);
         }
-        try {
-          probe.check = document.fonts.check(query, text);
-        } catch (error) {
-          probe.checkError =
-            error instanceof Error ? error.message : String(error);
-        }
-        probes.push(probe);
-      }
-      await document.fonts.ready;
-      const allFaces = [...document.fonts].map((face) => ({
-        family: face.family,
-        status: face.status,
-        weight: face.weight,
-        style: face.style,
-        stretch: face.stretch,
-        unicodeRange: face.unicodeRange,
-        featureSettings: face.featureSettings,
-        variationSettings: face.variationSettings,
-        display: face.display,
-        ascentOverride: face.ascentOverride,
-        descentOverride: face.descentOverride,
-        lineGapOverride: face.lineGapOverride,
-      }));
-      return {
-        characterSet: document.characterSet,
-        probes,
-        allFaces,
-        faces: allFaces
-          .filter((face) => face.family.replaceAll('"', "") === family)
-          .map((face) => ({
-            family: face.family,
-            status: face.status,
-            weight: face.weight,
-            style: face.style,
-          })),
-        astroIslands: document.querySelectorAll("astro-island").length,
-      };
-    }, expectedFamily);
+        await document.fonts.ready;
+        const authoredMatches: AuthoredFontMatch[] = [];
+        if (aliases)
+          for (const alias of aliases)
+            for (const weight of [400, 700]) {
+              const query = `${weight} 16px ${JSON.stringify(alias)}`,
+                canonical = canonicalFaces.get(weight);
+              let loaded: FontFace[] = [],
+                failure: string | undefined;
+              try {
+                loaded = await document.fonts.load(
+                  query,
+                  "012IncrementNative override",
+                );
+              } catch (error) {
+                failure =
+                  error instanceof Error ? error.message : String(error);
+              }
+              authoredMatches.push({
+                alias,
+                weight,
+                query,
+                canonicalQuery: `${weight} 16px ${JSON.stringify(family)}`,
+                loaded: loaded.length,
+                referenceEquality:
+                  loaded.length === 1 && loaded[0] === canonical,
+                ...(failure === undefined ? {} : { error: failure }),
+                ...(canonical ? { canonical: observe(canonical) } : {}),
+                faces: loaded.map(observe),
+              });
+            }
+        const allFaces = [...document.fonts].map((face) => ({
+          family: face.family,
+          status: face.status,
+          weight: face.weight,
+          style: face.style,
+          stretch: face.stretch,
+          unicodeRange: face.unicodeRange,
+          featureSettings: face.featureSettings,
+          variationSettings: face.variationSettings,
+          display: face.display,
+          ascentOverride: face.ascentOverride,
+          descentOverride: face.descentOverride,
+          lineGapOverride: face.lineGapOverride,
+        }));
+        return {
+          characterSet: document.characterSet,
+          ...(aliases ? { authoredMatches } : {}),
+          probes,
+          allFaces,
+          faces: allFaces
+            .filter((face) => face.family.replaceAll('"', "") === family)
+            .map((face) => ({
+              family: face.family,
+              status: face.status,
+              weight: face.weight,
+              style: face.style,
+            })),
+          astroIslands: document.querySelectorAll("astro-island").length,
+        };
+      },
+      { family: expectedFamily, aliases: familyAliases },
+    );
+    authoredFontMatches.push(...(fonts.authoredMatches ?? []));
     assert.equal(fonts.characterSet.toLowerCase(), "utf-8");
+    if (familyAliases) {
+      assert.equal(authoredFontMatches.length, 4);
+      for (const match of authoredFontMatches) {
+        assert.equal(match.error, undefined);
+        assert.equal(match.loaded, 1);
+        assert.equal(match.referenceEquality, true);
+        assert.ok(match.canonical);
+        assert.deepEqual(match.faces, [match.canonical]);
+        assert.equal(
+          match.canonical.family.replaceAll('"', ""),
+          expectedFamily,
+        );
+        assert.equal(match.canonical.status, "loaded");
+        assert.equal(match.canonical.weight, String(match.weight));
+        assert.equal(match.canonical.style, "normal");
+      }
+    }
     assert.equal(fonts.astroIslands, 1);
     for (const probe of fonts.probes) {
       assert.equal(probe.error, undefined);
@@ -358,7 +446,7 @@ export async function captureSourceFonts(
       ] as const)
         assert.deepEqual(frame.archive[field], prototype[field]);
       assert.deepEqual(frame.archive.props, checkpoint.props);
-      if (expectedFamily === "SourceStraße") {
+      if (familyAliases) {
         const families: Record<string, string> = {};
         function visit(nodes: NonNullable<JavascriptArchive["frame"]>) {
           for (const node of nodes) {
@@ -395,17 +483,19 @@ export async function captureSourceFonts(
     assert.equal(initial.used.count.text, native.restored.count);
     assert.equal(initial.used.seed.text, native.restored.seed);
     assert.deepEqual(initial.archive, checkpoint);
-    if (expectedFamily === "SourceStraße") {
-      assert.equal(initial.authoredFamily, "sourceſtraße");
+    if (familyAliases) {
+      assert.equal(initial.authoredFamily, familyAliases[1]);
       assert.equal(native.restored.authoredFamily, initial.authoredFamily);
       assert.ok(
         checkpoint.stylesheets!.some((sheet) =>
-          sheet.text.includes('font-family:"SOURCESTRASSE"'),
+          sheet.text.includes(
+            "font-family:" + JSON.stringify(familyAliases[0]),
+          ),
         ),
       );
       assert.ok(
         !checkpoint.stylesheets!.some((sheet) =>
-          sheet.text.includes('font-family:"SourceStraße"'),
+          sheet.text.includes("font-family:" + JSON.stringify(expectedFamily)),
         ),
       );
     }
@@ -417,8 +507,8 @@ export async function captureSourceFonts(
     assert.equal(final.used.count.text, "Native override:2");
     assert.equal(final.used.seed.text, initial.used.seed.text);
     assert.deepEqual(final.calls, [[2]]);
-    if (expectedFamily === "SourceStraße") {
-      assert.equal(final.authoredFamily, "SOURCESTRASSE");
+    if (familyAliases) {
+      assert.equal(final.authoredFamily, familyAliases[0]);
       assert.notEqual(final.authoredFamily, initial.authoredFamily);
     }
     assert.equal(
@@ -461,6 +551,7 @@ export async function captureSourceFonts(
     );
     const responses = await Promise.all(fontResponses);
     assert.ok(responses.length >= 2);
+    if (familyAliases) assert.equal(responses.length, 2);
     for (const font of expectedFonts)
       assert.ok(
         responses.some(
@@ -513,15 +604,16 @@ export async function captureSourceFonts(
           exportedCatalogue,
           realAstroIslands: fonts.astroIslands,
           stableDOMObjectsPerFrame: 3,
-          ...(expectedFamily === "SourceStraße"
+          ...(familyAliases
             ? {
                 fontFamilyProfile: {
                   canonical: expectedFamily,
                   canonicalCSS: JSON.stringify(expectedFamily),
-                  authoredCSS: "SOURCESTRASSE",
+                  authoredCSS: familyAliases[0],
                   observedAliases: frames.map((frame) => frame.authoredFamily),
                   nativeFrameCanonical: true,
                   managedComputedStyleCanonical: true,
+                  rawCSSFontFaceReferenceMatchingObserved: true,
                   authoredInlineAssignmentSourceBound: true,
                 },
               }
@@ -547,6 +639,7 @@ export async function captureSourceFonts(
           frames,
           fonts: fonts ?? null,
           fontResponses: await Promise.all(fontResponses),
+          ...(familyAliases ? { authoredFontMatches } : {}),
           pixelPerfectVerified: false,
         },
         null,

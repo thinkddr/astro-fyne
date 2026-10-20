@@ -36,6 +36,13 @@ family or fallback list. `validFontResourceFamily` returns false for invalid inp
 both key functions throw an error. Keys are comparison values: full folding may
 expand an 80-scalar input beyond 80 scalars.
 
+`cssFontFamilyTextKey` compares decoded CSS text separately from resource aliases.
+It accepts nonempty, well-formed Unicode text up to 240 scalars. This bound comes
+from the 80-scalar native limit and the largest three-scalar C/F expansion in the
+pinned data. Case folding never deletes an input scalar, so a longer spelling
+cannot equal a supported native alias's full key. The function is comparison
+arithmetic; it does not parse CSS syntax or validate a resource declaration.
+
 The grammar matches the native font-resource requirement rule when Go uses
 Unicode17.0.0. The Go standard library's Unicode version is a separate toolchain
 property. A future version must be checked and qualified explicitly; a change of
@@ -112,8 +119,17 @@ Keyword recognition is ASCII-insensitive, independently of Unicode family
 matching. See [CSS family syntax](https://www.w3.org/TR/css-fonts-4/#family-name-syntax)
 and [custom identifiers](https://www.w3.org/TR/css-values-4/#custom-idents).
 
-Lists, CSS escapes, generic functions and names outside the bounded resource
-grammar require additional adapters and produce diagnostics. Cleared inline
+The resolver also accepts a broader authored spelling when its full key selects
+a valid native alias. For example, `U+0345` is a combining mark that folds to Greek
+iota. It can select a declared `Ι` family even though the resource grammar forbids
+a leading mark. Similarly, an 80-scalar family consisting of `ΐ` may match a
+240-scalar authored spelling. These matches follow the pinned C/F mappings and
+do not apply Unicode normalization. The exported `parseCSSFontFamily` keeps its
+existing bounded resource-parser contract; the resolver uses a separate parser
+path for matching. Unknown names still pass the existing resource-profile checks.
+
+Lists, CSS escapes, generic functions and unmatched names outside the bounded
+resource grammar require additional adapters and produce diagnostics. Cleared inline
 families keep the existing empty-style behavior. Unknown valid names are left
 to the existing native style/resource checks. The older responsive emitter and
 capture adapter still have narrower family parsing rules; this integration does
@@ -160,6 +176,14 @@ count 1 to browser count 2 and returned native count 3, preserving source CSS,
 font bytes, licenses and host history. A separate original Astro JSON-props case
 is native-only. These checks establish the observed loaded-font behavior rather
 than font-origin, fallback-free or pixel equivalence.
+
+A separate `--unicode-matching` profile declares an 80-scalar native family and
+alternates two 240-scalar authored spellings, including a leading combining mark.
+It keeps the same native/browser/returned-native checkpoint tests and licensed
+font bytes. Unicode browser probes also query `document.fonts.load` with each
+raw authored name and compare the returned `FontFace` object with the canonical
+query's object. Those observations check the browser's actual name matching;
+they do not attest font origin, every painted glyph or raster equivalence.
 
 The seven Bun tests include explicit failure cases and independent parsing of
 the original data files. They compare leading and continuation grammar for

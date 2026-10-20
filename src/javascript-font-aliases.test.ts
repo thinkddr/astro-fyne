@@ -346,6 +346,57 @@ test("font resource names preserve ASCII hashes and Unicode ordering is stable",
   }
 });
 
+test("font bundles restore long and mark-leading CSS names through a canonical native alias", async () => {
+  const root = await mkdtemp(join(tmpdir(), "afy-font-matching-text-"));
+  try {
+    const source = join(root, "Matching.tsx"),
+      canonical = "ΐ".repeat(80),
+      aliases = ["\u0345\u0308\u0301".repeat(80), "ι\u0308\u0301".repeat(80)];
+    await writeFile(
+      source,
+      `import{useState}from"preact/hooks";const aliases=${JSON.stringify(aliases)};export default function Matching({observe}){const[count,setCount]=useState(0);const family=aliases[count%2];return <button data-authored-family={family} style={{fontFamily:family}} onClick={()=>{setCount(count+1);observe(count+1)}}>{count}</button>}`,
+    );
+    const archive = await bundleJavascript(
+        source,
+        "default",
+        {},
+        ["observe"],
+        [],
+        [canonical],
+      ),
+      effects: unknown[][] = [],
+      api = mount(archive, effects);
+    const first = api.snapshot()[0]!;
+    expect(first.attrs?.["data-authored-family"]).toBe(aliases[0]);
+    expect(first.style?.fontFamily).toBe(JSON.stringify(canonical));
+    api.dispatch({ node: first.uid, type: "click" });
+    const checkpoint = api.export();
+    expect(checkpoint.frame?.[0]?.attrs?.["data-authored-family"]).toBe(
+      aliases[1],
+    );
+    expect(checkpoint.frame?.[0]?.style?.fontFamily).toBe(
+      JSON.stringify(canonical),
+    );
+    expect(effects).toEqual([[1]]);
+    const replayEffects: unknown[][] = [],
+      restored = mount(checkpoint, replayEffects);
+    expect(restored.export()).toEqual(checkpoint);
+    expect(replayEffects).toEqual([]);
+    restored.dispatch({ node: first.uid, type: "click" });
+    expect(restored.snapshot()[0]?.attrs?.["data-authored-family"]).toBe(
+      aliases[0],
+    );
+    expect(restored.snapshot()[0]?.style?.fontFamily).toBe(
+      JSON.stringify(canonical),
+    );
+    expect(replayEffects).toEqual([[2]]);
+    restored.dispose();
+    api.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 60_000);
+
 test("catalogue CSS collisions reject both CLI directions before output writes", async () => {
   const root = await mkdtemp(join(tmpdir(), "afy-font-alias-catalogue-"));
   try {

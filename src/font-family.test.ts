@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import {
   FONT_FAMILY_UNICODE_VERSION,
   cssFontFamilyKey,
+  cssFontFamilyTextKey,
   simpleFontFamilyKey,
   validFontResourceFamily,
 } from "./font-family.ts";
@@ -174,6 +175,60 @@ test("font family key APIs reject malformed input without coercion or surrogate 
       expect(() => key(invalid as string)).toThrow("Font family requires");
   }
 });
+
+test("CSS matching text accepts full-fold spellings beyond native alias grammar", () => {
+  expect(validFontResourceFamily("\u0345")).toBe(false);
+  expect(cssFontFamilyTextKey("\u0345")).toBe(cssFontFamilyKey("Ι"));
+  const canonical = "ΐ".repeat(80),
+    expanded = "\u0345\u0308\u0301".repeat(80);
+  expect([...expanded].length).toBe(240);
+  expect(validFontResourceFamily(expanded)).toBe(false);
+  expect(cssFontFamilyTextKey(expanded)).toBe(cssFontFamilyKey(canonical));
+  expect(() => cssFontFamilyKey(expanded)).toThrow("Font family requires");
+  expect(cssFontFamilyTextKey("é")).not.toBe(cssFontFamilyTextKey("e\u0301"));
+  expect(cssFontFamilyTextKey("I")).not.toBe(cssFontFamilyTextKey("ı"));
+  expect(cssFontFamilyTextKey("𐐀".repeat(240))).toBe("𐐨".repeat(240));
+  for (const value of [
+    "",
+    "A".repeat(241),
+    "𐐀".repeat(241),
+    "\ud800",
+    "A\udfff",
+    null,
+    {},
+  ])
+    expect(() => cssFontFamilyTextKey(value as string)).toThrow();
+});
+
+test("CSS matching text follows pinned C F data for every Unicode scalar", async () => {
+  const full = new Map<number, string>();
+  for (const line of (await source("CaseFolding.txt")).split("\n")) {
+    const fields = line.split("#", 1)[0]!.trim().split(";");
+    if (fields.length < 3 || !["C", "F"].includes(fields[1]!.trim())) continue;
+    full.set(
+      Number.parseInt(fields[0]!, 16),
+      String.fromCodePoint(
+        ...fields[2]!
+          .trim()
+          .split(/\s+/)
+          .map((value) => Number.parseInt(value, 16)),
+      ),
+    );
+  }
+  expect(full.size).toBe(1585);
+  expect(
+    Math.max(...[...full.values()].map((value) => [...value].length)),
+  ).toBe(3);
+  let count = 0;
+  for (let scalar = 0; scalar <= 0x10ffff; scalar++) {
+    if (scalar >= 0xd800 && scalar <= 0xdfff) continue;
+    const value = String.fromCodePoint(scalar);
+    if (cssFontFamilyTextKey(value) !== (full.get(scalar) ?? value))
+      throw new Error(`CSS matching text differs at U+${scalar.toString(16)}`);
+    count++;
+  }
+  expect(count).toBe(1112064);
+}, 120_000);
 
 test("Unicode17 family grammar matches every normative code point independently", async () => {
   const flags = categories(await source("UnicodeData.txt"));

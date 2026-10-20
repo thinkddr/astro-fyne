@@ -155,6 +155,46 @@ test("single CSS font parsing diagnoses unsupported syntax instead of stripping 
   expect(parseCSSFontFamily("𐐀".repeat(80)).family).toBe("𐐀".repeat(80));
 });
 
+test("CSS matching spellings can exceed native alias length and leading-letter rules", () => {
+  const canonical = "ΐ".repeat(80),
+    dotted = "İ".repeat(80);
+  const resolve = createCSSFontFamilyResolver(["Ι", canonical, dotted]);
+  expect(resolve("\u0345")).toBe('"Ι"');
+  expect(resolve('"\u0345"')).toBe('"Ι"');
+  for (const raw of [
+    "\u0345\u0308\u0301".repeat(80),
+    "ι\u0308\u0301".repeat(80),
+  ]) {
+    expect([...raw].length).toBe(240);
+    expect(resolve(raw)).toBe(JSON.stringify(canonical));
+    expect(resolve(JSON.stringify(raw))).toBe(JSON.stringify(canonical));
+    expect(() => parseCSSFontFamily(raw)).toThrow();
+  }
+  expect(resolve("i\u0307".repeat(80))).toBe(JSON.stringify(dotted));
+  expect(resolve(canonical)).toBe(canonical);
+  expect(() => createCSSFontFamilyResolver(["\u0345"])).toThrow();
+  expect(() =>
+    createCSSFontFamilyResolver(["ι\u0308\u0301".repeat(80)]),
+  ).toThrow();
+});
+
+test("broader CSS matching keeps unknown resource limits and exact combining order", () => {
+  const canonical = "ΐ".repeat(80),
+    resolve = createCSSFontFamilyResolver([canonical, "é", "I"]);
+  for (const raw of [
+    "\u0345",
+    "A".repeat(81),
+    "ι\u0301\u0308".repeat(80),
+    "\u0345\u0308\u0301".repeat(81),
+    "\ud800",
+    '"A\udfff"',
+  ])
+    expect(() => resolve(raw)).toThrow();
+  expect(resolve("e\u0301")).toBe("e\u0301");
+  expect(resolve("ı")).toBe("ı");
+  expect(() => createCSSFontFamilyResolver([])("\u0345")).toThrow();
+});
+
 test("CSS font resolvers preserve exact canonical CSS and quote full-fold aliases", () => {
   const resolve = createCSSFontFamilyResolver([
     "Straße",
