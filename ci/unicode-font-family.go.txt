@@ -1,0 +1,176 @@
+// SPDX-License-Identifier: Apache-2.0
+package PROBE_PACKAGE
+
+import (
+	"encoding/json"
+	"os"
+	"runtime"
+	"sort"
+	"strings"
+	"testing"
+	"unicode"
+	"unicode/utf8"
+
+	webui "github.com/thinkddr/astro-fyne/native"
+)
+
+type unicodeFamilyRange struct {
+	Start rune  `json:"start"`
+	End   rune  `json:"end"`
+	Flags uint8 `json:"flags"`
+}
+
+type unicodeFamilyPair struct {
+	Left  string `json:"left"`
+	Right string `json:"right"`
+	Equal bool   `json:"equal"`
+}
+
+func TestUnicodeFontFamilyPolicy(t *testing.T) {
+	if unicode.Version != "17.0.0" {
+		t.Fatalf("Unicode font policy requires Unicode17.0.0, got %s", unicode.Version)
+	}
+	output := os.Getenv("ASTRO_FYNE_UNICODE_FAMILY_OUTPUT")
+	if output == "" {
+		t.Fatal("missing Unicode font-family reference output")
+	}
+	hash := strings.Repeat("0", 64)
+	requirement := func(family string) webui.FontResourceRequirement {
+		return webui.FontResourceRequirement{Family: family, Weight: 400, Style: "normal", Hash: hash}
+	}
+	valid := func(family string) bool {
+		return webui.ValidateFontResourceRequirements([]webui.FontResourceRequirement{requirement(family)}) == nil
+	}
+	ranges := []unicodeFamilyRange{}
+	rawOrbits, admittedOrbits, rejectedOrbits := [][]rune{}, [][]rune{}, [][]rune{}
+	scalars, grammarChecks, equalFoldChecks, duplicateChecks, orbitAdmissionChecks := 0, 0, 0, 0, 0
+	for scalar := rune(0); scalar <= unicode.MaxRune; scalar++ {
+		if !utf8.ValidRune(scalar) {
+			continue
+		}
+		scalars++
+		flags := uint8(0)
+		if unicode.IsLetter(scalar) {
+			flags |= 1
+		}
+		if unicode.IsMark(scalar) {
+			flags |= 2
+		}
+		if unicode.IsDigit(scalar) {
+			flags |= 4
+		}
+		if flags != 0 {
+			last := len(ranges) - 1
+			if last >= 0 && ranges[last].End+1 == scalar && ranges[last].Flags == flags {
+				ranges[last].End = scalar
+			} else {
+				ranges = append(ranges, unicodeFamilyRange{Start: scalar, End: scalar, Flags: flags})
+			}
+		}
+		leading := flags&1 != 0
+		continuation := flags != 0 || scalar == ' ' || scalar == '_' || scalar == '-'
+		if valid(string(scalar)+"A") != leading || valid("A"+string(scalar)+"A") != continuation {
+			t.Fatalf("native font-family grammar differs at U+%04X", scalar)
+		}
+		grammarChecks += 2
+		if unicode.SimpleFold(scalar) == scalar {
+			continue
+		}
+		orbit := []rune{scalar}
+		minimum := scalar
+		for next := unicode.SimpleFold(scalar); next != scalar; next = unicode.SimpleFold(next) {
+			if len(orbit) > 8 {
+				t.Fatal("unexpected Unicode SimpleFold orbit")
+			}
+			orbit = append(orbit, next)
+			if next < minimum {
+				minimum = next
+			}
+		}
+		if minimum != scalar {
+			continue
+		}
+		sort.Slice(orbit, func(i, j int) bool { return orbit[i] < orbit[j] })
+		admitted := false
+		for index, item := range orbit {
+			got := valid("A" + string(item) + "A")
+			orbitAdmissionChecks++
+			if index == 0 {
+				admitted = got
+			} else if got != admitted {
+				t.Fatalf("partially admitted native alias orbit: %v", orbit)
+			}
+		}
+		for _, left := range orbit {
+			for _, right := range orbit {
+				a, b := "A"+string(left)+"A", "A"+string(right)+"A"
+				if !strings.EqualFold(a, b) {
+					t.Fatalf("Go fold orbit differs for U+%04X/U+%04X", left, right)
+				}
+				equalFoldChecks++
+				if admitted {
+					if webui.ValidateFontResourceRequirements([]webui.FontResourceRequirement{requirement(a), requirement(b)}) == nil {
+						t.Fatalf("native duplicate check differs for admitted U+%04X/U+%04X", left, right)
+					}
+					duplicateChecks++
+				}
+			}
+		}
+		rawOrbits = append(rawOrbits, orbit)
+		if admitted {
+			admittedOrbits = append(admittedOrbits, orbit)
+		} else {
+			rejectedOrbits = append(rejectedOrbits, orbit)
+		}
+	}
+	pairs := []unicodeFamilyPair{
+		{Left: "Σ", Right: "ς", Equal: true},
+		{Left: "S", Right: "ſ", Equal: true},
+		{Left: "K", Right: "K", Equal: true},
+		{Left: "ß", Right: "ẞ", Equal: true},
+		{Left: "\u0390", Right: "\u1fd3", Equal: true},
+		{Left: "\u03b0", Right: "\u1fe3", Equal: true},
+		{Left: "\ufb05", Right: "\ufb06", Equal: true},
+		{Left: "I", Right: "ı", Equal: false},
+		{Left: "İ", Right: "i\u0307", Equal: false},
+		{Left: "ß", Right: "ss", Equal: false},
+		{Left: "é", Right: "e\u0301", Equal: false},
+	}
+	for _, pair := range pairs {
+		if !valid(pair.Left) || !valid(pair.Right) {
+			t.Fatal("comparison example requires admitted native aliases")
+		}
+		duplicate := webui.ValidateFontResourceRequirements([]webui.FontResourceRequirement{requirement(pair.Left), requirement(pair.Right)}) != nil
+		if strings.EqualFold(pair.Left, pair.Right) != pair.Equal || duplicate != pair.Equal {
+			t.Fatalf("Go/native family comparison differs for %q/%q", pair.Left, pair.Right)
+		}
+	}
+	if scalars != 0x110000-0x800 || grammarChecks != scalars*2 {
+		t.Fatal("incomplete Unicode scalar enumeration")
+	}
+	if len(rawOrbits) != 1482 || len(admittedOrbits) != 1440 || len(rejectedOrbits) != 42 || equalFoldChecks != 6084 || duplicateChecks != 5916 || orbitAdmissionChecks != 2994 {
+		t.Fatal("Unicode17 orbit admission counts differ")
+	}
+	reference := struct {
+		Schema                     int                  `json:"schema"`
+		UnicodeVersion             string               `json:"unicodeVersion"`
+		GoVersion                  string               `json:"goVersion"`
+		Scalars                    int                  `json:"scalars"`
+		NativeGrammarChecks        int                  `json:"nativeGrammarChecks"`
+		RawEqualFoldChecks          int                  `json:"rawEqualFoldChecks"`
+		NativeDuplicateChecks      int                  `json:"nativeDuplicateChecks"`
+		NativeOrbitAdmissionChecks int                  `json:"nativeOrbitAdmissionChecks"`
+		Ranges                     []unicodeFamilyRange `json:"ranges"`
+		RawSimpleOrbits             [][]rune             `json:"rawSimpleOrbits"`
+		AdmittedSimpleOrbits        [][]rune             `json:"admittedSimpleOrbits"`
+		RejectedSimpleOrbits        [][]rune             `json:"rejectedSimpleOrbits"`
+		Examples                   []unicodeFamilyPair  `json:"examples"`
+	}{1, unicode.Version, runtime.Version(), scalars, grammarChecks, equalFoldChecks, duplicateChecks, orbitAdmissionChecks, ranges, rawOrbits, admittedOrbits, rejectedOrbits, pairs}
+	data, err := json.MarshalIndent(reference, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(output, append(data, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}

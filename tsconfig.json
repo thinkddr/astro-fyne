@@ -22,6 +22,7 @@
     "ci/css-has-roundtrip.ts",
     "ci/css-height-roundtrip.ts",
     "ci/catalogue-roundtrip.ts",
+    "ci/unicode-font-family.ts",
     "ci/text-engine-probe/*.ts",
     "example/src/components/**/*.tsx",
     "example/src/pages/**/*.tsx"

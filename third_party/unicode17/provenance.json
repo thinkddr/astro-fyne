@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "unicodeVersion": "17.0.0",
+  "dataLicense": "Unicode-3.0",
+  "sources": [
+    {
+      "file": "CaseFolding.txt",
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt",
+      "bytes": 87539,
+      "sha256": "ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183"
+    },
+    {
+      "file": "UnicodeData.txt",
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt",
+      "bytes": 2198209,
+      "sha256": "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c"
+    },
+    {
+      "file": "LICENSE.txt",
+      "url": "https://www.unicode.org/license.txt",
+      "bytes": 1995,
+      "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
+    }
+  ],
+  "generator": {
+    "file": "third_party/unicode17/generate.py",
+    "sha256": "2bcc5a0b3ea1cbaa59e5649dd9284c4e9dadb2d00590101ec207d967ee3746f7"
+  },
+  "output": {
+    "file": "src/font-family-data.ts",
+    "bytes": 19816,
+    "sha256": "adfc2a013d3bcc988dfd56fb7941a6226c58d019148bbcae49a2f3555d92b7fa"
+  },
+  "policy": {
+    "simple": [
+      "C",
+      "S"
+    ],
+    "css": [
+      "C",
+      "F"
+    ],
+    "turkicMappings": false,
+    "normalization": false,
+    "categories": [
+      "L",
+      "M",
+      "Nd"
+    ]
+  },
+  "counts": {
+    "commonMappings": 1481,
+    "commonRuns": 88,
+    "commonSingles": 111,
+    "simpleOverrides": 31,
+    "fullOverrides": 104,
+    "categoryRanges": {
+      "L": 684,
+      "M": 327,
+      "Nd": 72
+    }
+  }
+}
