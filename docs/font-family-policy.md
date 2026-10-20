@@ -69,14 +69,61 @@ each member has a multi-scalar uppercase expansion and lowercases to itself.
 Using Unicode normalization to repair this would incorrectly merge other names.
 
 Consequently, a family collection can pass Go duplicate checks and still contain
-CSS collisions. `Straße` and `STRASSE` are one example. A future browser integration
-must check its CSS namespace separately or use an explicit private alias mapping.
+CSS collisions. `Straße` and `STRASSE` are one example. CSS generation rejects
+these distinct native aliases in the same CSS namespace, even when their bytes
+or weight/style slots differ. Identical declarations shared by independent
+components remain valid; conflicting hashes for one CSS slot are rejected.
 
-This utility is a standalone policy foundation. Existing font manifests,
-catalogue validation, rendering, browser font loading and generated output keep
-their current contracts. No font file is loaded or inspected by these functions.
-Comparison keys do not establish glyph coverage, shaping, fallback absence or
-pixel equivalence.
+## Manifests, catalogues and source islands
+
+Font manifests and catalogue validation use the grammar above and native simple
+equality. Use one exact spelling across every weight and style of a native alias
+class. Resource names preserve the previous ASCII hash inputs. A wholly ASCII
+manifest keeps its existing ordering; a manifest containing Unicode uses one
+deterministic scalar comparator for the entire collection.
+
+The CLI resolves source-font islands automatically:
+
+```sh
+astro-fyne to-fyne src/App.astro --fonts fonts.json --out native/generated --name App
+astro-fyne to-web checkpoint.catalogue.json --out src/components/app --name App
+```
+
+Generated CSS is UTF-8. The host Astro document must declare UTF-8, for example
+with `<meta charset="utf-8">` in the layout's `<head>`. Component emitters leave
+that document head to the host layout.
+
+With a declared `Straße` family, authored `font-family: STRASSE` resolves to the
+canonical CSS string `"Straße"` in native and generated web frames. Dynamic inline
+styles, inherited styles and CSS variables pass through the same final snapshot
+resolver. The source DOM style, original stylesheet text/hash and checkpoint
+journal stay intact. Canonical names are embedded in the compiled factory and
+therefore affect its code hash. Factories that include Unicode comparison data
+also retain its complete Unicode-3.0 license notice, hash and protected source
+path. A warm checkpoint carries that resolver back to
+Fyne without adding host calls or replaying effects.
+
+`src/font-family-css.ts` also exposes `parseCSSFontFamily`,
+`createCSSFontFamilyResolver` and `validateCSSFontNamespace`. The parser accepts
+one quoted family or unescaped CSS identifier sequence. Unquoted ASCII CSS
+whitespace collapses between identifiers; quoted spaces are significant. An
+unquoted generic or CSS-wide keyword never resolves to a declared quoted alias.
+Keyword recognition is ASCII-insensitive, independently of Unicode family
+matching. See [CSS family syntax](https://www.w3.org/TR/css-fonts-4/#family-name-syntax)
+and [custom identifiers](https://www.w3.org/TR/css-values-4/#custom-idents).
+
+Lists, CSS escapes, generic functions and names outside the bounded resource
+grammar require additional adapters and produce diagnostics. Cleared inline
+families keep the existing empty-style behavior. Unknown valid names are left
+to the existing native style/resource checks. The older responsive emitter and
+capture adapter still have narrower family parsing rules; this integration does
+not expand those profiles.
+
+The resolver does not change native `EqualFold` semantics or implement a private
+alias scheme for colliding families. It does not enable the stricter native
+resource-factory ABI or a verified browser `FontFace` resource pool. These
+functions do not load fonts, inspect glyph coverage or establish shaping,
+fallback absence or pixel equivalence.
 
 ## Data and regeneration
 
@@ -102,6 +149,17 @@ It does not download files. A Unicode update requires reviewing new inputs,
 updating pins and expected counts, regenerating and running hosted conformance.
 
 ## Hosted verification
+
+The source-font roundtrip gate runs separate ASCII and Unicode profiles. The
+Unicode profile declares `SourceStraße`, retains authored CSS `SOURCESTRASSE`,
+and alternates inline `SOURCESTRASSE`/`sourceſtraße` after real clicks. A program
+attribute exposes the chosen authored alias; native snapshots and exported
+frames retain the exact quoted canonical CSS string. Managed browser computed
+styles are observed separately. The same warm checkpoint moves from native
+count 1 to browser count 2 and returned native count 3, preserving source CSS,
+font bytes, licenses and host history. A separate original Astro JSON-props case
+is native-only. These checks establish the observed loaded-font behavior rather
+than font-origin, fallback-free or pixel equivalence.
 
 The seven Bun tests include explicit failure cases and independent parsing of
 the original data files. They compare leading and continuation grammar for

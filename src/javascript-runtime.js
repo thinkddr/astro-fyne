@@ -9,12 +9,12 @@ import {
 } from "./javascript-data.ts";
 
 /** Recorded host boundaries let replay rebuild closures and module state. */
-export function createRuntime(host, archive) {
+export function createRuntime(host, archive, resolveFontFamily) {
   const animated = archive.schema === 2,
     restoredAnimation = animated
       ? validateJavascriptAnimationState(archive.animation)
       : null;
-  const dom = createDocument(),
+  const dom = createDocument(resolveFontFamily),
     queue = [],
     events = [],
     journal = [];

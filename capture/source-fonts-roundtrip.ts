@@ -43,6 +43,7 @@ type Frame = {
   archive: JavascriptArchive;
   stableDOMObjects: number;
   focusExportRejected: boolean;
+  authoredFamily?: string;
 };
 type FontResponse = {
   url: string;
@@ -52,10 +53,43 @@ type FontResponse = {
   bytes: number;
   error?: string;
 };
+type FontObservation = {
+  characterSet: string;
+  probes: {
+    weight: number;
+    query: string;
+    text: string;
+    loaded: number;
+    check: boolean;
+    error?: string;
+    checkError?: string;
+  }[];
+  faces: { family: string; status: string; weight: string; style: string }[];
+  allFaces: {
+    family: string;
+    status: string;
+    weight: string;
+    style: string;
+    stretch: string;
+    unicodeRange: string;
+    featureSettings: string;
+    variationSettings: string;
+    display: string;
+    ascentOverride: string;
+    descentOverride: string;
+    lineGapOverride: string;
+  }[];
+  astroIslands: number;
+};
 
 /** Capture the source-font CLI checkpoint in the generated Astro island. */
-export async function captureSourceFonts(url: string, out: string) {
+export async function captureSourceFonts(
+  url: string,
+  out: string,
+  expectedFamily = "SourceNoto",
+) {
   let browser: Browser | undefined;
+  let fonts: FontObservation | undefined;
   const errors: string[] = [],
     fontResponses: Promise<FontResponse>[] = [],
     frames: Frame[] = [];
@@ -63,7 +97,7 @@ export async function captureSourceFonts(url: string, out: string) {
     const native = JSON.parse(
       await readFile(join(out, "native-prepare.json"), "utf8"),
     ) as {
-      restored: { count: string; seed: string };
+      restored: { count: string; seed: string; authoredFamily?: string };
       replayCalls: number;
     };
     const spec = await parseCatalogue(
@@ -85,7 +119,7 @@ export async function captureSourceFonts(url: string, out: string) {
     const expectedFonts = [400, 700].map((weight) => {
       const faces = spec.fontFaces.filter(
         (face) =>
-          face.family === "SourceNoto" &&
+          face.family === expectedFamily &&
           face.weight === weight &&
           face.style === "normal",
       );
@@ -139,25 +173,52 @@ export async function captureSourceFonts(url: string, out: string) {
     });
     assert.equal((await page.goto(url))?.ok(), true);
     await page.waitForFunction(() => !!window.afySourceFonts?.ready());
-    const fonts = await page.evaluate(async () => {
-      const probes = [];
+    fonts = await page.evaluate(async (family): Promise<FontObservation> => {
+      const probes: FontObservation["probes"] = [];
       for (const weight of [400, 700]) {
-        const query = `${weight} 16px "SourceNoto"`,
-          loaded = await document.fonts.load(
+        const query = `${weight} 16px ${JSON.stringify(family)}`,
+          text = "012IncrementNative override",
+          probe: FontObservation["probes"][number] = {
+            weight,
             query,
-            "012IncrementNative override",
-          );
-        probes.push({
-          weight,
-          loaded: loaded.length,
-          check: document.fonts.check(query, "012IncrementNative override"),
-        });
+            text,
+            loaded: 0,
+            check: false,
+          };
+        try {
+          probe.loaded = (await document.fonts.load(query, text)).length;
+        } catch (error) {
+          probe.error = error instanceof Error ? error.message : String(error);
+        }
+        try {
+          probe.check = document.fonts.check(query, text);
+        } catch (error) {
+          probe.checkError =
+            error instanceof Error ? error.message : String(error);
+        }
+        probes.push(probe);
       }
       await document.fonts.ready;
+      const allFaces = [...document.fonts].map((face) => ({
+        family: face.family,
+        status: face.status,
+        weight: face.weight,
+        style: face.style,
+        stretch: face.stretch,
+        unicodeRange: face.unicodeRange,
+        featureSettings: face.featureSettings,
+        variationSettings: face.variationSettings,
+        display: face.display,
+        ascentOverride: face.ascentOverride,
+        descentOverride: face.descentOverride,
+        lineGapOverride: face.lineGapOverride,
+      }));
       return {
+        characterSet: document.characterSet,
         probes,
-        faces: [...document.fonts]
-          .filter((face) => face.family.replaceAll('"', "") === "SourceNoto")
+        allFaces,
+        faces: allFaces
+          .filter((face) => face.family.replaceAll('"', "") === family)
           .map((face) => ({
             family: face.family,
             status: face.status,
@@ -166,9 +227,12 @@ export async function captureSourceFonts(url: string, out: string) {
           })),
         astroIslands: document.querySelectorAll("astro-island").length,
       };
-    });
+    }, expectedFamily);
+    assert.equal(fonts.characterSet.toLowerCase(), "utf-8");
     assert.equal(fonts.astroIslands, 1);
     for (const probe of fonts.probes) {
+      assert.equal(probe.error, undefined);
+      assert.equal(probe.checkError, undefined);
       assert.equal(probe.loaded, 1);
       assert.equal(probe.check, true);
       assert.ok(
@@ -262,8 +326,12 @@ export async function captureSourceFonts(url: string, out: string) {
             paddingLeft: style.paddingLeft,
           };
         }
+        const authoredFamily = scope
+          .querySelector('[id="font-root"]')
+          ?.getAttribute("data-authored-family");
         return {
           used,
+          ...(authoredFamily == null ? {} : { authoredFamily }),
           calls: window.afySourceFonts.calls(),
           archive: window.afySourceFonts.export(),
           stableDOMObjects: refs.length,
@@ -273,7 +341,7 @@ export async function captureSourceFonts(url: string, out: string) {
       frames.push(frame);
       for (const key of ["count", "button", "seed"] as const) {
         const style = frame.used[key];
-        assert.equal(style.fontFamily.replaceAll('"', ""), "SourceNoto");
+        assert.equal(style.fontFamily.replaceAll('"', ""), expectedFamily);
         assert.equal(style.fontWeight, key === "button" ? "700" : "400");
         assert.equal(style.fontStyle, "normal");
         assert.equal(style.fontSize, "16px");
@@ -290,6 +358,30 @@ export async function captureSourceFonts(url: string, out: string) {
       ] as const)
         assert.deepEqual(frame.archive[field], prototype[field]);
       assert.deepEqual(frame.archive.props, checkpoint.props);
+      if (expectedFamily === "SourceStraße") {
+        const families: Record<string, string> = {};
+        function visit(nodes: NonNullable<JavascriptArchive["frame"]>) {
+          for (const node of nodes) {
+            if (
+              [
+                "font-root",
+                "font-count",
+                "font-increment",
+                "font-seed",
+              ].includes(node.attrs?.id ?? "")
+            ) {
+              assert.equal(
+                node.style?.fontFamily,
+                JSON.stringify(expectedFamily),
+              );
+              families[node.attrs!.id!] = String(node.style!.fontFamily);
+            }
+            visit(node.children ?? []);
+          }
+        }
+        visit(frame.archive.frame!);
+        assert.equal(Object.keys(families).length, 4);
+      }
       return frame;
     }
     const initial = await capture("restored-from-native");
@@ -303,6 +395,20 @@ export async function captureSourceFonts(url: string, out: string) {
     assert.equal(initial.used.count.text, native.restored.count);
     assert.equal(initial.used.seed.text, native.restored.seed);
     assert.deepEqual(initial.archive, checkpoint);
+    if (expectedFamily === "SourceStraße") {
+      assert.equal(initial.authoredFamily, "sourceſtraße");
+      assert.equal(native.restored.authoredFamily, initial.authoredFamily);
+      assert.ok(
+        checkpoint.stylesheets!.some((sheet) =>
+          sheet.text.includes('font-family:"SOURCESTRASSE"'),
+        ),
+      );
+      assert.ok(
+        !checkpoint.stylesheets!.some((sheet) =>
+          sheet.text.includes('font-family:"SourceStraße"'),
+        ),
+      );
+    }
     await page
       .locator('[data-catalogue-island="app"] [id="font-increment"]')
       .click();
@@ -311,6 +417,10 @@ export async function captureSourceFonts(url: string, out: string) {
     assert.equal(final.used.count.text, "Native override:2");
     assert.equal(final.used.seed.text, initial.used.seed.text);
     assert.deepEqual(final.calls, [[2]]);
+    if (expectedFamily === "SourceStraße") {
+      assert.equal(final.authoredFamily, "SOURCESTRASSE");
+      assert.notEqual(final.authoredFamily, initial.authoredFamily);
+    }
     assert.equal(
       final.archive.events.length,
       initial.archive.events.length + 1,
@@ -403,6 +513,19 @@ export async function captureSourceFonts(url: string, out: string) {
           exportedCatalogue,
           realAstroIslands: fonts.astroIslands,
           stableDOMObjectsPerFrame: 3,
+          ...(expectedFamily === "SourceStraße"
+            ? {
+                fontFamilyProfile: {
+                  canonical: expectedFamily,
+                  canonicalCSS: JSON.stringify(expectedFamily),
+                  authoredCSS: "SOURCESTRASSE",
+                  observedAliases: frames.map((frame) => frame.authoredFamily),
+                  nativeFrameCanonical: true,
+                  managedComputedStyleCanonical: true,
+                  authoredInlineAssignmentSourceBound: true,
+                },
+              }
+            : {}),
           errors,
           pixelPerfectVerified: false,
           universalCSSVerified: false,
@@ -422,6 +545,7 @@ export async function captureSourceFonts(url: string, out: string) {
           message: error instanceof Error ? error.message : String(error),
           errors,
           frames,
+          fonts: fonts ?? null,
           fontResponses: await Promise.all(fontResponses),
           pixelPerfectVerified: false,
         },
@@ -436,10 +560,10 @@ export async function captureSourceFonts(url: string, out: string) {
 }
 
 if (import.meta.main) {
-  const [url, out] = process.argv.slice(2);
+  const [url, out, family] = process.argv.slice(2);
   assert.ok(
     url && out,
-    "Usage: bun capture/source-fonts-roundtrip.ts <url> <artifacts>",
+    "Usage: bun capture/source-fonts-roundtrip.ts <url> <artifacts> [family]",
   );
-  await captureSourceFonts(url, out);
+  await captureSourceFonts(url, out, family);
 }

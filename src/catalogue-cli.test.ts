@@ -1113,7 +1113,9 @@ test("conflicting valid static font hashes across catalogue and program faces bl
       name: "Conflict",
       direction: "web",
     }),
-  ).rejects.toThrow("Catalogue web font collision: cataloguesans:400:normal");
+  ).rejects.toThrow(
+    "shared family/weight/style slot has conflicting resource hashes",
+  );
   await expect(stat(out)).rejects.toThrow();
   await expect(stat(publicDir)).rejects.toThrow();
 }, 60_000);

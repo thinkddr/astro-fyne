@@ -67,6 +67,99 @@ func fontFixture(t *testing.T) Spec {
 	return spec
 }
 
+func fontAliasPairFixture(t *testing.T, first, second string, weight int) Spec {
+	t.Helper()
+	spec := fontFixture(t)
+	spec.FontFaces[0].Family = first
+	face := spec.FontFaces[0]
+	face.ID, face.Family, face.Weight = "second", second, weight
+	if weight == 700 {
+		data, err := os.ReadFile("../../example/public/fonts/NotoSans-Bold.ttf")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resource := Resource{Name: "fonts/NotoSans-Bold.ttf", MediaType: "font/ttf", Hash: digest(data), Content: data, License: spec.Resources[0].License}
+		spec.Resources = append(spec.Resources, resource)
+		face.Resource, face.Hash = resource.Name, resource.Hash
+	}
+	spec.FontFaces = append(spec.FontFaces, face)
+	spec.Components[0].FontFaces = append(spec.Components[0].FontFaces, face.ID)
+	return spec
+}
+
+func TestCatalogueUnicodeFontAliasesPreserveSpellingAndResources(t *testing.T) {
+	for _, family := range []string{"AstroNoto", "Σans", "日本語", "A\u0301_١-Host", "\U00011db0", "\U0001e6c0", strings.Repeat("\U00010400", 80), "A" + strings.Repeat("\u0301", 79)} {
+		spec := fontFixture(t)
+		spec.FontFaces[0].Family = family
+		registry := requireRegistry(t, spec)
+		encoded, err := registry.Marshal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		restored, err := Parse(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		again, err := restored.Marshal()
+		if err != nil || !bytes.Equal(encoded, again) || restored.Spec().FontFaces[0].Family != family {
+			t.Fatalf("font alias changed during catalogue transport: %q %v", family, err)
+		}
+		backend := restored.backend(restored.spec.Components[0])
+		resource := backend.Fonts[family][webui.Font{Weight: 400}]
+		if len(backend.Fonts) != 1 || resource == nil || digest(resource.Content()) != spec.Resources[0].Hash {
+			t.Fatalf("native backend lost the exact font alias or resource: %q", family)
+		}
+	}
+}
+
+func TestCatalogueUnicodeFontAliasesRejectInvalidGrammar(t *testing.T) {
+	for _, family := range []string{"", " Host", "Host ", "_Host", "-Host", "١Host", "\u0301Host", "Host, serif", "\"Host\"", "Host\\Alias", "A\tB", "A\u00a0B", "A\u200dB", "A²", "AⅧ", "A\x00B", "A\ufeffB", "A\ufffdB", "A😀", string([]byte{0xff}), string([]byte{0xed, 0xa0, 0x80}), strings.Repeat("\U00010400", 81), "A" + strings.Repeat("\u0301", 80)} {
+		spec := fontFixture(t)
+		spec.FontFaces[0].Family = family
+		if _, err := New(spec); err == nil || err.Error() != `catalog: invalid, conflicting or missing font binding "regular"` {
+			t.Fatalf("invalid font alias was admitted or changed its diagnostic: %q %v", family, err)
+		}
+	}
+}
+
+func TestCatalogueUnicodeFontAliasesUseSimpleFoldAcrossSlots(t *testing.T) {
+	for _, pair := range [][2]string{{"Host", "HOST"}, {"Σ", "ς"}, {"S", "ſ"}, {"K", "K"}, {"µ", "Μ"}, {"ß", "ẞ"}, {"\u0390", "\u1fd3"}, {"\u03b0", "\u1fe3"}, {"\ufb05", "\ufb06"}} {
+		for _, weight := range []int{400, 700} {
+			spec := fontAliasPairFixture(t, pair[0], pair[1], weight)
+			if _, err := New(spec); err == nil || err.Error() != `catalog: invalid, conflicting or missing font binding "second"` {
+				t.Fatalf("inconsistent simple-fold spelling was admitted: %q weight %d: %v", pair, weight, err)
+			}
+		}
+	}
+	if _, err := New(fontAliasPairFixture(t, "Host", "Host", 400)); err == nil {
+		t.Fatal("duplicate exact family/weight/style was admitted")
+	}
+	for _, family := range []string{"Host", "Σans", "日本語"} {
+		spec := fontAliasPairFixture(t, family, family, 700)
+		registry := requireRegistry(t, spec)
+		backend := registry.backend(registry.spec.Components[0])
+		if len(backend.Fonts) != 1 || len(backend.Fonts[family]) != 2 {
+			t.Fatalf("consistent family spelling lost a native weight slot: %q", family)
+		}
+		for _, face := range spec.FontFaces {
+			resource := backend.Fonts[family][webui.Font{Weight: face.Weight}]
+			if resource == nil || digest(resource.Content()) != face.Hash {
+				t.Fatalf("consistent family spelling changed the actual weight resource: %q %d", family, face.Weight)
+			}
+		}
+	}
+	for _, pair := range [][2]string{{"Straße", "STRASSE"}, {"İ", "i\u0307"}, {"I", "ı"}, {"é", "e\u0301"}, {"ﬀ", "ff"}} {
+		for _, weight := range []int{400, 700} {
+			spec := fontAliasPairFixture(t, pair[0], pair[1], weight)
+			registry := requireRegistry(t, spec)
+			backend := registry.backend(registry.spec.Components[0])
+			if len(backend.Fonts) != 2 || registry.Spec().FontFaces[0].Family != pair[0] || registry.Spec().FontFaces[1].Family != pair[1] {
+				t.Fatalf("distinct native simple-fold classes were merged: %q", pair)
+			}
+		}
+	}
+}
+
 func TestCatalogueOwnsResourcesCSSPayloadAndLayoutPointers(t *testing.T) {
 	spec := fontFixture(t)
 	spec.Components[0].Payload = "\n " + spec.Components[0].Payload + "\n"

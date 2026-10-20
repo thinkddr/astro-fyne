@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 import type { FontFace, FontResource } from "./ir.ts";
+import { simpleFontFamilyKey, validFontResourceFamily } from "./font-family.ts";
+import { validateCSSFontNamespace } from "./font-family-css.ts";
 
 const maxBytes = 20 * 1024 * 1024;
 const digest = (value: Buffer | string) =>
@@ -24,8 +26,7 @@ export function validateFontFaces(value: unknown): asserts value is FontFace[] {
           !["family", "weight", "style", "source", "webSrc"].includes(key),
       ) ||
       typeof face.family !== "string" ||
-      !/^[A-Za-z][A-Za-z0-9 _-]{0,79}$/.test(face.family) ||
-      face.family.trim() !== face.family ||
+      !validFontResourceFamily(face.family) ||
       ![400, 700].includes(face.weight) ||
       !["normal", "italic"].includes(face.style) ||
       typeof face.source !== "string" ||
@@ -41,11 +42,12 @@ export function validateFontFaces(value: unknown): asserts value is FontFace[] {
       throw new Error(
         "Invalid font face: use a unique family/weight/style, weight 400/700, style normal/italic, a relative source and an explicit /path.ttf webSrc.",
       );
-    const key = `${face.family.toLowerCase()}:${face.weight}:${face.style}`;
-    const spelling = families.get(face.family.toLowerCase());
+    const family = simpleFontFamilyKey(face.family),
+      key = `${family}:${face.weight}:${face.style}`;
+    const spelling = families.get(family);
     if (spelling && spelling !== face.family)
       throw new Error("Font families must use consistent capitalization.");
-    families.set(face.family.toLowerCase(), face.family);
+    families.set(family, face.family);
     if (keys.has(key)) throw new Error(`Duplicate font face: ${key}`);
     keys.add(key);
   }
@@ -217,7 +219,7 @@ export async function loadFonts(
       );
     webSources.set(face.webSrc, hash);
     result.push({
-      name: `font_${digest(`${face.family.toLowerCase()}:${face.weight}:${face.style}:${relativePath}:${hash}`).slice(0, 24)}`,
+      name: `font_${digest(`${simpleFontFamilyKey(face.family)}:${face.weight}:${face.style}:${relativePath}:${hash}`).slice(0, 24)}`,
       path: relativePath,
       hash,
       content: bytes.toString("base64"),
@@ -227,15 +229,27 @@ export async function loadFonts(
       webSrc: face.webSrc,
     });
   }
+  const ascii = result.every((face) => /^[\x00-\x7f]*$/.test(face.family));
+  const compare = (left: string, right: string) => {
+    if (ascii) return left.localeCompare(right, "en");
+    const a = [...left],
+      b = [...right];
+    for (let index = 0; index < Math.min(a.length, b.length); index++) {
+      const difference = a[index]!.codePointAt(0)! - b[index]!.codePointAt(0)!;
+      if (difference) return difference;
+    }
+    return a.length - b.length;
+  };
   return result.sort(
     (a, b) =>
-      a.family.toLowerCase().localeCompare(b.family.toLowerCase(), "en") ||
+      compare(simpleFontFamilyKey(a.family), simpleFontFamilyKey(b.family)) ||
       a.weight - b.weight ||
       a.style.localeCompare(b.style, "en"),
   );
 }
 
 export function fontsCSS(fonts: FontResource[]): string {
+  validateCSSFontNamespace(fonts);
   return (
     fonts
       .map(

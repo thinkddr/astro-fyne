@@ -13,6 +13,7 @@ import {
 } from "./javascript-data.ts";
 import { astroJavascript } from "./javascript-astro.ts";
 import { compileJavascriptCSS } from "./javascript-css.ts";
+import { createCSSFontFamilyResolver } from "./font-family-css.ts";
 
 import type { JavascriptArchive } from "./javascript-types.ts";
 export type { JavascriptArchive } from "./javascript-types.ts";
@@ -27,6 +28,7 @@ export async function bundleJavascript(
   props: Record<string, unknown> = {},
   actions: string[] = [],
   stylesheets: string[] = [],
+  fontFamilies: readonly string[] = [],
 ): Promise<JavascriptArchive> {
   const { archive } = await prepareJavascriptBundle(
     source,
@@ -34,6 +36,7 @@ export async function bundleJavascript(
     props,
     actions,
     stylesheets,
+    fontFamilies,
   );
   return archive;
 }
@@ -45,7 +48,12 @@ export async function prepareJavascriptBundle(
   props: Record<string, unknown> = {},
   actions: string[] = [],
   stylesheets: string[] = [],
+  fontFamilies: readonly string[] = [],
 ): Promise<{ archive: JavascriptArchive; inputPaths: string[] }> {
+  if (!Array.isArray(fontFamilies))
+    throw new Error("CSS font family: require a canonical family array.");
+  const families = [...fontFamilies];
+  createCSSFontFamilyResolver(families);
   source = resolve(source);
   if (![".astro", ".tsx", ".jsx", ".ts", ".js"].includes(extname(source)))
     throw new Error("JavaScript mode needs an Astro/TSX/JSX/TS/JS entry");
@@ -246,7 +254,7 @@ export async function prepareJavascriptBundle(
   }
   const runtime = await build(
     "astro-fyne-entry:runtime",
-    `import {createRuntime} from ${JSON.stringify(resolve(import.meta.dir, "javascript-runtime.js"))}; globalThis._afyRuntime = createRuntime;`,
+    `import {createRuntime} from ${JSON.stringify(resolve(import.meta.dir, "javascript-runtime.js"))}; ${families.length ? `import {createCSSFontFamilyResolver} from ${JSON.stringify(resolve(import.meta.dir, "font-family-css.ts"))}; globalThis._afyRuntime = (host,archive)=>createRuntime(host,archive,createCSSFontFamilyResolver(${JSON.stringify(families)}));` : "globalThis._afyRuntime = createRuntime;"}`,
   );
   const program = await build(
     "astro-fyne-entry:program",
@@ -268,7 +276,18 @@ export async function prepareJavascriptBundle(
     ),
     license = await readFile(licensePath, "utf8");
   inputPaths.add(licensePath);
-  const code = `/* Bundled Preact: ${license.replaceAll("*/", "* / ")} */\nfunction(host,archive){if(archive.schema!==${heightAnimations ? 2 : 1})throw new Error("JavaScript archive schema differs from its compiled animation ABI");const globalThis={};${runtime}\nconst runtime=globalThis._afyRuntime(host,archive);${stylesheets.length ? `runtime.environment._afyCssInstall(${JSON.stringify(externalStyles)});` : ""}return(function(environment){const{document,window,self,globalThis,Math,Date,setTimeout,clearTimeout,requestAnimationFrame,cancelAnimationFrame,queueMicrotask,fetch,setInterval,getComputedStyle,console}=environment;${scriptFactories.length ? `globalThis._afyAstroScripts={${scriptFactories.join(",")}};` : ""}${program}\nreturn runtime.bind(globalThis._afyComponent,globalThis._afyPreact);})(runtime.environment);}`;
+  let unicodeNotice = "";
+  if (families.length) {
+    const path = resolve(
+        import.meta.dir,
+        "../third_party/unicode17/LICENSE.txt",
+      ),
+      notice = await readFile(path, "utf8");
+    inputPaths.add(path);
+    sources.set(relative(root, path).replaceAll("\\", "/"), hash(notice));
+    unicodeNotice = `/* Bundled Unicode17 data: ${notice.replaceAll("*/", "* / ")} */\n`;
+  }
+  const code = `/* Bundled Preact: ${license.replaceAll("*/", "* / ")} */\n${unicodeNotice}function(host,archive){if(archive.schema!==${heightAnimations ? 2 : 1})throw new Error("JavaScript archive schema differs from its compiled animation ABI");const globalThis={};${runtime}\nconst runtime=globalThis._afyRuntime(host,archive);${stylesheets.length ? `runtime.environment._afyCssInstall(${JSON.stringify(externalStyles)});` : ""}return(function(environment){const{document,window,self,globalThis,Math,Date,setTimeout,clearTimeout,requestAnimationFrame,cancelAnimationFrame,queueMicrotask,fetch,setInterval,getComputedStyle,console}=environment;${scriptFactories.length ? `globalThis._afyAstroScripts={${scriptFactories.join(",")}};` : ""}${program}\nreturn runtime.bind(globalThis._afyComponent,globalThis._afyPreact);})(runtime.environment);}`;
   const archive: JavascriptArchive = {
     schema: heightAnimations ? 2 : 1,
     kind: "astro-fyne-javascript",
