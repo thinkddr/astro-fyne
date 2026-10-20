@@ -66,10 +66,11 @@ function checkedFamily(family: string): string {
 
 interface ScannedCSSFontFamily extends ParsedCSSFontFamily {
   escaped: boolean;
+  commented: boolean;
   keyword?: string;
 }
 
-/** Parse one family; lists, comments and functions need an adapter. */
+/** Parse one family; lists and functions need an adapter. */
 export function parseCSSFontFamily(raw: string): ParsedCSSFontFamily {
   const { family, generic, quoted } = parseFamily(raw, false);
   return { family, generic, quoted };
@@ -81,7 +82,8 @@ function parseFamily(raw: string, matching: boolean): ScannedCSSFontFamily {
   if (source.some((item) => /^[\ud800-\udfff]$/.test(item)))
     fail("require well-formed Unicode text.");
   let index = 0,
-    escaped = false;
+    escaped = false,
+    commented = false;
   const space = (item: string | undefined) =>
       item !== undefined && cssWhitespace.test(item),
     newline = (item: string | undefined) =>
@@ -89,8 +91,24 @@ function parseFamily(raw: string, matching: boolean): ScannedCSSFontFamily {
     start = (item: string | undefined) =>
       item !== undefined &&
       (/^[A-Za-z_]$/.test(item) || item.codePointAt(0)! >= 0x80),
-    skipSpace = () => {
-      while (space(source[index])) index++;
+    comment = () => source[index] === "/" && source[index + 1] === "*",
+    skipTrivia = () => {
+      while (space(source[index]) || comment()) {
+        if (space(source[index])) {
+          index++;
+          continue;
+        }
+        commented = true;
+        index += 2;
+        while (
+          index < source.length &&
+          !(source[index] === "*" && source[index + 1] === "/")
+        )
+          index++;
+        if (index === source.length)
+          fail("unclosed comments need a CSS recovery adapter.");
+        index += 2;
+      }
     },
     escape = (quoted: boolean) => {
       escaped = true;
@@ -127,7 +145,7 @@ function parseFamily(raw: string, matching: boolean): ScannedCSSFontFamily {
     cssFontFamilyTextKey(family);
     return family;
   };
-  skipSpace();
+  skipTrivia();
   const quote = source[index];
   if (quote === '"' || quote === "'") {
     index++;
@@ -138,9 +156,15 @@ function parseFamily(raw: string, matching: boolean): ScannedCSSFontFamily {
       family += source[index] === "\\" ? escape(true) : source[index++]!;
     }
     if (source[index++] !== quote) fail("require one complete quoted family.");
-    skipSpace();
+    skipTrivia();
     if (index !== source.length) fail("require one complete quoted family.");
-    return { family: decoded(family), generic: false, quoted: true, escaped };
+    return {
+      family: decoded(family),
+      generic: false,
+      quoted: true,
+      escaped,
+      commented,
+    };
   }
   const identifiers: string[] = [];
   while (index < source.length) {
@@ -166,9 +190,9 @@ function parseFamily(raw: string, matching: boolean): ScannedCSSFontFamily {
       } else break;
     }
     identifiers.push(identifier);
-    if (index < source.length && !space(source[index]))
-      fail("lists, comments and functions need an adapter.");
-    skipSpace();
+    if (index < source.length && !space(source[index]) && !comment())
+      fail("lists and functions need an adapter.");
+    skipTrivia();
   }
   const family = decoded(identifiers.join(" "));
   const reserved = identifiers.map(asciiKey);
@@ -182,6 +206,7 @@ function parseFamily(raw: string, matching: boolean): ScannedCSSFontFamily {
     generic,
     quoted: false,
     escaped,
+    commented,
     keyword: generic ? reserved[0] : undefined,
   };
 }
@@ -269,13 +294,17 @@ export function createCSSFontFamilyResolver(
     if (parsed.generic) {
       if (parsed.escaped && cssWideKeywords.has(parsed.keyword!))
         fail("escaped CSS-wide keywords need a cascade adapter.");
+      if (parsed.commented && cssWideKeywords.has(parsed.keyword!))
+        fail("commented CSS-wide keywords need a cascade adapter.");
       if (canonical !== undefined)
         fail("an unquoted keyword conflicts with a declared named alias.");
-      return parsed.escaped ? parsed.keyword! : raw;
+      return parsed.escaped || parsed.commented ? parsed.keyword! : raw;
     }
     if (canonical === undefined) {
       checkedFamily(parsed.family);
-      return parsed.escaped ? JSON.stringify(parsed.family) : raw;
+      return parsed.escaped || parsed.commented
+        ? JSON.stringify(parsed.family)
+        : raw;
     }
     if (
       simpleFontFamilyTextKey(parsed.family) !==
@@ -296,6 +325,8 @@ export function createCSSFontFamilyResolver(
     const exact =
       parsed.family === canonical &&
       (parsed.quoted || raw.replace(cssOuterWhitespace, "") === parsed.family);
-    return exact && !parsed.escaped ? raw : JSON.stringify(canonical);
+    return exact && !parsed.escaped && !parsed.commented
+      ? raw
+      : JSON.stringify(canonical);
   };
 }

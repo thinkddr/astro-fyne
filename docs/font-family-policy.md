@@ -153,6 +153,30 @@ frames use a quoted decoded family, so CSS escapes never become literal native
 resource names. Escaped generic keywords retain their keyword meaning. Escaped
 CSS-wide keywords require a cascade adapter and produce a diagnostic.
 
+Closed CSS comments are accepted before or after a family and between identifier
+tokens. `Host/**/Name` decodes to `Host Name`; `ser/**/if` is the named family
+`ser if`, rather than the generic `serif`. Comments also separate escape-bearing
+tokens: `\48/**/ost` decodes to `H ost`, while `\48 ost` decodes to `Host`.
+Comment contents are consumed through the first `*/`, without nesting. Quotes,
+backslashes and newlines inside a comment do not change that boundary. See
+[CSS comment consumption](https://www.w3.org/TR/css-syntax-3/#consume-comments).
+
+Comments are recognized outside strings and escaped characters. A quoted name
+such as `"Host/*comment*/Name"` retains its literal punctuation and fails the
+native alias grammar. Commented named families are serialized as quoted decoded
+or canonical names, including a comment beside an exact quoted alias. Commented
+generic values become clean keywords. Commented CSS-wide values need a cascade
+adapter; unclosed comments need a CSS recovery adapter. Original authored CSS
+text remains in the archive.
+
+Custom properties retain closed comments through aliases and selected `var()`
+fallbacks. A `font-family` consumer admits these replacements only when its
+document has the family resolver; that resolver checks the final value. Other
+properties and documents without the resolver still diagnose comment-bearing
+replacements. The substitution boundary guard remains active: joining tokens
+around `var()`, including comment-delimited joins, requires a token-stream
+adapter.
+
 The resolver accepts a broader authored spelling when it also passes that
 admission filter. For example, `U+0345` is a combining mark that simple-folds to
 Greek iota. Eighty such marks, or eighty `ι` scalars, can select a declared alias
@@ -244,6 +268,18 @@ changed-astral names; native constructor cases must diagnose those conversions.
 These assertions check selected actual name matches and admission failures, not
 font origin, every painted glyph or raster equivalence. The independent C/F
 math tests still require the 80-to-240-scalar expansion equality.
+
+The `--css-comments` source-font profile declares `Comment Host` and alternates
+`COMMENT/**/HOST` with `/* lead */"Comment Host"/* tail */`. It retains the
+original BOM and CRLF stylesheet bytes, licensed font resources and action
+history across native count 1, browser count 2 and returned native count 3.
+The bold button resolves the commented value through nested custom properties
+and a selected fallback in each runtime.
+Browser probes pass both authored CSS values directly to `document.fonts.load`
+at weights 400 and 700 and compare the actual returned `FontFace` objects with
+the canonical queries. Separate source-bundle tests cover comments in inherited
+CSS variables and cleared inline styles. These checks retain the same limits
+on claims about font origin, glyph coverage and pixel equivalence.
 
 The eleven Bun tests include explicit failure cases and independent parsing of
 the original data files. They compare leading and continuation grammar for
