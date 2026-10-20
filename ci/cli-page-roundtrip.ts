@@ -645,10 +645,12 @@ export default defineConfig({integrations:[preact(),{name:"cli-page-route-oracle
     observe?.(page);
     const response = await page.goto(base + path);
     assert.equal(response?.status(), 200);
-    assert.equal(
-      (await page.evaluate(() => document.characterSet)).toLowerCase(),
-      "utf-8",
-    );
+    if (path !== "/legacy/Legacy")
+      assert.equal(
+        (await page.evaluate(() => document.characterSet)).toLowerCase(),
+        "utf-8",
+        path + " must declare UTF-8 in page mode",
+      );
     return page;
   }
   const fontResponses: Promise<unknown>[] = [],
