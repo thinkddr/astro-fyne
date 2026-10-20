@@ -127,7 +127,6 @@ test("single CSS font parsing diagnoses unsupported syntax instead of stripping 
     "Noto 'Sans'",
     '"Noto',
     "'Noto\"",
-    "Noto/*comment*/Sans",
     "var(--font)",
     "generic(fangsong)",
     "Noto 123",
@@ -492,7 +491,6 @@ test("CSS family escapes diagnose malformed input and unsupported decoded names"
     "Noto\\",
     '"Noto\\',
     '"Noto',
-    "Noto/*x*/Sans",
     String.raw`Noto\,Sans`,
     String.raw`"Noto\22 Sans"`,
     String.raw`Noto\\Sans`,
@@ -511,4 +509,138 @@ test("CSS family escapes diagnose malformed input and unsupported decoded names"
   for (const newline of ["\n", "\r", "\f", "\r\n"])
     invalid.push("Noto\\" + newline + "Sans", '"Noto' + newline + 'Sans"');
   for (const raw of invalid) expect(() => parseCSSFontFamily(raw)).toThrow();
+});
+
+test("closed CSS comments separate identifier tokens without joining their text", () => {
+  for (const [raw, family] of [
+    ["/*leading*/Host/*trailing*/", "Host"],
+    ["Host/**/Name", "Host Name"],
+    ["Host/**//**/Name", "Host Name"],
+    [" \tHost /*comment*/\r\n Name /*last*/ ", "Host Name"],
+    ["Noto/*comment*/Sans", "Noto Sans"],
+    ["ser/**/if", "ser if"],
+    ["Ho/* outer /* inner */st", "Ho st"],
+    ["Host/* quotes '\" backslash \\ and \r\n\f */Name", "Host Name"],
+    [String.raw`\48/**/ost`, "H ost"],
+    [String.raw`Host\ /**/Name`, "Host  Name"],
+    [String.raw`Host\20 /**/Name`, "Host  Name"],
+  ])
+    expect(parseCSSFontFamily(raw!)).toEqual({
+      family: family!,
+      generic: false,
+      quoted: false,
+    });
+  expect(parseCSSFontFamily(String.raw`\48 ost`).family).toBe("Host");
+  for (const raw of ['/*before*/"Host"/*after*/', "/*before*/'Host'/**/"])
+    expect(parseCSSFontFamily(raw)).toEqual({
+      family: "Host",
+      generic: false,
+      quoted: true,
+    });
+});
+
+test("CSS comments are neither nested nor recognized inside strings or escapes", () => {
+  for (const raw of [
+    '"Host/*comment*/Name"',
+    "'Host/**/Name'",
+    String.raw`"Host\2f *comment*/Name"`,
+    String.raw`Host\/**/Name`,
+    String.raw`Host/\**/Name`,
+    String.raw`Host\2f **/Name`,
+    String.raw`Host\2a /Name`,
+    "Host/*outer /*inner*/ */Name",
+    '"Host"/**/Name',
+    'Host/**/"Name"',
+    "Host/**/, serif",
+    "Host/**/(Name)",
+    "/**/",
+  ])
+    expect(() => parseCSSFontFamily(raw)).toThrow();
+  for (const raw of ["/*", "/**", "Host/*", '"Host"/*', "Host/**/Name/*"])
+    expect(() => parseCSSFontFamily(raw)).toThrow("CSS recovery adapter");
+});
+
+test("font resolvers serialize commented names even beside exact quoted aliases", () => {
+  const resolve = createCSSFontFamilyResolver([
+    "Comment Host",
+    "Host",
+    "H ost",
+    "ser if",
+  ]);
+  for (const [raw, expected] of [
+    ["COMMENT/**/HOST", '"Comment Host"'],
+    ["/*leading*/Host", '"Host"'],
+    ['"Host"/*trailing*/', '"Host"'],
+    ["/*leading*/'Host'/*trailing*/", '"Host"'],
+    [String.raw`\48/**/ost`, '"H ost"'],
+    ["ser/**/if", '"ser if"'],
+    ["Unknown/**/Family", '"Unknown Family"'],
+    ['/*leading*/"Unknown  Family"/*trailing*/', '"Unknown  Family"'],
+  ])
+    expect(resolve(raw!)).toBe(expected!);
+  expect(resolve(" 'Host' ")).toBe(" 'Host' ");
+  expect(resolve("Unknown   Family")).toBe("Unknown   Family");
+  expect(createCSSFontFamilyResolver([])("Unknown/**/Family")).toBe(
+    '"Unknown Family"',
+  );
+});
+
+test("commented generic keywords stay keywords and CSS-wide values require a cascade adapter", () => {
+  const empty = createCSSFontFamilyResolver([]);
+  for (const [raw, keyword] of [
+    ["/*leading*/SeRiF/*trailing*/", "serif"],
+    ["sans-serif/**/", "sans-serif"],
+    ["/**/system-ui", "system-ui"],
+    [String.raw`/*leading*/\73 erif/*trailing*/`, "serif"],
+  ]) {
+    expect(parseCSSFontFamily(raw!)).toEqual({
+      family: raw === "/*leading*/SeRiF/*trailing*/" ? "SeRiF" : keyword!,
+      generic: true,
+      quoted: false,
+    });
+    expect(empty(raw!)).toBe(keyword!);
+    expect(() => createCSSFontFamilyResolver([keyword!])(raw!)).toThrow(
+      "unquoted keyword conflicts",
+    );
+  }
+  for (const keyword of [
+    "inherit",
+    "initial",
+    "unset",
+    "revert",
+    "revert-layer",
+    "revert-rule",
+  ]) {
+    const raw = "/*leading*/" + keyword + "/*trailing*/";
+    expect(parseCSSFontFamily(raw).generic).toBe(true);
+    expect(() => empty(raw)).toThrow("commented CSS-wide keywords");
+    expect(
+      createCSSFontFamilyResolver([keyword])('"' + keyword + '"/**/'),
+    ).toBe(JSON.stringify(keyword));
+  }
+  for (const raw of [
+    "serif/**/Something",
+    "default/**/Something",
+    "de/**/fault default",
+  ])
+    expect(() => parseCSSFontFamily(raw)).toThrow();
+  expect(parseCSSFontFamily("de/**/fault").family).toBe("de fault");
+});
+
+test("commented family matching retains Unicode, namespace and resource limits", () => {
+  const resolve = createCSSFontFamilyResolver(["Straße", "İ", "𐐀Source", "Ι"]);
+  expect(resolve("/*comment*/STRAẞE")).toBe('"Straße"');
+  expect(resolve("/**/𐐀source/**/")).toBe('"𐐀Source"');
+  expect(resolve("/**/\u0345/**/")).toBe('"Ι"');
+  expect(() => resolve("/**/STRASSE/**/")).toThrow("full-fold-only");
+  expect(() => resolve("/**/i\u0307/**/")).toThrow("full-fold-only");
+  expect(() => resolve("/**/𐐨Source/**/")).toThrow("changed astral");
+  expect(() => createCSSFontFamilyResolver([])("/**/\u0345/**/")).toThrow();
+  expect(parseCSSFontFamily("/**/" + "𐐀".repeat(80)).family).toBe(
+    "𐐀".repeat(80),
+  );
+  expect(() => parseCSSFontFamily("/**/" + "𐐀".repeat(81))).toThrow();
+  expect(() => parseCSSFontFamily("/*comment*/A\ud800")).toThrow(
+    "well-formed Unicode",
+  );
 });
