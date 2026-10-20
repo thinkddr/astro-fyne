@@ -363,7 +363,12 @@ if (mode === "prepare") {
           ? aliases[0]
           : JSON.stringify(unicode ? aliases[0] : family),
       ) +
-      (authoredCSS ? "#font-seed{font-family:" + aliases[1] + "}\r\n" : ""),
+      (authoredCSS ? "#font-seed{font-family:" + aliases[1] + "}\r\n" : "") +
+      (commented
+        ? "#font-increment{--source-family:" +
+          aliases[0] +
+          ";--source-alias:var(--source-family);font-family:var(--missing,var(--source-alias))}\r\n"
+        : ""),
   );
   await save(
     join(fixture, "external.css"),
@@ -512,6 +517,10 @@ if (mode === "prepare") {
     if (authoredCSS)
       assert.ok(
         sourceCSS.includes("#font-seed{font-family:" + aliases[1] + "}\r\n"),
+      );
+    if (commented)
+      assert.ok(
+        sourceCSS.includes("font-family:var(--missing,var(--source-alias))"),
       );
     assert.ok(!sourceCSS.includes("font-family:" + JSON.stringify(family)));
   }

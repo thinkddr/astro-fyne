@@ -78,7 +78,7 @@ const kebab = (name) =>
     : name.replace(/[A-Z]/g, (letter) => "-" + letter.toLowerCase());
 
 /** Source rules remain in the archived program, not in a browser dependency. */
-export function createCSSCascade() {
+export function createCSSCascade(resolveFontFamily) {
   const rules = [],
     layers = [],
     height = createHeightAnimations();
@@ -317,7 +317,7 @@ export function createCSSCascade() {
     }
     throw new Error("Invalid CSS string");
   }
-  function substitutionBoundary(value, reference, replacement) {
+  function substitutionBoundary(value, reference, replacement, allowComments) {
     const { at, end, name } = reference,
       before = value[at - 1],
       after = value[end];
@@ -334,11 +334,13 @@ export function createCSSCascade() {
         index = stringEnd(replacement, index);
       else if (replacement[index] === "\\")
         index = escape(replacement, index).end;
-      else if (replacement.slice(index, index + 2) === "/*")
-        throw new Error(
-          `CSS comments in the replacement for var(${name}) require a native token-stream adapter`,
-        );
-      else index++;
+      else if (replacement.slice(index, index + 2) === "/*") {
+        if (!allowComments)
+          throw new Error(
+            `CSS comments in the replacement for var(${name}) require a native token-stream adapter`,
+          );
+        index = commentEnd(replacement, index);
+      } else index++;
     }
   }
   function nextVariable(value, start) {
@@ -422,7 +424,12 @@ export function createCSSCascade() {
     }
     return null;
   }
-  function variable(value, lookup, invalidContext = () => false) {
+  function variable(
+    value,
+    lookup,
+    invalidContext = () => false,
+    allowComments = false,
+  ) {
     if (typeof value !== "string") return value;
     let output = "",
       start = 0;
@@ -434,9 +441,9 @@ export function createCSSCascade() {
       let replacement = lookup(name);
       if (invalidContext()) return undefined;
       if (replacement === undefined && fallback !== undefined)
-        replacement = variable(fallback, lookup, invalidContext);
+        replacement = variable(fallback, lookup, invalidContext, allowComments);
       if (replacement === undefined) return undefined;
-      substitutionBoundary(value, reference, replacement);
+      substitutionBoundary(value, reference, replacement, allowComments);
       output += replacement;
       start = end;
     }
@@ -547,8 +554,12 @@ export function createCSSCascade() {
       active.push(name);
       let resolved;
       try {
-        resolved = variable(variables[name], resolveVariable, () =>
-          cyclic.has(name),
+        // The consuming property selects the comment adapter.
+        resolved = variable(
+          variables[name],
+          resolveVariable,
+          () => cyclic.has(name),
+          true,
         );
       } finally {
         active.pop();
@@ -573,7 +584,12 @@ export function createCSSCascade() {
     const expanded = Object.create(null);
     for (const [name, item] of Object.entries(winners)) {
       if (name.startsWith("--")) continue;
-      const value = variable(item.value, (name) => computedVariables[name]);
+      const value = variable(
+        item.value,
+        (name) => computedVariables[name],
+        () => false,
+        name === "font-family" && typeof resolveFontFamily === "function",
+      );
       if (value === undefined)
         throw new Error(
           `CSS variable in ${name} needs a valid value or fallback`,

@@ -169,6 +169,14 @@ generic values become clean keywords. Commented CSS-wide values need a cascade
 adapter; unclosed comments need a CSS recovery adapter. Original authored CSS
 text remains in the archive.
 
+Custom properties retain closed comments through aliases and selected `var()`
+fallbacks. A `font-family` consumer admits these replacements only when its
+document has the family resolver; that resolver checks the final value. Other
+properties and documents without the resolver still diagnose comment-bearing
+replacements. The substitution boundary guard remains active: joining tokens
+around `var()`, including comment-delimited joins, requires a token-stream
+adapter.
+
 The resolver accepts a broader authored spelling when it also passes that
 admission filter. For example, `U+0345` is a combining mark that simple-folds to
 Greek iota. Eighty such marks, or eighty `ι` scalars, can select a declared alias
@@ -265,6 +273,8 @@ The `--css-comments` source-font profile declares `Comment Host` and alternates
 `COMMENT/**/HOST` with `/* lead */"Comment Host"/* tail */`. It retains the
 original BOM and CRLF stylesheet bytes, licensed font resources and action
 history across native count 1, browser count 2 and returned native count 3.
+The bold button resolves the commented value through nested custom properties
+and a selected fallback in each runtime.
 Browser probes pass both authored CSS values directly to `document.fonts.load`
 at weights 400 and 700 and compare the actual returned `FontFace` objects with
 the canonical queries. Separate source-bundle tests cover comments in inherited

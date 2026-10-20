@@ -9,7 +9,7 @@ import { createCSSCascade } from "./javascript-css-runtime.js";
 /** A Preact DOM adapter backed by native objects, never a browser renderer. */
 export function createDocument(resolveFontFamily) {
   let next = 0;
-  const css = createCSSCascade();
+  const css = createCSSCascade(resolveFontFamily);
   const asciiLower = (value) => value.replace(/[A-Z]/g, (c) => c.toLowerCase());
   function domString(value) {
     if (typeof value === "symbol")
