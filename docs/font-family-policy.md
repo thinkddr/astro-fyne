@@ -89,6 +89,10 @@ astro-fyne to-fyne src/App.astro --fonts fonts.json --out native/generated --nam
 astro-fyne to-web checkpoint.catalogue.json --out src/components/app --name App
 ```
 
+Generated CSS is UTF-8. The host Astro document must declare UTF-8, for example
+with `<meta charset="utf-8">` in the layout's `<head>`. Component emitters leave
+that document head to the host layout.
+
 With a declared `Straße` family, authored `font-family: STRASSE` resolves to the
 canonical CSS string `"Straße"` in native and generated web frames. Dynamic inline
 styles, inherited styles and CSS variables pass through the same final snapshot

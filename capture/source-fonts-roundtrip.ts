@@ -53,6 +53,34 @@ type FontResponse = {
   bytes: number;
   error?: string;
 };
+type FontObservation = {
+  characterSet: string;
+  probes: {
+    weight: number;
+    query: string;
+    text: string;
+    loaded: number;
+    check: boolean;
+    error?: string;
+    checkError?: string;
+  }[];
+  faces: { family: string; status: string; weight: string; style: string }[];
+  allFaces: {
+    family: string;
+    status: string;
+    weight: string;
+    style: string;
+    stretch: string;
+    unicodeRange: string;
+    featureSettings: string;
+    variationSettings: string;
+    display: string;
+    ascentOverride: string;
+    descentOverride: string;
+    lineGapOverride: string;
+  }[];
+  astroIslands: number;
+};
 
 /** Capture the source-font CLI checkpoint in the generated Astro island. */
 export async function captureSourceFonts(
@@ -61,6 +89,7 @@ export async function captureSourceFonts(
   expectedFamily = "SourceNoto",
 ) {
   let browser: Browser | undefined;
+  let fonts: FontObservation | undefined;
   const errors: string[] = [],
     fontResponses: Promise<FontResponse>[] = [],
     frames: Frame[] = [];
@@ -144,24 +173,51 @@ export async function captureSourceFonts(
     });
     assert.equal((await page.goto(url))?.ok(), true);
     await page.waitForFunction(() => !!window.afySourceFonts?.ready());
-    const fonts = await page.evaluate(async (family) => {
-      const probes = [];
+    fonts = await page.evaluate(async (family): Promise<FontObservation> => {
+      const probes: FontObservation["probes"] = [];
       for (const weight of [400, 700]) {
         const query = `${weight} 16px ${JSON.stringify(family)}`,
-          loaded = await document.fonts.load(
+          text = "012IncrementNative override",
+          probe: FontObservation["probes"][number] = {
+            weight,
             query,
-            "012IncrementNative override",
-          );
-        probes.push({
-          weight,
-          loaded: loaded.length,
-          check: document.fonts.check(query, "012IncrementNative override"),
-        });
+            text,
+            loaded: 0,
+            check: false,
+          };
+        try {
+          probe.loaded = (await document.fonts.load(query, text)).length;
+        } catch (error) {
+          probe.error = error instanceof Error ? error.message : String(error);
+        }
+        try {
+          probe.check = document.fonts.check(query, text);
+        } catch (error) {
+          probe.checkError =
+            error instanceof Error ? error.message : String(error);
+        }
+        probes.push(probe);
       }
       await document.fonts.ready;
+      const allFaces = [...document.fonts].map((face) => ({
+        family: face.family,
+        status: face.status,
+        weight: face.weight,
+        style: face.style,
+        stretch: face.stretch,
+        unicodeRange: face.unicodeRange,
+        featureSettings: face.featureSettings,
+        variationSettings: face.variationSettings,
+        display: face.display,
+        ascentOverride: face.ascentOverride,
+        descentOverride: face.descentOverride,
+        lineGapOverride: face.lineGapOverride,
+      }));
       return {
+        characterSet: document.characterSet,
         probes,
-        faces: [...document.fonts]
+        allFaces,
+        faces: allFaces
           .filter((face) => face.family.replaceAll('"', "") === family)
           .map((face) => ({
             family: face.family,
@@ -172,8 +228,11 @@ export async function captureSourceFonts(
         astroIslands: document.querySelectorAll("astro-island").length,
       };
     }, expectedFamily);
+    assert.equal(fonts.characterSet.toLowerCase(), "utf-8");
     assert.equal(fonts.astroIslands, 1);
     for (const probe of fonts.probes) {
+      assert.equal(probe.error, undefined);
+      assert.equal(probe.checkError, undefined);
       assert.equal(probe.loaded, 1);
       assert.equal(probe.check, true);
       assert.ok(
@@ -486,6 +545,7 @@ export async function captureSourceFonts(
           message: error instanceof Error ? error.message : String(error),
           errors,
           frames,
+          fonts: fonts ?? null,
           fontResponses: await Promise.all(fontResponses),
           pixelPerfectVerified: false,
         },

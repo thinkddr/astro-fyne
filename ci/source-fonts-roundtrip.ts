@@ -457,7 +457,7 @@ if (mode === "prepare") {
   );
   await save(
     join(web, "index.astro"),
-    '---\nimport Harness from "./Harness.tsx";\n---\n<html lang="en"><head><title>Source fonts roundtrip</title></head><body><Harness client:only="preact"/></body></html>\n',
+    '---\nimport Harness from "./Harness.tsx";\n---\n<html lang="en"><head><meta charset="utf-8"/><title>Source fonts roundtrip</title></head><body><Harness client:only="preact"/></body></html>\n',
   );
   const sourceFiles = [
     "ci/source-fonts-roundtrip.ts",
