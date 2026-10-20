@@ -10,6 +10,22 @@ import {
 
 /** Recorded host boundaries let replay rebuild closures and module state. */
 export function createRuntime(host, archive, resolveFontFamily) {
+  function metadata(value) {
+    return {
+      ...value,
+      props: JSON.parse(javascriptHostJSON(value.props || {})),
+      sources: value.sources.map((source) => ({ ...source })),
+      actions: [...(value.actions || [])],
+      ...(value.stylesheets === undefined
+        ? {}
+        : { stylesheets: value.stylesheets.map((sheet) => ({ ...sheet })) }),
+    };
+  }
+  archive = metadata(archive);
+  const expectedFrame =
+    archive.frame === undefined
+      ? undefined
+      : JSON.parse(JSON.stringify(archive.frame));
   const animated = archive.schema === 2,
     restoredAnimation = animated
       ? validateJavascriptAnimationState(archive.animation)
@@ -23,7 +39,7 @@ export function createRuntime(host, archive, resolveFontFamily) {
     draining = false,
     failed = false,
     dispatching = false;
-  const stored = archive.journal || [];
+  const stored = (archive.journal || []).map((entry) => ({ ...entry }));
   const restoring =
     archive.frame !== undefined ||
     stored.length > 0 ||
@@ -251,6 +267,7 @@ export function createRuntime(host, archive, resolveFontFamily) {
         flush: drain,
         replay(event) {
           if (!replaying) throw new Error("Replay is already complete");
+          event = JSON.parse(json(event));
           if (animated) {
             if (
               typeof event.timeMs !== "number" ||
@@ -269,8 +286,8 @@ export function createRuntime(host, archive, resolveFontFamily) {
             throw new Error("JavaScript replay left unconsumed host results");
           if (animated) dom.restoreAnimationState(restoredAnimation);
           if (
-            archive.frame &&
-            JSON.stringify(dom.snapshot()) !== JSON.stringify(archive.frame)
+            expectedFrame &&
+            JSON.stringify(dom.snapshot()) !== JSON.stringify(expectedFrame)
           )
             throw new Error("JavaScript replay changed the exported frame");
           replaying = false;
@@ -284,15 +301,12 @@ export function createRuntime(host, archive, resolveFontFamily) {
             throw new Error("JavaScript history exceeds 10000 events");
           dispatching = true;
           try {
-            const prevented = dispatch(event);
+            const owned = JSON.parse(json(event));
+            const prevented = dispatch(owned);
             events.push(
-              JSON.parse(
-                json(
-                  animated
-                    ? { ...event, timeMs: dom.animationState().timeMs }
-                    : event,
-                ),
-              ),
+              animated
+                ? { ...owned, timeMs: dom.animationState().timeMs }
+                : owned,
             );
             return prevented;
           } catch (error) {
@@ -306,9 +320,9 @@ export function createRuntime(host, archive, resolveFontFamily) {
           if (failed || queue.length || dispatching || replaying)
             throw new Error("Export requires a valid settled JavaScript frame");
           return {
-            ...archive,
-            events: [...events],
-            journal: [...journal],
+            ...metadata(archive),
+            events: events.map((event) => ({ ...event })),
+            journal: journal.map((entry) => ({ ...entry })),
             frame: dom.snapshot(),
             ...(animated ? { animation: dom.animationState() } : {}),
           };
