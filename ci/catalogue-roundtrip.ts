@@ -360,6 +360,7 @@ if (mode === "prepare") {
     "src/javascript-css-runtime.js",
     "native/javascript/runtime.go",
     "native/javascript/animations.go",
+    "native/javascript/archive_ownership_test.go",
     "native/javascript/font_resources.go",
     "native/javascript/font_resources_test.go",
     "native/javascript/nodes.go",

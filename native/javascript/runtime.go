@@ -282,6 +282,11 @@ func NewWithOptions(archive Archive, actions webui.Actions, options Options, bac
 	if err != nil {
 		return nil, err
 	}
+	var owned Archive
+	if err = json.Unmarshal(raw, &owned); err != nil {
+		return nil, err
+	}
+	archive, w.archive = owned, owned
 	err = w.limited(func() error {
 		code, err := w.vm.RunString("(" + archive.Code + ")")
 		if err != nil {
