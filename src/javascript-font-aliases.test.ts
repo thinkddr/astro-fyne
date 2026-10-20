@@ -41,6 +41,11 @@ const digest = (text: string) =>
 function mount(archive: JavascriptArchive, effects: unknown[][]) {
   const factory = eval(`(${archive.code})`) as JavascriptFactory;
   const api = factory((kind, name, args) => {
+    if (kind === "random" || kind === "now") {
+      expect(name).toBe("");
+      expect(JSON.parse(args)).toEqual([]);
+      return kind === "random" ? 0.25 : 1000;
+    }
     expect(kind).toBe("action");
     expect(name).toBe("observe");
     effects.push(JSON.parse(args));
