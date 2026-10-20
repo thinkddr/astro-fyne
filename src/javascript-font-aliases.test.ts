@@ -322,7 +322,10 @@ test("font resource names preserve ASCII hashes and Unicode ordering is stable",
       root,
     );
     const second = await loadFonts(
-      names.toReversed().map((family) => ({ ...face, family })),
+      names
+        .slice()
+        .reverse()
+        .map((family) => ({ ...face, family })),
       root,
     );
     expect(first).toEqual(second);
