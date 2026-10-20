@@ -573,10 +573,21 @@ export async function captureSourceFonts(
       assert.ok(
         checkpoint.stylesheets!.some((sheet) =>
           sheet.text.includes(
-            "font-family:" + JSON.stringify(familyAliases[0]),
+            "font-family:" +
+              (aliasesAreCSS
+                ? familyAliases[0]
+                : JSON.stringify(familyAliases[0])),
           ),
         ),
       );
+      if (aliasesAreCSS)
+        assert.ok(
+          checkpoint.stylesheets!.some((sheet) =>
+            sheet.text.includes(
+              "#font-seed{font-family:" + familyAliases[1] + "}\r\n",
+            ),
+          ),
+        );
       assert.ok(
         !checkpoint.stylesheets!.some((sheet) =>
           sheet.text.includes("font-family:" + JSON.stringify(expectedFamily)),

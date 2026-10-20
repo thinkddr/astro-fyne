@@ -487,7 +487,15 @@ if (mode === "prepare") {
       ).text,
       sourceCSS,
     );
-    assert.ok(sourceCSS.includes("font-family:" + JSON.stringify(aliases[0])));
+    assert.ok(
+      sourceCSS.includes(
+        "font-family:" + (escaped ? aliases[0] : JSON.stringify(aliases[0])),
+      ),
+    );
+    if (escaped)
+      assert.ok(
+        sourceCSS.includes("#font-seed{font-family:" + aliases[1] + "}\r\n"),
+      );
     assert.ok(!sourceCSS.includes("font-family:" + JSON.stringify(family)));
   }
   assert.deepEqual(
