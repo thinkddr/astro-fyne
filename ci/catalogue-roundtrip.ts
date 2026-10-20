@@ -350,7 +350,6 @@ if (mode === "prepare") {
     "src/javascript-checkpoints.test.ts",
     "src/catalogue.test.ts",
     "src/javascript-runtime.js",
-    "src/javascript-view.ts",
     "src/javascript-dom.js",
     "src/javascript.ts",
     "src/javascript-cli.ts",
