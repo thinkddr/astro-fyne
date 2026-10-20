@@ -82,7 +82,7 @@ The linked CLI also works from your own project directory:
 ```sh
 astro-fyne to-fyne src/App.tsx
 # In your Go host, save ExportJavascript() as JSON to App.program.json.
-astro-fyne to-web App.program.json
+astro-fyne to-web App.program.json --page
 # Save the browser handle's exportJavascript() result as App.web.program.json.
 astro-fyne to-fyne App.web.program.json --name App
 ```
@@ -90,7 +90,10 @@ astro-fyne to-fyne App.web.program.json --name App
 The source shortcut uses the native Goja route, includes supported CSS imports
 and defaults to `native/generated`. The inverse shortcut detects exported
 JavaScript programs, declarative programs, catalogues and native scenes; `App.program.json`
-defaults to `src/pages/app`. The JSON files come from native/browser export APIs;
+defaults to `src/pages/app`. Add `--page` to create `/app/` through `index.astro`,
+with generated helpers in `_App-web/` excluded from Astro routing. Pass
+`--public-dir public` when the archive contains public images or fonts. Omit `--page`
+to retain the component library output and existing filenames. The JSON files come from native/browser export APIs;
 source generation embeds its initial archive in Go. Override destinations with `--out`, names with
 `--name`, and verify either direction with `--check`. Keep the linked checkout
 and ensure Bun's binary directory is on `PATH`. See the

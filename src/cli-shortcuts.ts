@@ -34,7 +34,7 @@ export async function normalizeConversionArgs(
         "Only one input file is accepted, immediately after the command.",
         command,
       );
-    if (!["--javascript", "--check"].includes(flag)) {
+    if (!["--javascript", "--check", "--page"].includes(flag)) {
       const value = options[index + 1];
       if (value && !value.startsWith("-")) index++;
     }

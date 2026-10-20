@@ -47,7 +47,7 @@ Examples:
   bun run to-fyne src/App.astro
   bun run to-fyne src/Counter.tsx
   bun run to-fyne src/App.astro --fonts fonts.json
-  bun run to-web App.program.json
+  bun run to-web App.program.json --page
   bun run to-web scene.json --out src/pages/native --name NativePage
   bun run to-fyne
   bun run check --config path/to/astro-fyne.json
@@ -84,19 +84,22 @@ Inputs and explicit output options:
   --export <identifier>    JavaScript named export. Default: default.
   --props <file>           Initial JSON data for a JavaScript source entry.
   --actions <names>        Comma-separated JavaScript action props.
-  --out <directory>        Destination for Name.astro, Name.tsx, Name.css and report.
+  --out <directory>        Destination for generated components, resources and report.
   --name <Name>            Generated component name, for example NativePage.
 
 Options:
+  --page                  Generate index.astro and keep helpers in _Name-web/.
+                           The selected output directory becomes the page route.
   --public-dir <directory> Astro public directory for image assets.
                            Default: <out>/public. Use your project's public path.
   --actions-module <path>  Client module exporting "actions" for scene callbacks;
-                           import path relative to the generated TSX component.
+                           with --page, relative to the selected output directory.
+                           Otherwise relative to the generated TSX component.
   --check                 Verify files are current without writing them.
   -h, --help              Show this help without reading or writing any files.
 
 Examples:
-  bun run to-web App.program.json
+  bun run to-web App.program.json --page
   bun run to-web native.scene.json --check
   bun run to-web --scene scene.json --out src/pages/native --name NativePage --public-dir public
   bun run to-web --scene scene.json --out src/pages/native --name NativePage --actions-module ../../actions --check
