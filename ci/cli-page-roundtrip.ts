@@ -527,7 +527,13 @@ export default defineConfig({integrations:[preact(),{name:"cli-page-route-oracle
     await Bun.sleep(250);
   }
   assert.ok(ready, "Owned preview did not become ready");
-  const http = [];
+  const http: {
+    path: string;
+    status: number;
+    contentType: string | null;
+    bytes: number;
+    sha256: string;
+  }[] = [];
   observations.http = http;
   for (const path of [
     "/catalogue/",
@@ -572,7 +578,7 @@ export default defineConfig({integrations:[preact(),{name:"cli-page-route-oracle
     if (/\.(?:astro|[cm]?[jt]sx?)$/.test(rel))
       helperPaths.add("/" + rel.replace(/\.[^.]+$/, ""));
   }
-  const hidden = [];
+  const hidden: { path: string; status: number; sha256: string }[] = [];
   observations.helperHTTP = hidden;
   for (const path of [...helperPaths].sort()) {
     const response = await fetch(base + path),
