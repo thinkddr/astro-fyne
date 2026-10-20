@@ -63,6 +63,7 @@ type AuthoredFontMatch = {
   faces: FaceObservation[];
   check?: boolean;
   checkError?: string;
+  authoredCSSQuery?: true;
 };
 type FontResponse = {
   url: string;
@@ -110,7 +111,10 @@ export async function captureSourceFonts(
   expectedFamily = "SourceNoto",
   aliases?: readonly [string, string],
   rejectedAliases: readonly string[] = [],
+  aliasesAreCSS = false,
 ) {
+  if (aliasesAreCSS && !aliases)
+    throw new Error("Authored CSS font queries require explicit aliases");
   assert.ok(Array.isArray(rejectedAliases) && rejectedAliases.length <= 16);
   const rejectedFamilyAliases = rejectedAliases.slice();
   assert.ok(rejectedFamilyAliases.every((alias) => typeof alias === "string"));
@@ -207,7 +211,12 @@ export async function captureSourceFonts(
     assert.equal((await page.goto(url))?.ok(), true);
     await page.waitForFunction(() => !!window.afySourceFonts?.ready());
     fonts = await page.evaluate(
-      async ({ family, aliases, rejected }): Promise<FontObservation> => {
+      async ({
+        family,
+        aliases,
+        rejected,
+        aliasesAreCSS,
+      }): Promise<FontObservation> => {
         const probes: FontObservation["probes"] = [],
           canonicalFaces = new Map<number, FontFace>();
         const observe = (face: FontFace) => ({
@@ -248,7 +257,7 @@ export async function captureSourceFonts(
         if (aliases)
           for (const alias of aliases)
             for (const weight of [400, 700]) {
-              const query = `${weight} 16px ${JSON.stringify(alias)}`,
+              const query = `${weight} 16px ${aliasesAreCSS ? alias : JSON.stringify(alias)}`,
                 canonical = canonicalFaces.get(weight);
               let loaded: FontFace[] = [],
                 failure: string | undefined;
@@ -272,6 +281,7 @@ export async function captureSourceFonts(
                 ...(failure === undefined ? {} : { error: failure }),
                 ...(canonical ? { canonical: observe(canonical) } : {}),
                 faces: loaded.map(observe),
+                ...(aliasesAreCSS ? { authoredCSSQuery: true as const } : {}),
               });
             }
         const unmatchedQueries: AuthoredFontMatch[] = [];
@@ -348,6 +358,7 @@ export async function captureSourceFonts(
         family: expectedFamily,
         aliases: familyAliases,
         rejected: rejectedFamilyAliases,
+        aliasesAreCSS,
       },
     );
     authoredFontMatches.push(...(fonts.authoredMatches ?? []));
@@ -837,6 +848,9 @@ export async function captureSourceFonts(
                   nativeFrameCanonical: true,
                   managedComputedStyleCanonical: true,
                   rawCSSFontFaceReferenceMatchingObserved: true,
+                  ...(aliasesAreCSS
+                    ? { authoredQueriesUseCSSSyntax: true }
+                    : {}),
                   authoredInlineAssignmentSourceBound: true,
                 },
               }

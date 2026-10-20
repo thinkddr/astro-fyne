@@ -127,12 +127,31 @@ the current state.
 
 `src/font-family-css.ts` also exposes `parseCSSFontFamily`,
 `createCSSFontFamilyResolver` and `validateCSSFontNamespace`. The parser accepts
-one quoted family or unescaped CSS identifier sequence. Unquoted ASCII CSS
-whitespace collapses between identifiers; quoted spaces are significant. An
+one quoted family or CSS identifier sequence, including CSS escapes. Unquoted ASCII CSS
+whitespace collapses between identifier tokens; quoted and escaped spaces are significant. An
 unquoted generic or CSS-wide keyword never resolves to a declared quoted alias.
 Keyword recognition is ASCII-insensitive, independently of Unicode family
 matching. See [CSS family syntax](https://www.w3.org/TR/css-fonts-4/#family-name-syntax)
 and [custom identifiers](https://www.w3.org/TR/css-values-4/#custom-idents).
+
+Simple escapes and one-to-six-digit hexadecimal escapes decode before family
+matching. A hexadecimal escape consumes one optional whitespace terminator;
+CRLF counts as one terminator. Quoted strings also accept escaped line
+continuations. These spellings select the declared `EscapedStraße` family:
+
+```css
+.first {
+  font-family: ESCAPEDSTRA\1e9e E;
+}
+.second {
+  font-family: "EscapedStra\df e";
+}
+```
+
+The original CSS bytes and authored inline strings remain in the archive. Native
+frames use a quoted decoded family, so CSS escapes never become literal native
+resource names. Escaped generic keywords retain their keyword meaning. Escaped
+CSS-wide keywords require a cascade adapter and produce a diagnostic.
 
 The resolver accepts a broader authored spelling when it also passes that
 admission filter. For example, `U+0345` is a combining mark that simple-folds to
@@ -146,7 +165,7 @@ normalization is applied. The exported `parseCSSFontFamily` keeps its existing
 bounded resource-parser contract; the resolver uses a separate parser path for
 matching. Unknown names still pass the existing resource-profile checks.
 
-Lists, CSS escapes, generic functions and unmatched names outside the bounded
+Lists, malformed escapes, generic functions and unmatched names outside the bounded
 resource grammar require additional adapters and produce diagnostics. Cleared inline
 families keep the existing empty-style behavior. Unknown valid names are left
 to the existing native style/resource checks. The older responsive emitter and

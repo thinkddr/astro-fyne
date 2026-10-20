@@ -11,28 +11,43 @@ import {
 import { captureSourceFonts } from "../capture/source-fonts-roundtrip.ts";
 
 const mode = process.argv[2],
+  escaped = process.argv[3] === "--css-escapes",
   matching = process.argv[3] === "--unicode-matching",
-  unicode = matching || process.argv[3] === "--unicode",
+  unicode = escaped || matching || process.argv[3] === "--unicode",
   root = resolve(import.meta.dir, ".."),
-  stem = matching
-    ? "source-fonts-unicode-matching"
-    : unicode
-      ? "source-fonts-unicode"
-      : "source-fonts",
-  family = matching ? "Ι".repeat(80) : unicode ? "SourceStraße" : "SourceNoto",
-  aliases: readonly [string, string] = matching
-    ? ["\u0345".repeat(80), "\u03b9".repeat(80)]
-    : ["SOURCESTRAẞE", "sourceſtraße"],
-  originalPackage = matching
-    ? "sourcefontsmatchingprobe"
-    : unicode
-      ? "sourcefontsunicodeprobe"
-      : "sourcefontsprobe",
-  returnedPackage = matching
-    ? "sourcefontsmatchingreturned"
-    : unicode
-      ? "sourcefontsunicodereturned"
-      : "sourcefontsreturned",
+  stem = escaped
+    ? "source-fonts-css-escapes"
+    : matching
+      ? "source-fonts-unicode-matching"
+      : unicode
+        ? "source-fonts-unicode"
+        : "source-fonts",
+  family = escaped
+    ? "EscapedStraße"
+    : matching
+      ? "Ι".repeat(80)
+      : unicode
+        ? "SourceStraße"
+        : "SourceNoto",
+  aliases: readonly [string, string] = escaped
+    ? ["ESCAPEDSTRA\\1e9e E", '"EscapedStra\\df e"']
+    : matching
+      ? ["\u0345".repeat(80), "\u03b9".repeat(80)]
+      : ["SOURCESTRAẞE", "sourceſtraße"],
+  originalPackage = escaped
+    ? "sourcefontsescapedprobe"
+    : matching
+      ? "sourcefontsmatchingprobe"
+      : unicode
+        ? "sourcefontsunicodeprobe"
+        : "sourcefontsprobe",
+  returnedPackage = escaped
+    ? "sourcefontsescapedreturned"
+    : matching
+      ? "sourcefontsmatchingreturned"
+      : unicode
+        ? "sourcefontsunicodereturned"
+        : "sourcefontsreturned",
   out = join(root, "artifacts", stem + "-roundtrip"),
   foreign = join(out, "foreign"),
   fixture = join(out, "fixture"),
@@ -42,7 +57,7 @@ const mode = process.argv[2],
 assert.ok(
   ["prepare", "verify"].includes(mode ?? "") &&
     (process.argv.length === 3 || (process.argv.length === 4 && unicode)),
-  "Usage: bun ci/source-fonts-roundtrip.ts prepare|verify [--unicode|--unicode-matching]",
+  "Usage: bun ci/source-fonts-roundtrip.ts prepare|verify [--unicode|--unicode-matching|--css-escapes]",
 );
 const phases: {
   name: string;
@@ -163,12 +178,13 @@ function sameMetadata(actual: CatalogueSpec, expected: CatalogueSpec) {
 }
 const unicodeCapture =
   'families:=map[string]string{};var visitFamilies func([]webui.SnapshotNode);visitFamilies=func(nodes []webui.SnapshotNode){for _,node:=range nodes{switch node.Node.ID{case "font-root","font-count","font-increment","font-seed":if node.Node.Style.FontFamily!=`"SourceStraße"`{t.Fatal("native family was not canonical",node.Node.ID,node.Node.Style.FontFamily)};families[node.Node.ID]=node.Node.Style.FontFamily};visitFamilies(node.Children)}};visitFamilies(snapshot.Roots);if len(families)!=4{t.Fatal("missing canonical native families",families)};archive,err:=widget.ExportJavascript();check(err);var frames []js.Frame;check(json.Unmarshal(archive.Frame,&frames));authored:="";var visitAuthored func([]js.Frame);visitAuthored=func(nodes []js.Frame){for _,node:=range nodes{if node.Attrs["id"]=="font-root"{authored=node.Attrs["data-authored-family"]};visitAuthored(node.Children)}};visitAuthored(frames);wantAuthored:="sourceſtraße";if count=="Native override:0"||count=="Native override:2"||count=="Original props:0"{wantAuthored="SOURCESTRAẞE"};if authored!=wantAuthored{t.Fatal("authored family probe did not follow the real click",authored,wantAuthored)};state["fontFamilies"]=families;state["authoredFamily"]=authored';
-const matchingCapture = matching
-  ? unicodeCapture
-      .replace('`"SourceStraße"`', JSON.stringify(JSON.stringify(family)))
-      .replace('"sourceſtraße"', JSON.stringify(aliases[1]))
-      .replace('"SOURCESTRAẞE"', JSON.stringify(aliases[0]))
-  : unicodeCapture;
+const matchingCapture =
+  matching || escaped
+    ? unicodeCapture
+        .replace('`"SourceStraße"`', JSON.stringify(JSON.stringify(family)))
+        .replace('"sourceſtraße"', JSON.stringify(aliases[1]))
+        .replace('"SOURCESTRAẞE"', JSON.stringify(aliases[0]))
+    : unicodeCapture;
 async function buildDriver(directory: string, phase: "prepare" | "verify") {
   const packageName = phase === "prepare" ? originalPackage : returnedPackage,
     constructor =
@@ -188,7 +204,7 @@ async function buildDriver(directory: string, phase: "prepare" | "verify") {
         ? '{ast,err:=NewAstroFonts(nil,nil);check(err);defer ast.Close();astRegistry,err:=NewAstroFontsCatalogue();check(err);if !reflect.DeepEqual(astRegistry.Spec().Resources,registry.Spec().Resources)||!reflect.DeepEqual(astRegistry.Spec().FontFaces,registry.Spec().FontFaces){t.Fatal("Astro source lost font bindings")};astWindow:=test.NewWindow(ast);defer astWindow.Close();astWindow.SetPadded(false);astWindow.Resize(fyne.NewSize(420,200));ast.SetViewport(420,200);check(ast.BindCanvas(astWindow.Canvas()));astWindow.Canvas().Capture();astInitial:=capture(ast);if astInitial["count"]!="Original props:0"{t.Fatal("Astro JSON props did not mount",astInitial)};point:=sourceClick(t,ast,astWindow);astAfter:=capture(ast);if astAfter["count"]!="Original props:1"||astAfter["seed"]!=astInitial["seed"]||len(calls)!=0{t.Fatal("Astro JSON source did not continue without host actions",astAfter)};for _,row:=range []struct{id,text string;weight int}{{"font-count","Original props:1",400},{"font-increment","Increment",700},{"font-seed",astAfter["seed"].(string),400}}{found:=false;for _,face:=range astRegistry.Spec().FontFaces{if face.Weight==row.weight&&sourceFontHash(sourcePainted(t,ast.Object(row.id),row.text).FontSource.Content())==face.Hash{found=true}};if !found{t.Fatal("Astro painter lost its licensed face",row.id)}};astData,err:=ExportAstroFontsCatalogue(ast);check(err);check(os.WriteFile(filepath.Join(output,"native-astro-source.catalogue.json"),astData,0644));observation,err:=json.MarshalIndent(map[string]any{"schema":1,"sourceKind":"astro-json-props","initial":astInitial,"after":astAfter,"physicalClick":map[string]float32{"x":point.X,"y":point.Y},"hostCalls":len(calls),"pixelPerfectVerified":false},"","  ");check(err);check(os.WriteFile(filepath.Join(output,"native-astro-source.json"),observation,0644))}'
         : "",
     checkFontRejections =
-      phase === "prepare" && unicode && !matching
+      phase === "prepare" && unicode && !matching && !escaped
         ? 'sourceFontRejections(t,output,actions,func()int{return len(calls)},[]sourceFontRejectionCase{{constructor:"NewRejectedFontsWithOptions",sourceFile:"RejectedFonts.tsx",manifestFile:"fonts.json",canonical:"SourceStraße",authored:"SOURCESTRASSE",class:"full-fold-only",catalogue:NewRejectedFontsCatalogue,construct:NewRejectedFontsWithOptions},{constructor:"NewRejectedAstralFontsWithOptions",sourceFile:"RejectedAstralFonts.tsx",manifestFile:"fonts-astral.json",canonical:"𐐀Source",authored:"𐐨Source",class:"changed astral",catalogue:NewRejectedAstralFontsCatalogue,construct:NewRejectedAstralFontsWithOptions}})'
         : "",
     source = (
@@ -315,7 +331,7 @@ if (mode === "prepare") {
   );
   await save(
     join(fixture, "Counter.tsx"),
-    matching
+    matching || escaped
       ? 'import {useState} from "preact/hooks";import "./counter.css";export default function Counter({label,observe}){const[count,setCount]=useState(0);const[seed]=useState(()=>String(Date.now())+":"+String(Math.random()));const family=count%2?' +
           JSON.stringify(aliases[1]) +
           ":" +
@@ -330,8 +346,8 @@ if (mode === "prepare") {
     join(fixture, "counter.css"),
     '@import "./tokens.css";\r\n#font-root{width:400px;height:180px;padding:8px;background:#ffffff;color:var(--source-ink);font-family:"SourceNoto";font-weight:400;font-style:normal;font-size:16px;line-height:24px;white-space:nowrap}#font-count,#font-seed{font-weight:400;font-style:normal;font-size:16px;line-height:24px}#font-increment{font-family:"SourceNoto";font-weight:700;font-style:normal;font-size:16px;line-height:24px;height:36px;width:140px}\r\n'.replaceAll(
       '"SourceNoto"',
-      JSON.stringify(unicode ? aliases[0] : family),
-    ),
+      escaped ? aliases[0] : JSON.stringify(unicode ? aliases[0] : family),
+    ) + (escaped ? "#font-seed{font-family:" + aliases[1] + "}\r\n" : ""),
   );
   await save(
     join(fixture, "external.css"),
@@ -394,7 +410,7 @@ if (mode === "prepare") {
     ["astro-fyne", "to-fyne", ...astroArgs, "--check"],
     foreign,
   );
-  if (unicode && !matching) {
+  if (unicode && !matching && !escaped) {
     await json(join(fixture, "fonts-astral.json"), {
       schema: 1,
       kind: "astro-fyne-font-manifest",
@@ -491,7 +507,7 @@ if (mode === "prepare") {
   assert.deepEqual(nativePrepared.calls, [[1]]);
   assert.equal(nativePrepared.replayCalls, 0);
   let fontRejections;
-  if (unicode && !matching) {
+  if (unicode && !matching && !escaped) {
     fontRejections = JSON.parse(
       await readFile(join(out, "native-font-rejection.json"), "utf8"),
     );
@@ -620,7 +636,7 @@ if (mode === "prepare") {
     join(web, "index.astro"),
     '---\nimport Harness from "./Harness.tsx";\n---\n<html lang="en"><head><meta charset="utf-8"/><title>Source fonts roundtrip</title></head><body><Harness client:only="preact"/></body></html>\n',
   );
-  if (unicode && !matching)
+  if (unicode && !matching && !escaped)
     await save(
       join(web, "font-matching-probe.astro"),
       '<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>Font name matching probe</title></head><body></body></html>\n',
@@ -646,6 +662,7 @@ if (mode === "prepare") {
     "src/catalogue.test.ts",
     "src/catalogue-cli.test.ts",
     "src/javascript-font-aliases.test.ts",
+    "src/javascript-font-escapes.test.ts",
     "src/font-family.ts",
     "src/font-family-data.ts",
     "src/font-family.test.ts",
@@ -764,7 +781,8 @@ if (mode === "prepare") {
     out,
     family,
     unicode ? aliases : undefined,
-    unicode && !matching ? ["SOURCESTRASSE"] : undefined,
+    unicode && !matching && !escaped ? ["SOURCESTRASSE"] : undefined,
+    escaped,
   );
   const browser = JSON.parse(await readFile(join(out, "browser.json"), "utf8")),
     spec = await parseCatalogue(JSON.stringify(browser.exportedCatalogue)),

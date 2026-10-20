@@ -127,8 +127,6 @@ test("single CSS font parsing diagnoses unsupported syntax instead of stripping 
     "Noto 'Sans'",
     '"Noto',
     "'Noto\"",
-    "Noto\\ Sans",
-    '"Noto\\20 Sans"',
     "Noto/*comment*/Sans",
     "var(--font)",
     "generic(fangsong)",
@@ -321,4 +319,196 @@ test("unquoted CSS keywords never resolve to declared quoted family aliases", ()
   expect(createCSSFontFamilyResolver(["default"])('"default"')).toBe(
     '"default"',
   );
+});
+
+test("single CSS families decode simple and one-to-six-digit escapes", () => {
+  for (const [raw, family] of [
+    [String.raw`Noto\ Sans`, "Noto Sans"],
+    [String.raw`Noto\20 Sans`, "Noto Sans"],
+    [String.raw`Noto\_Sans`, "Noto_Sans"],
+    [String.raw`Noto\-Sans`, "Noto-Sans"],
+    [String.raw`\000053ource`, "Source"],
+    [String.raw`Stra\df e`, "Straße"],
+    [String.raw`\41 B`, "AB"],
+    [String.raw`\41  B`, "A B"],
+    [String.raw`\000041B`, "AB"],
+    [String.raw`\0000410`, "A0"],
+    [String.raw`\41B`, "Л"],
+    [String.raw`\10400 Face`, "𐐀Face"],
+    [String.raw`\10400  Face`, "𐐀 Face"],
+    [String.raw`"Noto\20 Sans"`, "Noto Sans"],
+  ])
+    expect(parseCSSFontFamily(raw!).family).toBe(family!);
+});
+
+test("CSS hex escapes consume exactly one whitespace unit including CRLF", () => {
+  for (const terminator of [" ", "\t", "\n", "\r", "\f", "\r\n"]) {
+    expect(parseCSSFontFamily("\\41" + terminator + "B").family).toBe("AB");
+    expect(parseCSSFontFamily("\\41" + terminator + " B").family).toBe("A B");
+    expect(parseCSSFontFamily('"\\41' + terminator + 'B"').family).toBe("AB");
+  }
+  expect(parseCSSFontFamily("\\41\r\n\tB").family).toBe("A B");
+});
+
+test("escaped identifier spaces keep token boundaries and reserved-word meaning", () => {
+  for (const raw of [
+    String.raw`serif\ Something`,
+    String.raw`serif\20 Something`,
+  ])
+    expect(parseCSSFontFamily(raw)).toEqual({
+      family: "serif Something",
+      generic: false,
+      quoted: false,
+    });
+  expect(parseCSSFontFamily(String.raw`default\ Something`).family).toBe(
+    "default Something",
+  );
+  expect(parseCSSFontFamily(String.raw`Noto\  Sans`).family).toBe("Noto  Sans");
+  expect(parseCSSFontFamily(String.raw`Noto \31 23`).family).toBe("Noto 123");
+  expect(parseCSSFontFamily(String.raw`Noto -\31`).family).toBe("Noto -1");
+  for (const raw of [
+    "serif Something",
+    "default Something",
+    "Noto 123",
+    "Noto -1",
+  ])
+    expect(() => parseCSSFontFamily(raw)).toThrow();
+  expect(parseCSSFontFamily(String.raw`\73 erif`).generic).toBe(true);
+  expect(parseCSSFontFamily(String.raw`\17f erif`).generic).toBe(false);
+});
+
+test("quoted CSS families remove continuations and keep their public result shape", () => {
+  for (const newline of ["\n", "\r", "\f", "\r\n"])
+    for (const quote of ['"', "'"])
+      expect(
+        parseCSSFontFamily(quote + "No\\" + newline + "to" + quote),
+      ).toEqual({
+        family: "Noto",
+        generic: false,
+        quoted: true,
+      });
+  expect(parseCSSFontFamily(String.raw`"Noto\20  Sans"`)).toEqual({
+    family: "Noto  Sans",
+    generic: false,
+    quoted: true,
+  });
+  expect(parseCSSFontFamily(String.raw`\4e oto`)).toEqual({
+    family: "Noto",
+    generic: false,
+    quoted: false,
+  });
+});
+
+test("font resolvers serialize escaped known and unknown names before native lookup", () => {
+  const resolve = createCSSFontFamilyResolver([
+    "Straße",
+    "Noto Sans",
+    "Noto 123",
+    "é",
+    "İ",
+    "ﬀ",
+  ]);
+  for (const raw of [
+    String.raw`\Straße`,
+    String.raw`Stra\df e`,
+    String.raw`"Stra\df e"`,
+  ])
+    expect(resolve(raw)).toBe('"Straße"');
+  expect(resolve('"Stra\\\r\nße"')).toBe('"Straße"');
+  expect(resolve(String.raw`Noto\ Sans`)).toBe('"Noto Sans"');
+  expect(resolve(String.raw`Noto \31 23`)).toBe('"Noto 123"');
+  expect(resolve(String.raw`Unknown\20 Family`)).toBe('"Unknown Family"');
+  expect(resolve(String.raw`"Unknown\20 Family"`)).toBe('"Unknown Family"');
+  expect(resolve(String.raw`e\301`)).toBe(JSON.stringify("e\u0301"));
+  expect(resolve(String.raw`\e9`)).toBe('"é"');
+  for (const raw of [
+    String.raw`\53 TRASSE`,
+    String.raw`"str\61 sse"`,
+    String.raw`i\307`,
+    String.raw`\66 f`,
+  ])
+    expect(() => resolve(raw)).toThrow("full-fold-only");
+  for (const raw of ["Straße", " 'Straße' ", "Unknown   Family"])
+    expect(resolve(raw)).toBe(raw);
+});
+
+test("escaped generic and CSS-wide keywords cannot become named aliases", () => {
+  const empty = createCSSFontFamilyResolver([]);
+  for (const [raw, keyword] of [
+    [String.raw`\73 erif`, "serif"],
+    [String.raw`S\65 RIF`, "serif"],
+    [String.raw`sans\2d serif`, "sans-serif"],
+    [String.raw`\73 ystem-ui`, "system-ui"],
+  ]) {
+    expect(empty(raw!)).toBe(keyword!);
+    expect(() => createCSSFontFamilyResolver([keyword!])(raw!)).toThrow(
+      "unquoted keyword conflicts",
+    );
+  }
+  for (const [raw, keyword] of [
+    [String.raw`\69 nherit`, "inherit"],
+    [String.raw`in\69 tial`, "initial"],
+    [String.raw`un\73 et`, "unset"],
+    [String.raw`re\76 ert`, "revert"],
+    [String.raw`revert\2d layer`, "revert-layer"],
+    [String.raw`revert\2d rule`, "revert-rule"],
+  ]) {
+    expect(parseCSSFontFamily(raw!).generic).toBe(true);
+    expect(() => empty(raw!)).toThrow("escaped CSS-wide keywords");
+    expect(empty(" \t" + keyword + "\n")).toBe(" \t" + keyword + "\n");
+  }
+  expect(
+    createCSSFontFamilyResolver(["inherit"])(String.raw`"\69 nherit"`),
+  ).toBe('"inherit"');
+  expect(() => parseCSSFontFamily(String.raw`\64 efault`)).toThrow("default");
+});
+
+test("escaped CSS family names retain decoded scalar limits and combining order", () => {
+  expect(parseCSSFontFamily(String.raw`\10400 `.repeat(80)).family).toBe(
+    "𐐀".repeat(80),
+  );
+  expect(() => parseCSSFontFamily(String.raw`\10400 `.repeat(81))).toThrow();
+  const canonical = "ΐ".repeat(80),
+    leading = "Ι".repeat(80),
+    resolve = createCSSFontFamilyResolver([canonical, "Ι", leading, "𐐀Source"]),
+    expanded = String.raw`\345 \308 \301 `.repeat(80);
+  expect(() => resolve(expanded)).toThrow("full-fold-only");
+  expect(resolve(String.raw`\345`)).toBe('"Ι"');
+  expect(resolve(String.raw`\345 `.repeat(80))).toBe(JSON.stringify(leading));
+  expect(resolve(String.raw`\10400 Source`)).toBe('"𐐀Source"');
+  expect(resolve(String.raw`\10400 source`)).toBe('"𐐀Source"');
+  expect(() => resolve(String.raw`\10428 Source`)).toThrow("changed astral");
+  expect(() => parseCSSFontFamily(expanded)).toThrow();
+  expect(() => resolve(expanded + String.raw`\345`)).toThrow();
+  expect(() => resolve(String.raw`\345 \301 \308 `.repeat(80))).toThrow();
+  expect(() => createCSSFontFamilyResolver([])(String.raw`\345`)).toThrow();
+  expect(() =>
+    createCSSFontFamilyResolver([])(String.raw`\41 `.repeat(81)),
+  ).toThrow();
+});
+
+test("CSS family escapes diagnose malformed input and unsupported decoded names", () => {
+  const invalid = [
+    "Noto\\",
+    '"Noto\\',
+    '"Noto',
+    "Noto/*x*/Sans",
+    String.raw`Noto\,Sans`,
+    String.raw`"Noto\22 Sans"`,
+    String.raw`Noto\\Sans`,
+    String.raw`\0`,
+    String.raw`\d800`,
+    String.raw`\dfff`,
+    String.raw`\110000`,
+    String.raw`\31 Noto`,
+    "A\ud800",
+    "A\\\udfff",
+    '"A\ud800"',
+    String.raw`"Noto"\20 Sans`,
+    String.raw`var(\4e oto)`,
+    "'Noto', serif",
+  ];
+  for (const newline of ["\n", "\r", "\f", "\r\n"])
+    invalid.push("Noto\\" + newline + "Sans", '"Noto' + newline + 'Sans"');
+  for (const raw of invalid) expect(() => parseCSSFontFamily(raw)).toThrow();
 });

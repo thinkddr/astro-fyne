@@ -346,6 +346,7 @@ if (mode === "prepare") {
     "src/font-family-css.ts",
     "src/font-family-css.test.ts",
     "src/javascript-font-aliases.test.ts",
+    "src/javascript-font-escapes.test.ts",
     "src/catalogue.test.ts",
     "src/javascript-runtime.js",
     "src/javascript-dom.js",
