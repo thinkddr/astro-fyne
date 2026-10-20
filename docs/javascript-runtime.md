@@ -137,6 +137,8 @@ Export returns detached props, metadata, events, journal records and frame nodes
 Editing an exported checkpoint or the caller's restored input cannot change a
 running instance. Save the returned archive before editing it to create a separate
 conversion input; mounting still checks its code, CSS digests and replay contract.
+The native constructor copies its validated input before calling trusted resource
+binders or application actions, including event values and the animation timeline.
 Locale/time-zone behavior, dynamic code that bypasses the recorded globals and other
 nondeterministic services require replay adapters; a changed frame is rejected on restore.
 
