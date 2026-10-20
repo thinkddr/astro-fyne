@@ -472,7 +472,7 @@ export function createDocument(resolveFontFamily) {
     const frame = {
       uid: node.uid,
       tag: node.localName,
-      attrs: node.attrs,
+      attrs: { ...node.attrs },
       style: resolved ? resolved.style : { ...node.style },
       ...(resolved ? { css: true } : {}),
       value: ["input", "textarea", "button"].includes(node.localName)

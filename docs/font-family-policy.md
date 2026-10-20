@@ -121,6 +121,9 @@ intact. Canonical names are embedded in the compiled factory and therefore
 affect its code hash. Factories that include Unicode comparison data also retain
 its complete Unicode-3.0 license notice, hash and protected source path. A warm
 checkpoint carries that resolver back to Fyne without replaying effects.
+Each exported frame owns its attribute maps. Later DOM updates or edits to another
+snapshot preserve the saved checkpoint, including when a font diagnostic rejects
+the current state.
 
 `src/font-family-css.ts` also exposes `parseCSSFontFamily`,
 `createCSSFontFamilyResolver` and `validateCSSFontNamespace`. The parser accepts

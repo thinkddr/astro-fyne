@@ -56,6 +56,36 @@ function mount(archive: JavascriptArchive, effects: unknown[][]) {
   return api;
 }
 
+test("snapshots own nested attributes across live updates and caller edits", () => {
+  const dom = createDocument(),
+    parent = dom.document.createElement("div"),
+    child = dom.document.createElement("p");
+  parent.setAttribute("data-state", "initial");
+  child.setAttribute("data-label", "saved");
+  child.setAttribute("title", "original");
+  parent.appendChild(child);
+  dom.root.appendChild(parent);
+  const before = dom.snapshot(),
+    serialized = JSON.stringify(before);
+  expect(before[0].attrs).not.toBe(parent.attrs);
+  expect(before[0].children[0].attrs).not.toBe(child.attrs);
+  parent.setAttribute("data-state", "updated");
+  child.setAttribute("data-label", "changed");
+  child.removeAttribute("title");
+  expect(JSON.stringify(before)).toBe(serialized);
+  before[0].attrs["data-state"] = "caller";
+  before[0].children[0].attrs["data-label"] = "caller";
+  delete before[0].children[0].attrs.title;
+  expect(parent.getAttribute("data-state")).toBe("updated");
+  expect(child.getAttribute("data-label")).toBe("changed");
+  const after = dom.snapshot();
+  expect(after[0].attrs["data-state"]).toBe("updated");
+  expect(after[0].children[0].attrs["data-label"]).toBe("changed");
+  expect(Object.hasOwn(after[0].children[0].attrs, "title")).toBe(false);
+  expect(after[0].attrs).not.toBe(before[0].attrs);
+  expect(after[0].children[0].attrs).not.toBe(before[0].children[0].attrs);
+});
+
 test("source font bundles resolve dynamic CSS aliases and restore the same warm checkpoint", async () => {
   const root = await mkdtemp(join(tmpdir(), "afy-font-alias-runtime-"));
   try {
@@ -433,12 +463,14 @@ test("bundled full-fold-only font aliases diagnose initial and changed snapshots
         api = mount(archive, effects);
       expect(archive.props).toEqual({ canonical, family });
       const initial = api.snapshot()[0]!,
-        checkpoint = api.export();
+        checkpoint = api.export(),
+        serialized = JSON.stringify(checkpoint);
       expect(initial.style?.fontFamily).toBe(canonical!);
       api.dispatch({ node: initial.uid, type: "click" });
       expect(effects).toEqual([[1]]);
       expect(() => api.snapshot()).toThrow("full-fold-only");
       expect(() => api.export()).toThrow("full-fold-only");
+      expect(JSON.stringify(checkpoint)).toBe(serialized);
       const replayEffects: unknown[][] = [],
         restored = mount(checkpoint, replayEffects);
       expect(restored.export()).toEqual(checkpoint);
