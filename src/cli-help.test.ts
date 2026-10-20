@@ -49,6 +49,7 @@ const helpCases: { args: string[]; contains: string }[] = [
   { args: ["help", "to-fyne"], contains: "alias: to-fyne" },
   { args: ["reverse", "--help"], contains: "--public-dir <directory>" },
   { args: ["to-web", "-h"], contains: "--actions-module <path>" },
+  { args: ["to-web", "missing.json", "--page", "--help"], contains: "--page" },
   { args: ["help", "to-web"], contains: "alias: to-web" },
   {
     args: ["generate", "--config", "missing.json", "--help"],

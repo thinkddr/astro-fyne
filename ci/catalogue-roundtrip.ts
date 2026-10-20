@@ -339,6 +339,8 @@ if (mode === "prepare") {
     "src/catalogue-types.ts",
     "src/catalogue-web.ts",
     "src/catalogue-cli.ts",
+    "src/web-page.ts",
+    "src/web-page.test.ts",
     "src/fonts.ts",
     "src/fonts.test.ts",
     "src/font-family.ts",

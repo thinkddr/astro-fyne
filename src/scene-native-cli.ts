@@ -9,6 +9,8 @@ import type { FontFace } from "./ir.ts";
 import { readCLIJSON, usageError } from "./cli-help.ts";
 import { emitNativeScene } from "./scene-native.ts";
 
+import { requireWebPage } from "./web-page.ts";
+
 export interface NativeSceneCLIOptions {
   scene: string;
   out: string;
@@ -16,10 +18,12 @@ export interface NativeSceneCLIOptions {
   packageName?: string;
   fonts?: string;
   check?: boolean;
+  page?: boolean;
 }
 export async function generateNativeScene(
   options: NativeSceneCLIOptions,
 ): Promise<void> {
+  requireWebPage("native", options.page);
   const scenePath = resolve(options.scene);
   const output = resolve(options.out);
   const fontConfig = options.fonts ? resolve(options.fonts) : undefined;
@@ -97,6 +101,7 @@ export async function nativeSceneMain(
     if (seen.has(flag))
       throw usageError(`Duplicate option: ${flag}`, "generate");
     seen.add(flag);
+    if (flag === "--page") requireWebPage("native", true);
     if (flag === "--check") {
       options.check = true;
       continue;

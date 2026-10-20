@@ -18,6 +18,7 @@
     "ci/program-roundtrip.ts",
     "ci/javascript-roundtrip.ts",
     "ci/javascript-pointer-roundtrip.ts",
+    "ci/cli-page-roundtrip.ts",
     "ci/css-roundtrip.ts",
     "ci/css-has-roundtrip.ts",
     "ci/css-height-roundtrip.ts",
