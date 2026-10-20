@@ -16,11 +16,11 @@ import (
 const FontResourceFactoryHeader = "/* astro-fyne font resources:1 */\n"
 
 type fontResourceRequest struct {
-	marked bool
+	marked       bool
 	initializing bool
-	attempted bool
-	backend webui.Backend
-	err error
+	attempted    bool
+	backend      webui.Backend
+	err          error
 }
 
 func nilFontBinding(value any) bool {
