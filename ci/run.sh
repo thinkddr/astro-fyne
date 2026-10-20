@@ -78,6 +78,7 @@ bun ci/css-roundtrip.ts prepare
 bun ci/css-has-roundtrip.ts prepare
 bun ci/css-height-roundtrip.ts prepare
 bun ci/catalogue-roundtrip.ts prepare
+# Keep ASCII transport, accepted Unicode aliases and leading-mark aliases isolated.
 bun ci/source-fonts-roundtrip.ts prepare
 bun ci/source-fonts-roundtrip.ts prepare --unicode
 bun ci/source-fonts-roundtrip.ts prepare --unicode-matching

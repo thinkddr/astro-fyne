@@ -61,6 +61,8 @@ type AuthoredFontMatch = {
   error?: string;
   canonical?: FaceObservation;
   faces: FaceObservation[];
+  check?: boolean;
+  checkError?: string;
 };
 type FontResponse = {
   url: string;
@@ -98,6 +100,7 @@ type FontObservation = {
   }[];
   astroIslands: number;
   authoredMatches?: AuthoredFontMatch[];
+  unmatchedQueries?: AuthoredFontMatch[];
 };
 
 /** Capture the source-font CLI checkpoint in the generated Astro island. */
@@ -106,14 +109,19 @@ export async function captureSourceFonts(
   out: string,
   expectedFamily = "SourceNoto",
   aliases?: readonly [string, string],
+  rejectedAliases: readonly string[] = [],
 ) {
+  assert.ok(Array.isArray(rejectedAliases) && rejectedAliases.length <= 16);
+  const rejectedFamilyAliases = rejectedAliases.slice();
+  assert.ok(rejectedFamilyAliases.every((alias) => typeof alias === "string"));
   const familyAliases = aliases
     ? ([aliases[0], aliases[1]] as const)
     : expectedFamily === "SourceStraße"
-      ? (["SOURCESTRASSE", "sourceſtraße"] as const)
+      ? (["SOURCESTRAẞE", "sourceſtraße"] as const)
       : undefined;
   let browser: Browser | undefined;
   let fonts: FontObservation | undefined;
+  let astralFontProbe: unknown;
   const errors: string[] = [],
     fontResponses: Promise<FontResponse>[] = [],
     frames: Frame[] = [],
@@ -199,7 +207,7 @@ export async function captureSourceFonts(
     assert.equal((await page.goto(url))?.ok(), true);
     await page.waitForFunction(() => !!window.afySourceFonts?.ready());
     fonts = await page.evaluate(
-      async ({ family, aliases }): Promise<FontObservation> => {
+      async ({ family, aliases, rejected }): Promise<FontObservation> => {
         const probes: FontObservation["probes"] = [],
           canonicalFaces = new Map<number, FontFace>();
         const observe = (face: FontFace) => ({
@@ -266,6 +274,45 @@ export async function captureSourceFonts(
                 faces: loaded.map(observe),
               });
             }
+        const unmatchedQueries: AuthoredFontMatch[] = [];
+        for (const alias of rejected)
+          for (const weight of [400, 700]) {
+            const query = `${weight} 16px ${JSON.stringify(alias)}`,
+              canonical = canonicalFaces.get(weight),
+              row: AuthoredFontMatch = {
+                alias,
+                weight,
+                query,
+                canonicalQuery: `${weight} 16px ${JSON.stringify(family)}`,
+                loaded: 0,
+                referenceEquality: false,
+                ...(canonical ? { canonical: observe(canonical) } : {}),
+                faces: [],
+              };
+            try {
+              const loaded = await document.fonts.load(
+                query,
+                "012IncrementNative override",
+              );
+              row.loaded = loaded.length;
+              row.referenceEquality =
+                loaded.length === 1 && loaded[0] === canonical;
+              row.faces = loaded.map(observe);
+            } catch (error) {
+              row.error =
+                error instanceof Error ? error.message : String(error);
+            }
+            try {
+              row.check = document.fonts.check(
+                query,
+                "012IncrementNative override",
+              );
+            } catch (error) {
+              row.checkError =
+                error instanceof Error ? error.message : String(error);
+            }
+            unmatchedQueries.push(row);
+          }
         const allFaces = [...document.fonts].map((face) => ({
           family: face.family,
           status: face.status,
@@ -283,6 +330,7 @@ export async function captureSourceFonts(
         return {
           characterSet: document.characterSet,
           ...(aliases ? { authoredMatches } : {}),
+          ...(rejected.length ? { unmatchedQueries } : {}),
           probes,
           allFaces,
           faces: allFaces
@@ -296,7 +344,11 @@ export async function captureSourceFonts(
           astroIslands: document.querySelectorAll("astro-island").length,
         };
       },
-      { family: expectedFamily, aliases: familyAliases },
+      {
+        family: expectedFamily,
+        aliases: familyAliases,
+        rejected: rejectedFamilyAliases,
+      },
     );
     authoredFontMatches.push(...(fonts.authoredMatches ?? []));
     assert.equal(fonts.characterSet.toLowerCase(), "utf-8");
@@ -315,6 +367,27 @@ export async function captureSourceFonts(
         assert.equal(match.canonical.status, "loaded");
         assert.equal(match.canonical.weight, String(match.weight));
         assert.equal(match.canonical.style, "normal");
+      }
+    }
+    if (rejectedFamilyAliases.length) {
+      assert.equal(
+        fonts.unmatchedQueries?.length,
+        rejectedFamilyAliases.length * 2,
+      );
+      for (const match of fonts.unmatchedQueries!) {
+        assert.equal(match.error, undefined);
+        assert.equal(match.checkError, undefined);
+        assert.equal(typeof match.check, "boolean");
+        assert.equal(match.loaded, 0);
+        assert.equal(match.referenceEquality, false);
+        assert.deepEqual(match.faces, []);
+        assert.ok(match.canonical);
+        assert.equal(
+          match.canonical.family.replaceAll('"', ""),
+          expectedFamily,
+        );
+        assert.equal(match.canonical.status, "loaded");
+        assert.equal(match.canonical.weight, String(match.weight));
       }
     }
     assert.equal(fonts.astroIslands, 1);
@@ -570,6 +643,155 @@ export async function captureSourceFonts(
       ),
     );
     assert.deepEqual(errors, []);
+    if (rejectedFamilyAliases.length) {
+      const regular = spec.fontFaces.find(
+          (face) =>
+            face.family === expectedFamily &&
+            face.weight === 400 &&
+            face.style === "normal",
+        )!,
+        resource = spec.resources.find(
+          (item) => item.name === regular.resource,
+        )!,
+        probePage = await browser.newPage();
+      try {
+        assert.equal(
+          (
+            await probePage.goto(new URL("font-matching-probe/", url).href)
+          )?.ok(),
+          true,
+        );
+        const result = await probePage.evaluate(
+          async ({ content }) => {
+            const canonical = "𐐀Source",
+              changed = "𐐨Source",
+              observation = {
+                characterSet: document.characterSet,
+                secureContext: isSecureContext,
+                canonical,
+                changed,
+                initialFaces: document.fonts.size,
+                resourceHash: "",
+                bytes: 0,
+                registered: false,
+                removed: false,
+                remainingFaces: document.fonts.size,
+                constructed: null as FaceObservation | null,
+                queries: [] as {
+                  family: string;
+                  query: string;
+                  loaded: number;
+                  referenceEquality: boolean;
+                  faces: FaceObservation[];
+                  check: boolean;
+                  error?: string;
+                }[],
+                error: null as string | null,
+                glyphFallbackObserved: false,
+                pixelPerfectVerified: false,
+              };
+            let owned: FontFace | undefined;
+            const observe = (face: FontFace): FaceObservation => ({
+              family: face.family,
+              status: face.status,
+              weight: face.weight,
+              style: face.style,
+            });
+            try {
+              const bytes = Uint8Array.from(atob(content), (value) =>
+                  value.charCodeAt(0),
+                ),
+                digest = await crypto.subtle.digest("SHA-256", bytes);
+              observation.bytes = bytes.byteLength;
+              observation.resourceHash = [...new Uint8Array(digest)]
+                .map((value) => value.toString(16).padStart(2, "0"))
+                .join("");
+              owned = new FontFace(canonical, bytes, {
+                weight: "400",
+                style: "normal",
+              });
+              await owned.load();
+              document.fonts.add(owned);
+              observation.registered = document.fonts.has(owned);
+              observation.constructed = observe(owned);
+              for (const family of [canonical, changed]) {
+                const query = `400 16px ${JSON.stringify(family)}`;
+                try {
+                  const loaded = await document.fonts.load(
+                    query,
+                    "012IncrementNative override",
+                  );
+                  observation.queries.push({
+                    family,
+                    query,
+                    loaded: loaded.length,
+                    referenceEquality:
+                      loaded.length === 1 && loaded[0] === owned,
+                    faces: loaded.map(observe),
+                    check: document.fonts.check(
+                      query,
+                      "012IncrementNative override",
+                    ),
+                  });
+                } catch (error) {
+                  observation.queries.push({
+                    family,
+                    query,
+                    loaded: 0,
+                    referenceEquality: false,
+                    faces: [],
+                    check: false,
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  });
+                }
+              }
+            } catch (error) {
+              observation.error =
+                error instanceof Error ? error.message : String(error);
+            } finally {
+              if (owned) observation.removed = document.fonts.delete(owned);
+              observation.remainingFaces = document.fonts.size;
+            }
+            return observation;
+          },
+          { content: resource.content },
+        );
+        astralFontProbe = result;
+        assert.equal(result.error, null);
+        assert.equal(result.characterSet.toLowerCase(), "utf-8");
+        assert.equal(result.secureContext, true);
+        assert.equal(result.initialFaces, 0);
+        assert.equal(result.resourceHash, regular.hash);
+        assert.equal(
+          result.bytes,
+          Buffer.from(resource.content, "base64").length,
+        );
+        assert.equal(result.registered, true);
+        assert.equal(result.removed, true);
+        assert.equal(result.remainingFaces, 0);
+        assert.ok(result.constructed);
+        assert.equal(
+          result.constructed.family.replaceAll('"', ""),
+          result.canonical,
+        );
+        assert.equal(result.constructed.status, "loaded");
+        assert.equal(result.constructed.weight, "400");
+        assert.equal(result.constructed.style, "normal");
+        assert.equal(result.queries.length, 2);
+        for (const row of result.queries) assert.equal(row.error, undefined);
+        assert.equal(result.queries[0]!.family, result.canonical);
+        assert.equal(result.queries[0]!.loaded, 1);
+        assert.equal(result.queries[0]!.referenceEquality, true);
+        assert.deepEqual(result.queries[0]!.faces, [result.constructed]);
+        assert.equal(result.queries[1]!.family, result.changed);
+        assert.equal(result.queries[1]!.loaded, 0);
+        assert.equal(result.queries[1]!.referenceEquality, false);
+        assert.deepEqual(result.queries[1]!.faces, []);
+      } finally {
+        await probePage.close();
+      }
+    }
     const verified = await verifyBrowserProvenance(browser, provenance),
       afterText = JSON.stringify(verified, null, 2) + "\n";
     await writeFile(join(out, "browser-provenance-after.json"), afterText);
@@ -597,6 +819,7 @@ export async function captureSourceFonts(
           },
           frames,
           fonts,
+          ...(rejectedFamilyAliases.length ? { astralFontProbe } : {}),
           expectedFonts,
           fontResponses: responses,
           initialArchive: initial.archive,
@@ -638,6 +861,9 @@ export async function captureSourceFonts(
           errors,
           frames,
           fonts: fonts ?? null,
+          ...(rejectedFamilyAliases.length
+            ? { astralFontProbe: astralFontProbe ?? null }
+            : {}),
           fontResponses: await Promise.all(fontResponses),
           ...(familyAliases ? { authoredFontMatches } : {}),
           pixelPerfectVerified: false,

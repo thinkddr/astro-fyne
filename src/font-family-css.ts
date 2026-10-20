@@ -3,6 +3,7 @@ import {
   cssFontFamilyKey,
   cssFontFamilyTextKey,
   simpleFontFamilyKey,
+  simpleFontFamilyTextKey,
   validFontResourceFamily,
 } from "./font-family.ts";
 
@@ -199,6 +200,22 @@ export function createCSSFontFamilyResolver(
       checkedFamily(parsed.family);
       return raw;
     }
+    if (
+      simpleFontFamilyTextKey(parsed.family) !==
+      simpleFontFamilyTextKey(canonical)
+    )
+      fail("full-fold-only aliases need a browser font matching adapter.");
+    const authoredScalars = [...parsed.family],
+      canonicalScalars = [...canonical];
+    if (
+      authoredScalars.some(
+        (character, index) =>
+          character !== canonicalScalars[index] &&
+          (character.codePointAt(0)! > 0xffff ||
+            canonicalScalars[index]!.codePointAt(0)! > 0xffff),
+      )
+    )
+      fail("changed astral aliases need a browser font matching adapter.");
     const exact =
       parsed.family === canonical &&
       (parsed.quoted || raw.replace(cssOuterWhitespace, "") === parsed.family);

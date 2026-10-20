@@ -62,11 +62,11 @@ test("source font bundles resolve dynamic CSS aliases and restore the same warm 
     const source = join(root, "Counter.tsx"),
       css = join(root, "counter.css");
     const raw =
-      '\ufeff/* exact aliases */\r\n.probe{font-family:"STRASSE";font-size:16px;line-height:20px}\r\n';
+      '\ufeff/* exact aliases */\r\n.probe{font-family:"SOURCESTRAẞE";font-size:16px;line-height:20px}\r\n';
     await writeFile(css, raw);
     await writeFile(
       source,
-      'import{useState}from"preact/hooks";import"./counter.css";export default function Counter({observe}){const[count,setCount]=useState(0);const family=count%2?"i\\u0307":"STRASSE";return <button class="probe" id="counter" data-authored-family={family} style={{fontFamily:family}} onClick={()=>{setCount(count+1);observe(count+1)}}>{count}</button>}',
+      'import{useState}from"preact/hooks";import"./counter.css";export default function Counter({observe}){const[count,setCount]=useState(0);const family=count%2?"sourceſtraße":"SOURCESTRAẞE";return <button class="probe" id="counter" data-authored-family={family} style={{fontFamily:family}} onClick={()=>{setCount(count+1);observe(count+1)}}>{count}</button>}',
     );
     const prepared = await prepareJavascriptBundle(
       source,
@@ -74,7 +74,7 @@ test("source font bundles resolve dynamic CSS aliases and restore the same warm 
       {},
       ["observe"],
       [],
-      ["Straße", "İ"],
+      ["SourceStraße"],
     );
     const archive = prepared.archive,
       effects: unknown[][] = [],
@@ -105,21 +105,21 @@ test("source font bundles resolve dynamic CSS aliases and restore the same warm 
       ),
     ).toBe(true);
     const initial = api.snapshot()[0]!;
-    expect(initial.attrs?.["data-authored-family"]).toBe("STRASSE");
-    expect(initial.style?.fontFamily).toBe('"Straße"');
+    expect(initial.attrs?.["data-authored-family"]).toBe("SOURCESTRAẞE");
+    expect(initial.style?.fontFamily).toBe('"SourceStraße"');
     api.dispatch({ node: initial.uid, type: "click" });
     const checkpoint = api.export();
     expect(checkpoint.frame?.[0]?.attrs?.["data-authored-family"]).toBe(
-      "i\u0307",
+      "sourceſtraße",
     );
-    expect(checkpoint.frame?.[0]?.style?.fontFamily).toBe('"İ"');
+    expect(checkpoint.frame?.[0]?.style?.fontFamily).toBe('"SourceStraße"');
     expect(effects).toEqual([[1]]);
     const replayEffects: unknown[][] = [],
       restored = mount(checkpoint, replayEffects);
     expect(restored.export()).toEqual(checkpoint);
     expect(replayEffects).toEqual([]);
     restored.dispatch({ node: initial.uid, type: "click" });
-    expect(restored.snapshot()[0]?.style?.fontFamily).toBe('"Straße"');
+    expect(restored.snapshot()[0]?.style?.fontFamily).toBe('"SourceStraße"');
     expect(replayEffects).toEqual([[2]]);
     expect(restored.export().stylesheets).toEqual(archive.stylesheets);
     restored.dispose();
@@ -132,38 +132,42 @@ test("source font bundles resolve dynamic CSS aliases and restore the same warm 
 test("font alias snapshots preserve authored inline values and inherited CSS", async () => {
   const root = await mkdtemp(join(tmpdir(), "afy-font-alias-cascade-"));
   try {
-    const dom = createDocument(createCSSFontFamilyResolver(["Straße", "İ"]));
+    const dom = createDocument(
+      createCSSFontFamilyResolver(["SourceStraße", "Σ"]),
+    );
     const parent = dom.document.createElement("div"),
       child = dom.document.createElement("p");
-    parent.style.fontFamily = "STRASSE";
-    child.style.fontFamily = "i\u0307";
+    parent.style.fontFamily = "SOURCESTRAẞE";
+    child.style.fontFamily = "ς";
     parent.appendChild(child);
     dom.root.appendChild(parent);
-    expect(dom.snapshot()[0].style.fontFamily).toBe('"Straße"');
-    expect(dom.snapshot()[0].children[0].style.fontFamily).toBe('"İ"');
-    expect(parent.style.fontFamily).toBe("STRASSE");
-    expect(child.style.fontFamily).toBe("i\u0307");
-    expect(dom.snapshot()[0].style.fontFamily).toBe('"Straße"');
-    child.style.fontFamily = "Straße";
-    expect(dom.snapshot()[0].children[0].style.fontFamily).toBe("Straße");
+    expect(dom.snapshot()[0].style.fontFamily).toBe('"SourceStraße"');
+    expect(dom.snapshot()[0].children[0].style.fontFamily).toBe('"Σ"');
+    expect(parent.style.fontFamily).toBe("SOURCESTRAẞE");
+    expect(child.style.fontFamily).toBe("ς");
+    expect(dom.snapshot()[0].style.fontFamily).toBe('"SourceStraße"');
+    child.style.fontFamily = "SourceStraße";
+    expect(dom.snapshot()[0].children[0].style.fontFamily).toBe("SourceStraße");
     child.style.fontFamily = "";
     expect(() => dom.snapshot()).not.toThrow();
     const stylesheet = join(root, "style.css");
     await writeFile(
       stylesheet,
-      ".parent{font-family:STRASSE}.child{font-size:16px}",
+      ".parent{font-family:SOURCESTRAẞE}.child{font-size:16px}",
     );
     parent.className = "parent";
     child.className = "child";
     dom.installCSS(await compileJavascriptCSS(stylesheet, () => {}));
-    expect(dom.snapshot()[0].children[0].style.fontFamily).toBe('"Straße"');
-    parent.style.fontFamily = "i\u0307";
+    expect(dom.snapshot()[0].children[0].style.fontFamily).toBe(
+      '"SourceStraße"',
+    );
+    parent.style.fontFamily = "ς";
     const inherited = dom.snapshot()[0];
-    expect(inherited.style.fontFamily).toBe('"İ"');
-    expect(inherited.children[0].style.fontFamily).toBe('"İ"');
-    expect(parent.style.fontFamily).toBe("i\u0307");
+    expect(inherited.style.fontFamily).toBe('"Σ"');
+    expect(inherited.children[0].style.fontFamily).toBe('"Σ"');
+    expect(parent.style.fontFamily).toBe("ς");
     expect(child.style.fontFamily).toBe("");
-    expect(dom.snapshot()[0].children[0].style.fontFamily).toBe('"İ"');
+    expect(dom.snapshot()[0].children[0].style.fontFamily).toBe('"Σ"');
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -175,7 +179,7 @@ test("source font bundles can clear and restore an inline family across warm rep
     const source = join(root, "Clear.tsx");
     await writeFile(
       source,
-      'import{useState}from"preact/hooks";export default function Clear(){const[count,setCount]=useState(0);return <button style={{fontFamily:count%2?undefined:"STRASSE"}} onClick={()=>setCount(count+1)}>{count}</button>}',
+      'import{useState}from"preact/hooks";export default function Clear(){const[count,setCount]=useState(0);return <button style={{fontFamily:count%2?undefined:"STRAẞE"}} onClick={()=>setCount(count+1)}>{count}</button>}',
     );
     const archive = await bundleJavascript(
         source,
@@ -208,7 +212,7 @@ test("font bundle options are snapshotted and bind canonical names to the code h
     const source = join(root, "Page.tsx");
     await writeFile(
       source,
-      'export default function Page(){return <p style={{fontFamily:"STRASSE"}}>Alias</p>}',
+      'export default function Page(){return <p style={{fontFamily:"STRAẞE"}}>Alias</p>}',
     );
     const families = ["Straße"],
       pending = prepareJavascriptBundle(
@@ -236,7 +240,7 @@ test("font bundle options are snapshotted and bind canonical names to the code h
       {},
       [],
       [],
-      ["STRASSE"],
+      ["STRAẞE"],
     );
     expect(first.archive.codeHash).not.toBe(other.codeHash);
     expect(first.archive.sources).toEqual(other.sources);
@@ -244,7 +248,7 @@ test("font bundle options are snapshotted and bind canonical names to the code h
     const a = mount(first.archive, []),
       b = mount(other, []);
     expect(a.snapshot()[0]?.style?.fontFamily).toBe('"Straße"');
-    expect(b.snapshot()[0]?.style?.fontFamily).toBe("STRASSE");
+    expect(b.snapshot()[0]?.style?.fontFamily).toBe("STRAẞE");
     a.dispose();
     b.dispose();
     await expect(
@@ -350,8 +354,8 @@ test("font bundles restore long and mark-leading CSS names through a canonical n
   const root = await mkdtemp(join(tmpdir(), "afy-font-matching-text-"));
   try {
     const source = join(root, "Matching.tsx"),
-      canonical = "ΐ".repeat(80),
-      aliases = ["\u0345\u0308\u0301".repeat(80), "ι\u0308\u0301".repeat(80)];
+      canonical = "Ι".repeat(80),
+      aliases = ["\u0345".repeat(80), "ι".repeat(80)];
     await writeFile(
       source,
       `import{useState}from"preact/hooks";const aliases=${JSON.stringify(aliases)};export default function Matching({observe}){const[count,setCount]=useState(0);const family=aliases[count%2];return <button data-authored-family={family} style={{fontFamily:family}} onClick={()=>{setCount(count+1);observe(count+1)}}>{count}</button>}`,
@@ -392,6 +396,140 @@ test("font bundles restore long and mark-leading CSS names through a canonical n
     expect(replayEffects).toEqual([[2]]);
     restored.dispose();
     api.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("bundled full-fold-only font aliases diagnose initial and changed snapshots", async () => {
+  const root = await mkdtemp(join(tmpdir(), "afy-font-alias-rejection-"));
+  try {
+    const source = join(root, "Rejected.tsx"),
+      styledSource = join(root, "Styled.tsx"),
+      css = join(root, "unsupported.css");
+    await writeFile(
+      source,
+      'import{useState}from"preact/hooks";export default function Rejected({canonical,family,observe}){const[count,setCount]=useState(0);return <button data-authored-family={count?family:canonical} style={{fontFamily:count?family:canonical}} onClick={()=>{setCount(count+1);observe(count+1)}}>{count}</button>}',
+    );
+    await writeFile(
+      styledSource,
+      'import "./unsupported.css";export default function Styled(){return <div class="probe"><p>Inherited</p></div>}',
+    );
+    for (const [canonical, family] of [
+      ["Straße", "STRASSE"],
+      ["İ", "i\u0307"],
+      ["ﬀ", "ff"],
+      ["ΐ".repeat(80), "\u0345\u0308\u0301".repeat(80)],
+    ]) {
+      const archive = await bundleJavascript(
+          source,
+          "default",
+          { canonical, family },
+          ["observe"],
+          [],
+          [canonical!],
+        ),
+        effects: unknown[][] = [],
+        api = mount(archive, effects);
+      expect(archive.props).toEqual({ canonical, family });
+      const initial = api.snapshot()[0]!,
+        checkpoint = api.export();
+      expect(initial.style?.fontFamily).toBe(canonical!);
+      api.dispatch({ node: initial.uid, type: "click" });
+      expect(effects).toEqual([[1]]);
+      expect(() => api.snapshot()).toThrow("full-fold-only");
+      expect(() => api.export()).toThrow("full-fold-only");
+      const replayEffects: unknown[][] = [],
+        restored = mount(checkpoint, replayEffects);
+      expect(restored.export()).toEqual(checkpoint);
+      expect(replayEffects).toEqual([]);
+      restored.dispose();
+      api.dispose();
+      const rejected = await bundleJavascript(
+        source,
+        "default",
+        { canonical: family, family },
+        ["observe"],
+        [],
+        [canonical!],
+      );
+      expect(rejected.props).toEqual({ canonical: family, family });
+      expect(() => {
+        const instance = mount(rejected, []);
+        try {
+          instance.snapshot();
+        } finally {
+          instance.dispose();
+        }
+      }).toThrow("full-fold-only");
+      const rawCSS =
+        "\ufeff.probe{font-family:" + JSON.stringify(family) + "}\r\n";
+      await writeFile(css, rawCSS);
+      const styled = await bundleJavascript(
+        styledSource,
+        "default",
+        {},
+        [],
+        [],
+        [canonical!],
+      );
+      expect(styled.stylesheets?.[0]?.text).toBe(rawCSS);
+      expect(() => {
+        const instance = mount(styled, []);
+        try {
+          instance.snapshot();
+        } finally {
+          instance.dispose();
+        }
+      }).toThrow("full-fold-only");
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 120_000);
+
+test("bundled astral font aliases preserve exact scalars and diagnose changed scalars", async () => {
+  const root = await mkdtemp(join(tmpdir(), "afy-font-astral-admission-"));
+  try {
+    const source = join(root, "Astral.tsx"),
+      canonical = "𐐀Source";
+    await writeFile(
+      source,
+      "export default function Astral({family}){return <p data-authored-family={family} style={{fontFamily:family}}>Astral</p>}",
+    );
+    for (const family of [canonical, "𐐀source", "𐐨Source"]) {
+      const archive = await bundleJavascript(
+        source,
+        "default",
+        { family },
+        [],
+        [],
+        [canonical],
+      );
+      expect(archive.props).toEqual({ family });
+      if (family === "𐐨Source") {
+        expect(() => {
+          const instance = mount(archive, []);
+          try {
+            instance.snapshot();
+          } finally {
+            instance.dispose();
+          }
+        }).toThrow("changed astral");
+      } else {
+        const instance = mount(archive, []),
+          node = instance.snapshot()[0]!;
+        expect(node.attrs?.["data-authored-family"]).toBe(family);
+        expect(node.style?.fontFamily).toBe(
+          family === canonical ? canonical : JSON.stringify(canonical),
+        );
+        const checkpoint = instance.export(),
+          restored = mount(checkpoint, []);
+        expect(restored.export()).toEqual(checkpoint);
+        restored.dispose();
+        instance.dispose();
+      }
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }

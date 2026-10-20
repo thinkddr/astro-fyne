@@ -95,8 +95,12 @@ function checkedFamily(value: string): string {
 
 /** Return a C+S key for Go simple-fold equality, without normalization. */
 export function simpleFontFamilyKey(value: string): string {
+  return simpleFamilyKey(checkedFamily(value));
+}
+
+function simpleFamilyKey(value: string): string {
   let result = "";
-  for (const character of checkedFamily(value)) {
+  for (const character of value) {
     const scalar = character.codePointAt(0)!;
     result += String.fromCodePoint(simple.get(scalar) ?? commonFold(scalar));
   }
@@ -110,6 +114,15 @@ export function cssFontFamilyKey(value: string): string {
 
 /** Compare decoded CSS names that may fold to a bounded native alias. */
 export function cssFontFamilyTextKey(value: string): string {
+  return fullFamilyKey(checkedCSSFamilyText(value));
+}
+
+/** Compare bounded decoded text with pinned C+S mappings. */
+export function simpleFontFamilyTextKey(value: string): string {
+  return simpleFamilyKey(checkedCSSFamilyText(value));
+}
+
+function checkedCSSFamilyText(value: string): string {
   if (typeof value !== "string" || !value)
     throw new Error("CSS font matching requires nonempty Unicode text.");
   let count = 0;
@@ -123,7 +136,7 @@ export function cssFontFamilyTextKey(value: string): string {
         "CSS font matching exceeds the native alias comparison bounds.",
       );
   }
-  return fullFamilyKey(value);
+  return value;
 }
 
 function fullFamilyKey(value: string): string {

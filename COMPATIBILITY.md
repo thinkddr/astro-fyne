@@ -52,6 +52,15 @@ uses separate explicit geometry bindings. Neither contract establishes general C
 Reusable [catalogues](docs/catalogue.md) transport component archives, themes, source
 layouts, licensed resources, exact CSS/font bytes and independent island checkpoints.
 Both CLI directions generate these libraries without serializing arbitrary Go callbacks.
+Source-font family resolution uses pinned Unicode17 full-fold comparison, followed
+by a conservative native admission filter: the authored and canonical names must
+also have equal simple-fold keys and identical astral scalars at each position.
+Full-fold-only aliases and changed astral aliases require an adapter and produce
+diagnostics. This filter does not establish a browser's complete matching algorithm.
+Dynamic family values are checked when their mount or update is evaluated; the CLI
+cannot statically reject every future value. See the
+[font-family policy](docs/font-family-policy.md) for the unchanged 80-scalar resource
+grammar, observed browser limits and separate comparison-math verification.
 The relational `:has()` selector supports anchored descendant, child and following
 sibling chains and lists, with live state reevaluation and argument-list specificity.
 Nested `:has()` and pseudo-elements remain diagnosed. The
