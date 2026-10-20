@@ -418,7 +418,9 @@ export default defineConfig({integrations:[preact(),{name:"cli-page-route-oracle
         ? []
         : ["--public-dir", relative(foreign, join(site, "public"))]),
       "--actions-module",
-      "../_actions/" + item.actions + ".ts",
+      (item.slug === "legacy" ? "../../_actions/" : "../_actions/") +
+        item.actions +
+        ".ts",
       ...(item.slug === "legacy" ? [] : ["--page"]),
     ];
     await command("generate-" + item.slug, ["astro-fyne", ...args], foreign);

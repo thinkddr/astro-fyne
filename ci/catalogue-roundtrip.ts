@@ -341,6 +341,8 @@ if (mode === "prepare") {
     "src/catalogue-cli.ts",
     "src/web-page.ts",
     "src/web-page.test.ts",
+    "src/program-web.ts",
+    "src/program-web-runtime.ts",
     "src/fonts.ts",
     "src/fonts.test.ts",
     "src/font-family.ts",

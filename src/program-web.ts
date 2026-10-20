@@ -68,7 +68,7 @@ export const ${name} = _afyForwardRef<${name}Handle, ${name}Props>(function ${na
   const [failure,setFailure] = _afyState<unknown>();
   ${actionsModule ? `_afyEffect(()=>{if(input.actions) return; let active=true; import(${literal(actionsModule)}).then(module=>{if(active) setLoaded(module.actions);}).catch(error=>{if(active) setFailure(error);}); return()=>{active=false;};},[input.actions]);` : ""}
   if(failure) throw failure;
-  const actions = input.actions ?? loaded ${program.actions.length ? "" : "?? _afyEmptyActions"};
+  const actions = input.actions ?? loaded ${program.actions.length || actionsModule ? "" : "?? _afyEmptyActions"};
   return actions ? _afyH(_afyRoot,{...input,actions,ref}) : null;
 });
 const _afyEmptyActions:ProgramActions = {};

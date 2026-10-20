@@ -727,6 +727,8 @@ if (mode === "prepare") {
     "src/cli-shortcuts.ts",
     "src/web-page.ts",
     "src/web-page.test.ts",
+    "src/program-web.ts",
+    "src/program-web-runtime.ts",
     "bin/astro-fyne.ts",
     "native/go.mod",
     "native/go.sum",
