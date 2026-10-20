@@ -194,7 +194,7 @@ func TestFontResourceBindingOwnershipAndPaint(t *testing.T) {
 	original := bytes.Clone(data)
 	resource := &bindingTestResource{data: data}
 	fonts := map[string]map[Font]fyne.Resource{
-		"Host": {{Weight: 400}: resource, {Weight: 600}: bindingTestSliceResource(data)},
+		"Host":  {{Weight: 400}: resource, {Weight: 600}: bindingTestSliceResource(data)},
 		"Alias": {{Weight: 400}: resource}, "Unused": {{Weight: 400}: nil},
 	}
 	item, alias := bindingTestRequirement(data), bindingTestRequirement(data)
@@ -308,7 +308,10 @@ func TestFontResourceBindingStaticFaceAndHash(t *testing.T) {
 		func(item *FontResourceRequirement, _ *[]byte) { item.Hash = strings.Repeat("0", 64) },
 		func(item *FontResourceRequirement, _ *[]byte) { item.Weight = 700 },
 		func(item *FontResourceRequirement, _ *[]byte) { item.Style = "italic" },
-		func(item *FontResourceRequirement, data *[]byte) { (*data)[100] ^= 0xff; item.Hash = bindingTestHash(*data) },
+		func(item *FontResourceRequirement, data *[]byte) {
+			(*data)[100] ^= 0xff
+			item.Hash = bindingTestHash(*data)
+		},
 	} {
 		copy := bytes.Clone(data)
 		item := bindingTestRequirement(copy)
