@@ -23,6 +23,11 @@ spaces, underscores and hyphens, start with a letter and fit within 80 Unicode
 scalars. They have no surrounding whitespace, quoting, escapes or fallback lists.
 Duplicate descriptors use Go's actual `strings.EqualFold` comparison.
 
+The [Unicode font-family policy](font-family-policy.md) provides Unicode17 alias
+checks and separate Go/CSS comparison keys for compiler and browser adapters.
+Existing manifests and catalogues keep their current alias rules until those
+adapters are integrated.
+
 `ValidateFontResourceRequirements` checks typed requirements without reading
 resources. `ParseFontResourceRequirements` additionally accepts a closed JSON
 array up to 16 KiB. It rejects duplicate, missing or unknown fields, trailing data,
