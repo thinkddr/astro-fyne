@@ -408,11 +408,11 @@ test("font resolvers serialize escaped known and unknown names before native loo
     "İ",
     "ﬀ",
   ]);
-  for (const raw of [
-    String.raw`\Straße`,
-    String.raw`Stra\df e`,
-    String.raw`"Stra\df e"`,
-  ])
+  const simple = "\\Straße";
+  expect([...simple].map((character) => character.codePointAt(0))).toEqual([
+    92, 83, 116, 114, 97, 223, 101,
+  ]);
+  for (const raw of [simple, String.raw`Stra\df e`, String.raw`"Stra\df e"`])
     expect(resolve(raw)).toBe('"Straße"');
   expect(resolve('"Stra\\\r\nße"')).toBe('"Straße"');
   expect(resolve(String.raw`Noto\ Sans`)).toBe('"Noto Sans"');
