@@ -24,6 +24,13 @@ async function program(source: string) {
 
 const options = { name: "Page", packageName: "generated" };
 
+test("Go string quoting preserves Unicode line separators in generated literals", async () => {
+  const source = await program(
+    "export function Page(){return <p>before\u2028after</p>;}",
+  );
+  expect(emitGo(source, options)).toContain("before\u2028after");
+});
+
 const responsiveTextStyle =
   "flexBasis:80,minWidth:0,minHeight:0,boxSizing:'border-box',height:32,margin:0,fontFamily:'AstroNoto',fontStyle:'normal',fontSize:14,lineHeight:'20px',fontWeight:400,textAlign:'left',whiteSpace:'nowrap',color:'#112233'";
 const responsiveControlReset =

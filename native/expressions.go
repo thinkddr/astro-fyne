@@ -171,7 +171,10 @@ func missingProperty(kind reflect.Kind, property string) any {
 func index(key any) (int, bool) {
 	s := String(key)
 	n, err := strconv.ParseUint(s, 10, 32)
-	if err != nil || strconv.FormatUint(n, 10) != s || n >= (1<<32)-1 || n > uint64(^uint(0)>>1) {
+	if err != nil ||
+		strconv.FormatUint(n, 10) != s ||
+		n >= (1<<32)-1 ||
+		(strconv.IntSize == 32 && n > 2147483647) {
 		return 0, false
 	}
 	return int(n), true

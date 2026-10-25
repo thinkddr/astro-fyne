@@ -6,9 +6,31 @@ package webui
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 )
+
+func TestArrayIndexConversionUsesPortableIntBounds(t *testing.T) {
+	for _, key := range []string{"0", "12", "4294967294"} {
+		got, ok := index(key)
+		wantOK := key != "4294967294" || strconv.IntSize == 64
+		if ok != wantOK {
+			t.Fatalf("index(%q) accepted=%v, expected %v", key, ok, wantOK)
+		}
+		if ok && fmt.Sprint(got) != key {
+			t.Fatalf("index(%q)=%d", key, got)
+		}
+	}
+	for _, key := range []string{"01", "4294967295", "4294967296"} {
+		if _, ok := index(key); ok {
+			t.Fatalf("index(%q) unexpectedly accepted", key)
+		}
+	}
+	if _, ok := index("2147483648"); ok != (strconv.IntSize == 64) {
+		t.Fatalf("index(2147483648) accepted=%v on %d-bit int", ok, strconv.IntSize)
+	}
+}
 
 func TestNullishAccessDoesNotTreatFalsyPrimitivesAsMissing(t *testing.T) {
 	for _, value := range []any{nil, Undefined} {

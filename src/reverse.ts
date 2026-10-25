@@ -258,14 +258,56 @@ function style(value: unknown, path: string): SceneStyle {
       fail(`${path}.${key}`, "unsupported native style value");
   for (const key of ["background", "color", "borderColor"] as const)
     result[key] = color(result[key], `${path}.${key}`);
-  if (
-    result.fontFamily &&
-    !/^(?:"[^"\\\r\n<>]*"|'[^'\\\r\n<>]*'|[A-Za-z][A-Za-z\d _-]*)(?:\s*,\s*(?:"[^"\\\r\n<>]*"|'[^'\\\r\n<>]*'|[A-Za-z][A-Za-z\d _-]*))*$/.test(
-      result.fontFamily,
-    )
-  )
+  if (result.fontFamily && !validFontFamilyList(result.fontFamily))
     fail(`${path}.fontFamily`, "unsupported or unsafe font-family list");
   return result;
+}
+
+function validFontFamilyList(value: string): boolean {
+  let index = 0;
+  while (index < value.length) {
+    const quote = value[index] === '"' || value[index] === "'" ? value[index] : "";
+    if (quote) {
+      index++;
+      while (
+        index < value.length &&
+        value[index] !== quote &&
+        value[index] !== "\\" &&
+        value[index] !== "\r" &&
+        value[index] !== "\n" &&
+        value[index] !== "<" &&
+        value[index] !== ">"
+      )
+        index++;
+      if (value[index] !== quote) return false;
+      index++;
+    } else {
+      const first = value.charCodeAt(index);
+      if (!((first >= 65 && first <= 90) || (first >= 97 && first <= 122)))
+        return false;
+      index++;
+      while (index < value.length) {
+        const character = value.charCodeAt(index);
+        if (
+          (character >= 65 && character <= 90) ||
+          (character >= 97 && character <= 122) ||
+          (character >= 48 && character <= 57) ||
+          character === 32 ||
+          character === 45 ||
+          character === 95
+        )
+          index++;
+        else break;
+      }
+    }
+    if (index === value.length) return true;
+    while (index < value.length && /\s/.test(value[index]!)) index++;
+    if (index === value.length || value[index] !== ",") return false;
+    index++;
+    while (index < value.length && /\s/.test(value[index]!)) index++;
+    if (index === value.length) return false;
+  }
+  return false;
 }
 
 /** Validate an actual exported scene; unknown fields and unsupported semantics fail closed. */
