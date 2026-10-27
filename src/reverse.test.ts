@@ -206,6 +206,27 @@ test("schema validation rejects ambiguous or unsupported scenes before writing a
   expect(() => validateSceneDocument(scene)).toThrow("cannot be accessors");
 });
 
+test("font-family lists validate without backtracking on long malformed input", () => {
+  for (const family of [
+    "Arial, sans serif",
+    '"A, B", serif',
+    "'Quoted'",
+    "Arial ",
+  ])
+    expect(() =>
+      validateSceneDocument(
+        document([node({ style: style({ fontFamily: family }) })]),
+      ),
+    ).not.toThrow();
+
+  const malformed = `${Array.from({ length: 2_000 }, () => "A,A ").join(",")}!`;
+  expect(() =>
+    validateSceneDocument(
+      document([node({ style: style({ fontFamily: malformed }) })]),
+    ),
+  ).toThrow("font-family");
+});
+
 test("DOM text normalization and exact native placeholder colors are explicit boundaries", () => {
   for (const value of ["A\nB", "A\rB"])
     expect(() =>
